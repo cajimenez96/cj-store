@@ -9,8 +9,10 @@ import {
   CheckCircle2,
   Loader2,
   Lock,
+  Plus,
+  Trash2,
 } from "lucide-react";
-import type { GenderType, IProductImage, ISizeStock } from "@/models/Product";
+import type { GenderType, IProductImage, ISizeStock, IVariantStock } from "@/models/Product";
 import { DEFAULT_GENDER_SIZES } from "@/constants/sizes";
 import { ImageUploader } from "./ImageUploader";
 import { toast } from "@/components/ui/sonner";
@@ -30,11 +32,13 @@ interface ProductFormProps {
     wholesalePrice?: number;
     brandId: string | { _id: string; name: string };
     typeId: string | { _id: string; name: string };
-    gender: GenderType;
+    gender?: GenderType | null;
     active: boolean;
     isClearance?: boolean;
     images: IProductImage[];
-    sizesStock: ISizeStock[];
+    variants?: IVariantStock[];
+    stock?: number;
+    sizesStock?: ISizeStock[];
     displayedSizes?: number[];
   };
   isEditing?: boolean;
@@ -81,14 +85,38 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       ? initialData.typeId._id
       : initialData?.typeId || "",
   );
-  const [gender, setGender] = useState<GenderType>(
-    initialData?.gender || "Hombre",
+  const [gender, setGender] = useState<GenderType | null>(
+    initialData?.gender !== undefined ? initialData.gender : null,
   );
   const [active, setActive] = useState<boolean>(
     initialData?.active !== undefined ? initialData.active : true,
   );
   const [isClearance, setIsClearance] = useState<boolean>(
     initialData?.isClearance || false,
+  );
+
+  // Inventory mode: 'variants' | 'simple' | 'shoes'
+  const initialMode =
+    initialData?.variants && initialData.variants.length > 0
+      ? "variants"
+      : initialData?.sizesStock && initialData.sizesStock.length > 0
+      ? "shoes"
+      : initialData?.stock !== undefined
+      ? "simple"
+      : "variants";
+
+  const [inventoryMode, setInventoryMode] = useState<"variants" | "simple" | "shoes">(initialMode);
+
+  // Generic variants state
+  const [variants, setVariants] = useState<IVariantStock[]>(
+    initialData?.variants && initialData.variants.length > 0
+      ? initialData.variants
+      : [{ name: "100ml", stock: 10 }]
+  );
+
+  // Simple stock state
+  const [simpleStock, setSimpleStock] = useState<number | "">(
+    initialData?.stock !== undefined ? initialData.stock : 0
   );
 
   // Images state: array of { url, fileId, isPrincipal, position }
@@ -135,7 +163,8 @@ export const ProductForm: React.FC<ProductFormProps> = ({
 
   // 2. Initialize size scale stock when Gender or genderSizes changes
   useEffect(() => {
-    const scaleSizes = genderSizes[gender] || DEFAULT_GENDER_SIZES[gender] || [];
+    const activeGenderKey = gender || "Unisex";
+    const scaleSizes = genderSizes[activeGenderKey] || DEFAULT_GENDER_SIZES[activeGenderKey] || [];
 
     if (!isEditing) {
       const initialized = scaleSizes.map((s) => ({
@@ -201,6 +230,24 @@ export const ProductForm: React.FC<ProductFormProps> = ({
     ? sizesStock
     : sizesStock.filter((s) => s.stock > 0);
 
+  const handleAddVariant = () => {
+    setVariants((prev) => [...prev, { name: "", stock: 0 }]);
+  };
+
+  const handleRemoveVariant = (index: number) => {
+    setVariants((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleVariantChange = (
+    index: number,
+    field: keyof IVariantStock,
+    value: string | number
+  ) => {
+    setVariants((prev) =>
+      prev.map((v, i) => (i === index ? { ...v, [field]: value } : v))
+    );
+  };
+
   // Submit Handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -246,7 +293,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       }
     }
     if (!brandId || !typeId) {
-      toast.error("Seleccioná la Marca y Tipo de Calzado", {
+      toast.error("Seleccioná la Marca y Categoría", {
         description: "Ambos campos son requeridos para catalogar.",
       });
       return;
@@ -260,14 +307,29 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       return;
     }
 
-    const totalStockCount = sizesStock.reduce(
-      (acc, curr) => acc + curr.stock,
-      0,
-    );
-    if (totalStockCount === 0) {
-      toast.warning("El producto no tiene stock cargado en ningún talle", {
-        description: "Se guardará sin stock disponible para la venta.",
-      });
+    let finalVariants: IVariantStock[] = [];
+    let finalStock = 0;
+    let finalSizesStock: ISizeStock[] = [];
+    let finalDisplayedSizes: number[] = [];
+
+    if (inventoryMode === "variants") {
+      const validVariants = variants.filter((v) => v.name.trim().length > 0);
+      if (validVariants.length === 0) {
+        toast.error("Cargá al menos una variante con nombre", {
+          description: "Ej: 100ml, 50ml, etc.",
+        });
+        return;
+      }
+      finalVariants = validVariants.map((v) => ({
+        name: v.name.trim(),
+        stock: Math.max(0, Number(v.stock) || 0),
+        sku: v.sku?.trim() || undefined,
+      }));
+    } else if (inventoryMode === "simple") {
+      finalStock = Math.max(0, Number(simpleStock) || 0);
+    } else {
+      finalSizesStock = sizesStock;
+      finalDisplayedSizes = displayedSizes;
     }
 
     setSaving(true);
@@ -276,38 +338,24 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       const url = "/api/admin/products";
       const method = isEditing ? "PUT" : "POST";
 
-      const payload = isEditing
-        ? {
-            _id: initialData?._id,
-            name: name.trim(),
-            description: description.trim(),
-            retailPrice: isClearance ? Number(wholesalePrice) : Number(retailPrice),
-            wholesalePrice: Number(wholesalePrice),
-            price: isClearance ? Number(wholesalePrice) : Number(retailPrice),
-            brandId,
-            typeId,
-            gender,
-            active,
-            isClearance,
-            images: validImages,
-            sizesStock,
-            displayedSizes,
-          }
-        : {
-            name: name.trim(),
-            description: description.trim(),
-            retailPrice: isClearance ? Number(wholesalePrice) : Number(retailPrice),
-            wholesalePrice: Number(wholesalePrice),
-            price: isClearance ? Number(wholesalePrice) : Number(retailPrice),
-            brandId,
-            typeId,
-            gender,
-            active,
-            isClearance,
-            images: validImages,
-            sizesStock,
-            displayedSizes,
-          };
+      const payload = {
+        ...(isEditing && { _id: initialData?._id }),
+        name: name.trim(),
+        description: description.trim(),
+        retailPrice: isClearance ? Number(wholesalePrice) : Number(retailPrice),
+        wholesalePrice: Number(wholesalePrice),
+        price: isClearance ? Number(wholesalePrice) : Number(retailPrice),
+        brandId,
+        typeId,
+        gender: gender || null,
+        active,
+        isClearance,
+        images: validImages,
+        variants: finalVariants,
+        stock: finalStock,
+        sizesStock: finalSizesStock,
+        displayedSizes: finalDisplayedSizes,
+      };
 
       const res = await fetch(url, {
         method,
@@ -508,92 +556,195 @@ export const ProductForm: React.FC<ProductFormProps> = ({
             </div>
           </div>
 
-          {/* Stock Matrix per Size */}
-          <div className="bg-white border border-[#e5e5e5] p-6 space-y-4 shadow-sm">
-            <div className="flex justify-between items-center">
-              <h2 className="text-base font-extrabold uppercase tracking-tight text-[#111111]">
-                Stock por Talle (Escala {gender})
-              </h2>
-              <span className="text-xs text-[#707072] font-semibold">
-                Stock Total:{" "}
-                <strong className="text-[#111111]">
-                  {sizesStock.reduce((acc, curr) => acc + curr.stock, 0)} pares
-                </strong>
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              {sizesStock.map((item) => (
-                <div
-                  key={item.size}
-                  className="p-3 bg-[#f5f5f5] border border-[#e5e5e5] space-y-1.5 text-center"
-                >
-                  <span className="block text-xs font-extrabold text-[#111111]">
-                    Talle {item.size}
-                  </span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={item.stock}
-                    onChange={(e) =>
-                      handleStockChange(
-                        item.size,
-                        parseInt(e.target.value, 10) || 0,
-                      )
-                    }
-                    className="w-full text-center bg-white text-[#111111] font-extrabold text-sm py-1.5 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Visible Sizes Selector */}
-          <div className="bg-white border border-[#e5e5e5] p-6 space-y-4 shadow-sm">
-            <div className="flex justify-between items-center">
+          {/* Inventory & Stock Section */}
+          <div className="bg-white border border-[#e5e5e5] p-6 space-y-5 shadow-sm">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-[#e5e5e5]">
               <div>
                 <h2 className="text-base font-extrabold uppercase tracking-tight text-[#111111]">
-                  Talles Visibles en Tienda
+                  Gestión de Stock e Inventario
                 </h2>
-                <p className="text-xs text-[#707072] mt-1">
-                  Seleccioná qué talles se mostrarán en la página del producto
+                <p className="text-xs text-[#707072] mt-0.5">
+                  Elegí cómo se gestiona el inventario de este producto
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowHiddenSizes(!showHiddenSizes)}
-                className="text-xs font-bold px-3 py-2 rounded-full border border-[#e5e5e5] bg-white hover:bg-[#f5f5f5] transition-colors flex items-center gap-1.5 cursor-pointer"
-                title={showHiddenSizes ? "Ocultar talles sin stock" : "Mostrar talles sin stock"}
-              >
-                👁️ {showHiddenSizes ? "Ocultar sin stock" : "Mostrar sin stock"}
-              </button>
-            </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              {visibleSizesForToggle.map((item) => (
-                <label
-                  key={item.size}
-                  className="flex items-center gap-2 p-3 bg-[#f5f5f5] border border-[#e5e5e5] hover:border-[#111111] cursor-pointer transition-colors"
+              {/* Mode Selector Tabs */}
+              <div className="flex gap-1 bg-[#f5f5f5] p-1 border border-[#e5e5e5]">
+                <button
+                  type="button"
+                  onClick={() => setInventoryMode("variants")}
+                  className={`px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                    inventoryMode === "variants"
+                      ? "bg-[#111111] text-white shadow-xs"
+                      : "text-[#707072] hover:text-[#111111]"
+                  }`}
                 >
-                  <input
-                    type="checkbox"
-                    checked={displayedSizes.includes(item.size)}
-                    onChange={() => handleToggleSizeDisplay(item.size)}
-                    className="w-4 h-4 accent-[#111111] cursor-pointer"
-                  />
-                  <span className="text-xs font-extrabold text-[#111111]">
-                    {item.size}
-                    {item.stock === 0 && (
-                      <span className="text-[#cacacb] ml-1">(sin stock)</span>
-                    )}
-                  </span>
-                </label>
-              ))}
+                  Variantes (ml, colores)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInventoryMode("simple")}
+                  className={`px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                    inventoryMode === "simple"
+                      ? "bg-[#111111] text-white shadow-xs"
+                      : "text-[#707072] hover:text-[#111111]"
+                  }`}
+                >
+                  Stock Simple
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInventoryMode("shoes")}
+                  className={`px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                    inventoryMode === "shoes"
+                      ? "bg-[#111111] text-white shadow-xs"
+                      : "text-[#707072] hover:text-[#111111]"
+                  }`}
+                >
+                  Talles Calzado
+                </button>
+              </div>
             </div>
 
-            {displayedSizes.length === 0 && (
-              <div className="text-xs text-[#d30005] bg-[#fef2f2] border border-[#fecaca] p-3 rounded">
-                ⚠️ Ningún talle seleccionado. El producto no será visible en tienda.
+            {/* Mode 1: Generic Variants */}
+            {inventoryMode === "variants" && (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-[#707072]">
+                    Total unidades:{" "}
+                    <strong className="text-[#111111]">
+                      {variants.reduce((acc, curr) => acc + (Number(curr.stock) || 0), 0)}
+                    </strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddVariant}
+                    className="px-3 py-1.5 bg-[#111111] text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 hover:bg-black transition-all cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Agregar Variante
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {variants.map((v, idx) => (
+                    <div
+                      key={idx}
+                      className="flex flex-col sm:flex-row items-center gap-3 p-3 bg-[#f5f5f5] border border-[#e5e5e5]"
+                    >
+                      <div className="w-full sm:flex-1">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#707072] mb-1">
+                          Presentación / Variante (Ej: 100ml, 50ml, Negro) *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ej: 100ml"
+                          value={v.name}
+                          onChange={(e) => handleVariantChange(idx, "name", e.target.value)}
+                          className="w-full bg-white text-[#111111] text-xs font-bold p-2 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                        />
+                      </div>
+                      <div className="w-full sm:w-32">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#707072] mb-1">
+                          Stock Disponible *
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={v.stock}
+                          onChange={(e) =>
+                            handleVariantChange(idx, "stock", parseInt(e.target.value, 10) || 0)
+                          }
+                          className="w-full bg-white text-[#111111] text-xs font-bold p-2 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                        />
+                      </div>
+                      <div className="w-full sm:w-36">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#707072] mb-1">
+                          SKU (Opcional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ej: PERF-100"
+                          value={v.sku || ""}
+                          onChange={(e) => handleVariantChange(idx, "sku", e.target.value)}
+                          className="w-full bg-white text-[#111111] text-xs font-medium p-2 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                        />
+                      </div>
+                      <div className="flex sm:self-end pb-1">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveVariant(idx)}
+                          disabled={variants.length <= 1}
+                          className="p-2 text-[#707072] hover:text-[#d30005] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                          title="Eliminar variante"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Mode 2: Simple Stock */}
+            {inventoryMode === "simple" && (
+              <div className="p-4 bg-[#f5f5f5] border border-[#e5e5e5] space-y-2">
+                <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111]">
+                  Stock Total Disponible *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Ej: 50"
+                  value={simpleStock}
+                  onChange={(e) =>
+                    setSimpleStock(e.target.value === "" ? "" : parseInt(e.target.value, 10) || 0)
+                  }
+                  className="w-full sm:w-48 bg-white text-[#111111] text-base font-extrabold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                />
+                <p className="text-[11px] text-[#707072]">
+                  Usá esta opción para productos únicos sin variantes (ej. anteojos de sol modelo único o accesorios simples).
+                </p>
+              </div>
+            )}
+
+            {/* Mode 3: Traditional Shoe Sizes */}
+            {inventoryMode === "shoes" && (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xs font-bold uppercase text-[#707072]">
+                    Escala {gender || "Unisex"} ({sizesStock.reduce((acc, curr) => acc + curr.stock, 0)} pares)
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowHiddenSizes(!showHiddenSizes)}
+                    className="text-xs font-bold px-3 py-1.5 rounded-full border border-[#e5e5e5] bg-white hover:bg-[#f5f5f5] transition-colors cursor-pointer"
+                  >
+                    👁️ {showHiddenSizes ? "Ocultar sin stock" : "Mostrar sin stock"}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  {sizesStock.map((item) => (
+                    <div
+                      key={item.size}
+                      className="p-3 bg-[#f5f5f5] border border-[#e5e5e5] space-y-1.5 text-center"
+                    >
+                      <span className="block text-xs font-extrabold text-[#111111]">
+                        Talle {item.size}
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.stock}
+                        onChange={(e) =>
+                          handleStockChange(item.size, parseInt(e.target.value, 10) || 0)
+                        }
+                        className="w-full text-center bg-white text-[#111111] font-extrabold text-sm py-1.5 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -642,16 +793,16 @@ export const ProductForm: React.FC<ProductFormProps> = ({
               )}
             </div>
 
-            {/* Footwear Type Dropdown */}
+            {/* Category / Type Dropdown */}
             <div>
               <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
-                Tipo de Calzado *
+                Categoría / Tipo de Producto *
               </label>
               {isEditing ? (
                 <div className="w-full bg-[#f5f5f5] text-[#707072] text-xs font-bold py-3 px-3 border border-[#e5e5e5]">
                   {typeof initialData?.typeId === "object"
                     ? initialData.typeId.name
-                    : "Tipo Bloqueado"}
+                    : "Categoría Bloqueada"}
                 </div>
               ) : (
                 <select
@@ -660,7 +811,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                   disabled={loadingOptions}
                   className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold py-3 px-3 rounded-none border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] cursor-pointer"
                 >
-                  <option value="">-- Seleccionar Tipo --</option>
+                  <option value="">-- Seleccionar Categoría --</option>
                   {types.map((t) => (
                     <option key={t._id} value={t._id}>
                       {t.name}
@@ -673,22 +824,25 @@ export const ProductForm: React.FC<ProductFormProps> = ({
             {/* Gender Select */}
             <div>
               <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
-                Género *
+                Género (Opcional)
               </label>
               {isEditing ? (
                 <div className="w-full bg-[#f5f5f5] text-[#707072] text-xs font-bold py-3 px-3 border border-[#e5e5e5]">
-                  {gender}
+                  {gender || "Sin género / No aplica"}
                 </div>
               ) : (
                 <select
-                  value={gender}
-                  onChange={(e) => setGender(e.target.value as GenderType)}
+                  value={gender || ""}
+                  onChange={(e) =>
+                    setGender(e.target.value ? (e.target.value as GenderType) : null)
+                  }
                   className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold py-3 px-3 rounded-none border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] cursor-pointer"
                 >
-                  <option value="Hombre">Hombre (Talles 36-45)</option>
-                  <option value="Mujer">Mujer (Talles 33-42)</option>
-                  <option value="Niño">Niño (Talles 25-35)</option>
-                  <option value="Unisex">Unisex (Talles 36-45)</option>
+                  <option value="">Sin género / No aplica</option>
+                  <option value="Unisex">Unisex</option>
+                  <option value="Hombre">Hombre</option>
+                  <option value="Mujer">Mujer</option>
+                  <option value="Niño">Niño</option>
                 </select>
               )}
             </div>

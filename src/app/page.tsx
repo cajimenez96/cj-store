@@ -219,7 +219,7 @@ function HomeContent() {
   };
 
   const handleAddToCart = (payload: CartItemAddPayload) => {
-    addToCart(payload.product, payload.size, payload.qty);
+    addToCart(payload.product, payload.variantName ?? payload.size, payload.qty);
   };
 
   const handleStartCheckout = () => {

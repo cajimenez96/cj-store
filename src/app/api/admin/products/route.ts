@@ -62,11 +62,20 @@ export async function GET(req: NextRequest) {
     // Format total stock
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const formattedProducts = products.map((prod: any) => {
-      const sizesStock = prod.sizesStock || [];
-      const totalStock = sizesStock.reduce(
-        (acc: number, curr: { stock: number }) => acc + curr.stock,
-        0
-      );
+      let totalStock = 0;
+      if (Array.isArray(prod.variants) && prod.variants.length > 0) {
+        totalStock = prod.variants.reduce(
+          (acc: number, curr: { stock: number }) => acc + curr.stock,
+          0
+        );
+      } else if (typeof prod.stock === 'number') {
+        totalStock = prod.stock;
+      } else if (Array.isArray(prod.sizesStock) && prod.sizesStock.length > 0) {
+        totalStock = prod.sizesStock.reduce(
+          (acc: number, curr: { stock: number }) => acc + curr.stock,
+          0
+        );
+      }
       return {
         ...prod,
         totalStock,
@@ -97,7 +106,22 @@ export async function POST(req: NextRequest) {
     await connectToDatabase();
     const body = await req.json();
 
-    const { name, description, retailPrice, wholesalePrice, brandId, typeId, gender, active, isClearance, images, sizesStock, displayedSizes } = body;
+    const {
+      name,
+      description,
+      retailPrice,
+      wholesalePrice,
+      brandId,
+      typeId,
+      gender,
+      active,
+      isClearance,
+      images,
+      variants,
+      stock,
+      sizesStock,
+      displayedSizes,
+    } = body;
 
     // Validations
     if (!name || !name.trim()) {
@@ -128,9 +152,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!brandId || !typeId || !gender) {
+    if (!brandId || !typeId) {
       return NextResponse.json(
-        { ok: false, error: 'BAD_REQUEST', message: 'Marca, tipo de calzado y género son obligatorios' },
+        { ok: false, error: 'BAD_REQUEST', message: 'Marca y categoría son obligatorios' },
         { status: 400 }
       );
     }
@@ -142,9 +166,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!sizesStock || !Array.isArray(sizesStock) || sizesStock.length === 0) {
+    const hasVariants = Array.isArray(variants) && variants.length > 0;
+    const hasSizes = Array.isArray(sizesStock) && sizesStock.length > 0;
+    const hasDirectStock = stock !== undefined && stock !== null;
+
+    if (!hasVariants && !hasSizes && !hasDirectStock) {
       return NextResponse.json(
-        { ok: false, error: 'BAD_REQUEST', message: 'Debe cargar el stock por talle' },
+        { ok: false, error: 'BAD_REQUEST', message: 'Debe cargar stock para el producto o sus variantes' },
         { status: 400 }
       );
     }
@@ -156,11 +184,13 @@ export async function POST(req: NextRequest) {
       wholesalePrice: Number(wholesalePrice),
       brandId,
       typeId,
-      gender,
+      gender: gender ? gender : null,
       active: active !== undefined ? Boolean(active) : true,
       isClearance: isClearance !== undefined ? Boolean(isClearance) : false,
       images,
-      sizesStock,
+      variants: hasVariants ? variants : [],
+      stock: hasDirectStock ? Number(stock) : 0,
+      sizesStock: hasSizes ? sizesStock : [],
       displayedSizes: displayedSizes || [],
     });
 
@@ -179,7 +209,22 @@ export async function PUT(req: NextRequest) {
     await connectToDatabase();
     const body = await req.json();
     const productId = body._id || body.id;
-    const { name, description, retailPrice, wholesalePrice, active, isClearance, images, sizesStock, brandId, typeId, gender, displayedSizes } = body;
+    const {
+      name,
+      description,
+      retailPrice,
+      wholesalePrice,
+      active,
+      isClearance,
+      images,
+      variants,
+      stock,
+      sizesStock,
+      brandId,
+      typeId,
+      gender,
+      displayedSizes,
+    } = body;
 
     if (!productId) {
       return NextResponse.json(
@@ -197,10 +242,12 @@ export async function PUT(req: NextRequest) {
     if (wholesalePrice !== undefined) updateFields.wholesalePrice = Number(wholesalePrice);
     if (brandId !== undefined) updateFields.brandId = brandId;
     if (typeId !== undefined) updateFields.typeId = typeId;
-    if (gender !== undefined) updateFields.gender = gender;
+    if (gender !== undefined) updateFields.gender = gender ? gender : null;
     if (active !== undefined) updateFields.active = Boolean(active);
     if (isClearance !== undefined) updateFields.isClearance = Boolean(isClearance);
     if (images !== undefined) updateFields.images = images;
+    if (variants !== undefined) updateFields.variants = variants;
+    if (stock !== undefined) updateFields.stock = Number(stock);
     if (sizesStock !== undefined) updateFields.sizesStock = sizesStock;
     if (displayedSizes !== undefined) updateFields.displayedSizes = displayedSizes;
 

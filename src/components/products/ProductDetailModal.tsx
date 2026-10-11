@@ -16,7 +16,8 @@ import { formatPrice } from "@/utils/formatCurrency";
 
 export interface CartItemAddPayload {
   product: FormattedProduct;
-  size: number;
+  variantName?: string;
+  size?: number;
   qty: number;
 }
 
@@ -32,12 +33,16 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   onAddToCart,
 }) => {
   const [selectedImage, setSelectedImage] = useState<string>("");
+  const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<number | null>(null);
   const [quantity, setQuantity] = useState<number>(1);
   const [addedSuccess, setAddedSuccess] = useState(false);
 
   // Get current cart wholesale status to show live pricing
-  const { isWholesale, totalPairs } = useCart();
+  const { isWholesale, totalUnits } = useCart();
+
+  const hasVariants = Boolean(product?.variants && product.variants.length > 0);
+  const hasSizes = Boolean(product?.sizesStock && product.sizesStock.length > 0);
 
   useEffect(() => {
     if (product) {
@@ -47,11 +52,16 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         "";
       setSelectedImage(primaryUrl);
 
-      // Auto select first size with stock > 0
-      const firstAvailable = product.sizesStock.find((s) => s.stock > 0);
-      if (firstAvailable) {
-        setSelectedSize(firstAvailable.size);
+      if (product.variants && product.variants.length > 0) {
+        const firstAvailable = product.variants.find((v) => v.stock > 0) || product.variants[0];
+        setSelectedVariant(firstAvailable ? firstAvailable.name : null);
+        setSelectedSize(null);
+      } else if (product.sizesStock && product.sizesStock.length > 0) {
+        const firstAvailable = product.sizesStock.find((s) => s.stock > 0);
+        setSelectedSize(firstAvailable ? firstAvailable.size : null);
+        setSelectedVariant(null);
       } else {
+        setSelectedVariant(null);
         setSelectedSize(null);
       }
       setQuantity(1);
@@ -64,7 +74,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const brandName =
     typeof product.brandId === "object" && product.brandId !== null
       ? product.brandId.name
-      : "Calzado";
+      : "Producto";
 
   const typeName =
     typeof product.typeId === "object" && product.typeId !== null
@@ -78,19 +88,31 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
   // Effective price based on current cart state
   const effectivePrice = isWholesale ? wholesalePrice : retailPrice;
-  const pairsToWholesale = Math.max(0, 5 - totalPairs);
+  const unitsToWholesale = Math.max(0, 5 - totalUnits);
 
-  // Get max stock for selected size
-  const currentSizeObj = product.sizesStock.find(
-    (s) => s.size === selectedSize,
-  );
-  const maxStock = currentSizeObj ? currentSizeObj.stock : 0;
+  // Get max stock
+  let maxStock = 0;
+  if (hasVariants) {
+    const currentVar = product.variants?.find((v) => v.name === selectedVariant);
+    maxStock = currentVar ? currentVar.stock : 0;
+  } else if (hasSizes) {
+    const currentSizeObj = product.sizesStock?.find((s) => s.size === selectedSize);
+    maxStock = currentSizeObj ? currentSizeObj.stock : 0;
+  } else {
+    maxStock = product.stock ?? product.totalStock ?? 0;
+  }
+
+  const canAddToCart =
+    maxStock > 0 &&
+    (!hasVariants || !!selectedVariant) &&
+    (!hasSizes || selectedSize !== null);
 
   const handleAddToCart = () => {
-    if (!selectedSize || maxStock === 0) return;
+    if (!canAddToCart) return;
     onAddToCart({
       product,
-      size: selectedSize,
+      variantName: selectedVariant ?? undefined,
+      size: selectedSize ?? undefined,
       qty: quantity,
     });
     setAddedSuccess(true);
@@ -247,57 +269,110 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 )}
               </div>
 
-              {/* Size Selector */}
+              {/* Options / Variant / Size Selector */}
               <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-xs font-extrabold text-[#111111] uppercase tracking-wider">
-                    Seleccionar Talle
-                  </label>
-                  {selectedSize && (
-                    <span className="text-xs text-[#707072]">
-                      Stock disponible:{" "}
-                      <strong className="text-[#111111]">
-                        {maxStock} pares
-                      </strong>
+                {hasVariants ? (
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="text-xs font-extrabold text-[#111111] uppercase tracking-wider">
+                        Seleccionar Presentación / Variante
+                      </label>
+                      {selectedVariant && (
+                        <span className="text-xs text-[#707072]">
+                          Stock: <strong className="text-[#111111]">{maxStock} unidades</strong>
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {product.variants!.map((v) => {
+                        const hasStock = v.stock > 0;
+                        const isSelected = selectedVariant === v.name;
+
+                        return (
+                          <button
+                            key={v.name}
+                            disabled={!hasStock}
+                            onClick={() => {
+                              setSelectedVariant(v.name);
+                              setQuantity(1);
+                            }}
+                            className={`px-4 py-2 font-bold text-xs rounded-none border transition-all ${
+                              isSelected
+                                ? "bg-[#111111] text-white border-[#111111] shadow-xs cursor-pointer"
+                                : hasStock
+                                  ? "bg-white text-[#111111] border-[#e5e5e5] hover:border-[#111111] cursor-pointer"
+                                  : "bg-[#f5f5f5] text-[#cacacb] border-transparent cursor-not-allowed line-through"
+                            }`}
+                          >
+                            {v.name} {hasStock ? `(${v.stock})` : '(Agotado)'}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : hasSizes ? (
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="text-xs font-extrabold text-[#111111] uppercase tracking-wider">
+                        Seleccionar Talle
+                      </label>
+                      {selectedSize !== null && (
+                        <span className="text-xs text-[#707072]">
+                          Stock disponible:{" "}
+                          <strong className="text-[#111111]">
+                            {maxStock} unidades
+                          </strong>
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-5 gap-2">
+                      {product.sizesStock!
+                        .filter((s) => {
+                          const displayedSizes =
+                            (product as any).displayedSizes || [];
+                          return (
+                            displayedSizes.length === 0 ||
+                            displayedSizes.includes(s.size)
+                          );
+                        })
+                        .map((s) => {
+                          const hasStock = s.stock > 0;
+                          const isSelected = selectedSize === s.size;
+
+                          return (
+                            <button
+                              key={s.size}
+                              disabled={!hasStock}
+                              onClick={() => {
+                                setSelectedSize(s.size);
+                                setQuantity(1);
+                              }}
+                              className={`h-11 font-bold text-xs rounded-none border transition-all ${
+                                isSelected
+                                  ? "bg-[#111111] text-white border-[#111111] shadow-xs cursor-pointer"
+                                  : hasStock
+                                    ? "bg-white text-[#111111] border-[#e5e5e5] hover:border-[#111111] cursor-pointer"
+                                    : "bg-[#f5f5f5] text-[#cacacb] border-transparent cursor-not-allowed line-through"
+                              }`}
+                            >
+                              {s.size}
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-between items-center py-2 border-b border-[#f5f5f5]">
+                    <span className="text-xs font-bold text-[#707072] uppercase tracking-wider">
+                      Stock disponible:
                     </span>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-5 gap-2">
-                  {product.sizesStock
-                    .filter((s) => {
-                      const displayedSizes =
-                        (product as any).displayedSizes || [];
-                      return (
-                        displayedSizes.length === 0 ||
-                        displayedSizes.includes(s.size)
-                      );
-                    })
-                    .map((s) => {
-                      const hasStock = s.stock > 0;
-                      const isSelected = selectedSize === s.size;
-
-                      return (
-                        <button
-                          key={s.size}
-                          disabled={!hasStock}
-                          onClick={() => {
-                            setSelectedSize(s.size);
-                            setQuantity(1);
-                          }}
-                          className={`h-11 font-bold text-xs rounded-none border transition-all ${
-                            isSelected
-                              ? "bg-[#111111] text-white border-[#111111] shadow-xs cursor-pointer"
-                              : hasStock
-                                ? "bg-white text-[#111111] border-[#e5e5e5] hover:border-[#111111] cursor-pointer"
-                                : "bg-[#f5f5f5] text-[#cacacb] border-transparent cursor-not-allowed line-through"
-                          }`}
-                        >
-                          {s.size}
-                        </button>
-                      );
-                    })}
-                </div>
+                    <span className="text-xs font-extrabold text-[#111111]">
+                      {maxStock > 0 ? `${maxStock} unidades` : 'Agotado'}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="border-t border-b border-[#f5f5f5] py-3">
@@ -307,7 +382,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               </div>
 
               {/* Quantity Selector */}
-              {selectedSize && maxStock > 0 && (
+              {canAddToCart && (
                 <div className="flex items-center gap-4 pt-2">
                   <label className="text-xs font-extrabold text-[#111111] uppercase tracking-wider">
                     Cantidad:
@@ -341,11 +416,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             <div className="space-y-3 pt-4 border-t border-[#f5f5f5]">
               <button
                 onClick={handleAddToCart}
-                disabled={!selectedSize || maxStock === 0 || addedSuccess}
+                disabled={!canAddToCart || addedSuccess}
                 className={`w-full py-4 rounded-full font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md cursor-pointer ${
                   addedSuccess
                     ? "bg-[#007d48] text-white cursor-default"
-                    : selectedSize && maxStock > 0
+                    : canAddToCart
                       ? "bg-[#111111] hover:bg-black text-white cursor-pointer"
                       : "bg-[#f5f5f5] text-[#707072] cursor-not-allowed"
                 }`}
