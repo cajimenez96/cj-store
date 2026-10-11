@@ -14,6 +14,12 @@ export interface ISizeStock {
   stock: number;
 }
 
+export interface IVariantStock {
+  name: string;
+  stock: number;
+  sku?: string;
+}
+
 export interface IProduct {
   name: string;
   description: string;
@@ -23,12 +29,16 @@ export interface IProduct {
   wholesalePrice: number;
   brandId: Types.ObjectId;
   typeId: Types.ObjectId;
-  gender: GenderType;
+  gender?: GenderType | null;
   active: boolean;
   isClearance?: boolean;
   images: IProductImage[];
-  sizesStock: ISizeStock[];
-  displayedSizes: number[];
+  stock?: number;
+  variants?: IVariantStock[];
+  /** @deprecated Legacy shoe sizes - maintained for backward compatibility */
+  sizesStock?: ISizeStock[];
+  /** @deprecated Legacy shoe displayed sizes */
+  displayedSizes?: number[];
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -41,6 +51,15 @@ const ProductImageSchema = new Schema<IProductImage>(
     fileId: { type: String },
     isPrincipal: { type: Boolean, default: false },
     position: { type: Number, default: 0 },
+  },
+  { _id: false }
+);
+
+const VariantStockSchema = new Schema<IVariantStock>(
+  {
+    name: { type: String, required: true, trim: true },
+    stock: { type: Number, required: true, min: 0, default: 0 },
+    sku: { type: String, trim: true },
   },
   { _id: false }
 );
@@ -84,22 +103,19 @@ const ProductSchema: Schema<IProductDocument> = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'Brand',
       required: [true, 'La marca es obligatoria'],
-      immutable: true,
     },
     typeId: {
       type: Schema.Types.ObjectId,
       ref: 'FootwearType',
-      required: [true, 'El tipo de calzado es obligatorio'],
-      immutable: true,
+      required: [true, 'La categoría/tipo es obligatoria'],
     },
     gender: {
       type: String,
       enum: {
-        values: ['Hombre', 'Mujer', 'Niño', 'Unisex'],
+        values: ['Hombre', 'Mujer', 'Niño', 'Unisex', null],
         message: '{VALUE} no es un género válido',
       },
-      required: [true, 'El género es obligatorio'],
-      immutable: true,
+      default: null,
     },
     active: {
       type: Boolean,
@@ -112,6 +128,15 @@ const ProductSchema: Schema<IProductDocument> = new Schema(
     },
     images: {
       type: [ProductImageSchema],
+      default: [],
+    },
+    stock: {
+      type: Number,
+      min: [0, 'El stock no puede ser negativo'],
+      default: 0,
+    },
+    variants: {
+      type: [VariantStockSchema],
       default: [],
     },
     sizesStock: {
@@ -131,6 +156,7 @@ const ProductSchema: Schema<IProductDocument> = new Schema(
 // Compound Indexes for fast catalog queries and filtering
 ProductSchema.index({ active: 1, brandId: 1, typeId: 1, gender: 1 });
 ProductSchema.index({ active: 1, isClearance: 1 });
+ProductSchema.index({ 'variants.name': 1 });
 ProductSchema.index({ 'sizesStock.size': 1 });
 
 const Product: Model<IProductDocument> =

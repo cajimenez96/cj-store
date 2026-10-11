@@ -17,7 +17,9 @@ export interface IOrderItem {
   productId: Types.ObjectId;
   name: string;
   image?: string;
-  size: number;
+  variantName?: string;
+  /** @deprecated Legacy shoe size */
+  size?: number;
   qty: number;
   appliedPriceType: AppliedPriceType;
   unitPrice: number;
@@ -62,9 +64,12 @@ const OrderItemSchema = new Schema<IOrderItem>(
       type: String,
       default: '',
     },
+    variantName: {
+      type: String,
+      trim: true,
+    },
     size: {
       type: Number,
-      required: [true, 'El talle es obligatorio'],
     },
     qty: {
       type: Number,
