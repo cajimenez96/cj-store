@@ -3,7 +3,7 @@
 import React from "react";
 import Image from "next/image";
 import { Eye, AlertCircle, Tag } from "lucide-react";
-import type { IProductImage, ISizeStock } from "@/models/Product";
+import type { IProductImage, ISizeStock, IVariantStock } from "@/models/Product";
 
 import { formatPrice } from "@/utils/formatCurrency";
 
@@ -15,11 +15,14 @@ export interface FormattedProduct {
   price?: number;
   retailPrice: number;
   wholesalePrice: number;
-  gender: string;
+  gender?: string | null;
   brandId: { _id: string; name: string } | string;
   typeId: { _id: string; name: string } | string;
   images: IProductImage[];
-  sizesStock: ISizeStock[];
+  variants?: IVariantStock[];
+  stock?: number;
+  /** @deprecated Legacy shoe sizes */
+  sizesStock?: ISizeStock[];
   totalStock: number;
   isOutOfStock: boolean;
   isClearance?: boolean;
@@ -37,7 +40,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const brandName =
     typeof product.brandId === "object" && product.brandId !== null
       ? product.brandId.name
-      : "Calzado";
+      : "Producto";
 
   const typeName =
     typeof product.typeId === "object" && product.typeId !== null
@@ -55,9 +58,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     product.images[0]?.url ||
     "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=800&q=80";
 
-  const availableSizes = product.sizesStock
-    .filter((s) => s.stock > 0)
-    .map((s) => s.size);
+  const availableOptions = (product.variants && product.variants.length > 0)
+    ? product.variants.filter((v) => v.stock > 0).map((v) => v.name)
+    : (product.sizesStock && product.sizesStock.length > 0)
+    ? product.sizesStock.filter((s) => s.stock > 0).map((s) => String(s.size))
+    : [];
 
   return (
     <div
@@ -115,23 +120,25 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {product.name}
         </h3>
 
-        {/* Available Sizes Pills Preview */}
+        {/* Available Options / Sizes Pills Preview */}
         <div className="hidden md:flex items-center gap-1 my-1 overflow-x-auto no-scrollbar py-0.5">
-          {availableSizes.length > 0 ? (
-            availableSizes.slice(0, 5).map((size) => (
+          {availableOptions.length > 0 ? (
+            availableOptions.slice(0, 5).map((opt) => (
               <span
-                key={size}
+                key={opt}
                 className="text-[10px] font-semibold bg-[#f5f5f5] text-[#111111] px-1.5 py-0.5 rounded-sm border border-[#e5e5e5]"
               >
-                {size}
+                {opt}
               </span>
             ))
+          ) : product.totalStock > 0 ? (
+            <span className="text-[10px] font-semibold text-[#007d48]">Disponible</span>
           ) : (
             <span className="text-[11px] text-[#707072] italic">Agotado</span>
           )}
-          {availableSizes.length > 5 && (
+          {availableOptions.length > 5 && (
             <span className="text-[10px] text-[#707072] font-medium">
-              +{availableSizes.length - 5}
+              +{availableOptions.length - 5}
             </span>
           )}
         </div>

@@ -67,7 +67,7 @@ export const Step2OrderReview: React.FC<Step2OrderReviewProps> = ({
 
           return (
             <div
-              key={`${item.productId}-${item.size}`}
+              key={`${item.productId}-${item.variantName || item.size || 'default'}`}
               className="p-3.5 flex gap-4 items-center"
             >
               <div className="relative w-14 h-14 bg-white flex-shrink-0 border border-[#e5e5e5]">
@@ -89,7 +89,11 @@ export const Step2OrderReview: React.FC<Step2OrderReviewProps> = ({
                   {item.name}
                 </h4>
                 <p className="text-[11px] text-[#707072]">
-                  Talle: <strong className="text-[#111111]">{item.size}</strong> •
+                  {item.variantName ? (
+                    <>Variante: <strong className="text-[#111111]">{item.variantName}</strong> • </>
+                  ) : item.size !== undefined ? (
+                    <>Talle: <strong className="text-[#111111]">{item.size}</strong> • </>
+                  ) : null}
                   Cantidad: <strong className="text-[#111111]">{item.qty}</strong>
                 </p>
                 {isDiscounted ? (

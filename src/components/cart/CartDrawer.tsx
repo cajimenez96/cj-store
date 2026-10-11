@@ -67,7 +67,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onStartCheckout }) => {
                   {isWholesale ? (
                     <><Zap className="w-3 h-3 fill-current" /> ¡Precio mayorista activo en todos los productos!</>
                   ) : (
-                    <><Tag className="w-3 h-3" /> {pairsToWholesale} par{pairsToWholesale !== 1 ? 'es' : ''} más para precio mayorista</>
+                    <><Tag className="w-3 h-3" /> {pairsToWholesale} unidad{pairsToWholesale !== 1 ? 'es' : ''} más para precio mayorista</>
                   )}
                 </span>
                 <span className="text-[10px] text-[#707072] font-semibold">{totalPairs}/{WHOLESALE_THRESHOLD}</span>
@@ -103,10 +103,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onStartCheckout }) => {
               items.map((item) => {
                 const effectivePrice = getEffectivePrice(item);
                 const isDiscounted = isWholesale && item.wholesalePrice < item.retailPrice;
+                const itemKey = `${item.productId}-${item.variantName || item.size || 'default'}`;
+                const variantIdentifier = item.variantName ?? item.size;
 
                 return (
                   <div
-                    key={`${item.productId}-${item.size}`}
+                    key={itemKey}
                     className="pt-4 first:pt-0 flex gap-4 items-center"
                   >
                     {/* Thumbnail */}
@@ -131,7 +133,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onStartCheckout }) => {
                           {item.name}
                         </h3>
                         <button
-                          onClick={() => removeFromCart(item.productId, item.size)}
+                          onClick={() => removeFromCart(item.productId, variantIdentifier)}
                           className="text-[#707072] hover:text-[#d30005] transition-colors p-1 cursor-pointer"
                           title="Eliminar producto"
                         >
@@ -139,15 +141,21 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onStartCheckout }) => {
                         </button>
                       </div>
 
-                      <p className="text-[11px] font-semibold text-[#707072]">
-                        Talle: <strong className="text-[#111111]">{item.size}</strong>
-                      </p>
+                      {(item.variantName || item.size !== undefined) && (
+                        <p className="text-[11px] font-semibold text-[#707072]">
+                          {item.variantName ? (
+                            <>Variante: <strong className="text-[#111111]">{item.variantName}</strong></>
+                          ) : (
+                            <>Talle: <strong className="text-[#111111]">{item.size}</strong></>
+                          )}
+                        </p>
+                      )}
 
                       <div className="flex justify-between items-center pt-1">
                         {/* Qty Counter */}
                         <div className="flex items-center border border-[#e5e5e5]">
                           <button
-                            onClick={() => updateQuantity(item.productId, item.size, item.qty - 1)}
+                            onClick={() => updateQuantity(item.productId, variantIdentifier, item.qty - 1)}
                             className="px-2 py-0.5 text-xs font-bold text-[#111111] hover:bg-[#f5f5f5] cursor-pointer"
                           >
                             <Minus className="w-3 h-3" />
@@ -156,7 +164,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onStartCheckout }) => {
                             {item.qty}
                           </span>
                           <button
-                            onClick={() => updateQuantity(item.productId, item.size, item.qty + 1)}
+                            onClick={() => updateQuantity(item.productId, variantIdentifier, item.qty + 1)}
                             disabled={item.qty >= item.maxStock}
                             className="px-2 py-0.5 text-xs font-bold text-[#111111] hover:bg-[#f5f5f5] cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                           >

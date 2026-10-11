@@ -16,7 +16,8 @@ interface Step3PaymentWhatsAppProps {
   };
   items: Array<{
     name: string;
-    size: number;
+    variantName?: string;
+    size?: number;
     qty: number;
     price: number;
     subtotal: number;

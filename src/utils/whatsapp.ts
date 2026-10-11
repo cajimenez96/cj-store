@@ -9,7 +9,8 @@ export interface WhatsAppMessagePayload {
   };
   items: Array<{
     name: string;
-    size: number;
+    variantName?: string;
+    size?: number;
     qty: number;
     price: number;
     subtotal: number;
@@ -24,16 +25,20 @@ export function buildWhatsAppShareUrl(payload: WhatsAppMessagePayload): string {
     payload.storePhone || process.env.NEXT_PUBLIC_WHATSAPP_PHONE || "-";
 
   const alias =
-    payload.bankAlias || process.env.NEXT_PUBLIC_BANK_ALIAS || "FP.ZAPATILLAS";
+    payload.bankAlias || process.env.NEXT_PUBLIC_BANK_ALIAS || "CJ.STORE";
 
   const itemsList = payload.items
-    .map(
-      (item) =>
-        `• ${item.qty}x ${item.name}\n   - Talle: ${item.size}\n   - Subtotal: ${formatPrice(item.subtotal)}`,
-    )
+    .map((item) => {
+      const variantText = item.variantName
+        ? `\n   - Variante: ${item.variantName}`
+        : item.size !== undefined
+          ? `\n   - Talle: ${item.size}`
+          : "";
+      return `• ${item.qty}x ${item.name}${variantText}\n   - Subtotal: ${formatPrice(item.subtotal)}`;
+    })
     .join("\n\n");
 
-  const text = `¡Hola! Acabo de hacer mi pedido en FP Zapatillas 👟
+  const text = `¡Hola! Acabo de hacer mi pedido #${payload.orderNumber} ✨
 
 👤 *CLIENTE*
 • ${payload.guest.name} ${payload.guest.lastName}

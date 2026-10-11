@@ -96,8 +96,14 @@ export async function GET(req: NextRequest) {
     // Map products to include totalStock and isOutOfStock flags
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const formattedProducts = products.map((prod: any) => {
-      const sizesStock = (prod.sizesStock as { size: number; stock: number }[]) || [];
-      const totalStock = sizesStock.reduce((acc, curr) => acc + curr.stock, 0);
+      let totalStock = 0;
+      if (Array.isArray(prod.variants) && prod.variants.length > 0) {
+        totalStock = prod.variants.reduce((acc: number, curr: any) => acc + (curr.stock || 0), 0);
+      } else if (typeof prod.stock === 'number') {
+        totalStock = prod.stock;
+      } else if (Array.isArray(prod.sizesStock) && prod.sizesStock.length > 0) {
+        totalStock = prod.sizesStock.reduce((acc: number, curr: any) => acc + (curr.stock || 0), 0);
+      }
 
       return {
         ...prod,
