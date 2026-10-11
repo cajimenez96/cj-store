@@ -7,3 +7,4 @@ export { default as Promotion, type IPromotion, type IPromotionDocument } from '
 export { default as GenderSize, type IGenderSize, type IGenderSizeDocument } from './GenderSize';
 export { default as Expense, type IExpense, type IExpenseDocument, type ExpenseCategory } from './Expense';
 export { default as Settings, type ISettings, type ISettingsDocument } from './Settings';
+export { default as User, type IUser, type IUserDocument, type UserRole } from './User';

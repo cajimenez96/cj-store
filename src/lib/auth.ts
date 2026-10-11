@@ -1,35 +1,54 @@
 import { SignJWT, jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
+import { connectToDatabase } from '@/lib/db';
+import User, { IUserDocument } from '@/models/User';
 
 const SECRET_KEY = new TextEncoder().encode(
-  process.env.NEXTAUTH_SECRET || 'dev_secret_fp_zapatillas_2026_change_in_prod'
+  process.env.NEXTAUTH_SECRET || 'dev_secret_cj_store_2026_change_in_prod'
 );
 
-const ADMIN_USER = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_HASH =
-  process.env.ADMIN_PASSWORD_HASH ||
-  '$2b$10$Zb/AGPZFkAFzn9Zikuc5GuowsybEueiaoP7b3VqFMY78NqrJHLURu'; // default hash for 'fypZapatillas.DEV'
+export async function verifyUserCredentials(
+  username: string,
+  password?: string
+): Promise<IUserDocument | null> {
+  if (!username || !password) return null;
+  await connectToDatabase();
+
+  const user = await User.findOne({
+    username: username.toLowerCase().trim(),
+    active: true,
+  });
+
+  if (!user) return null;
+
+  const isMatch = await bcrypt.compare(password, user.passwordHash);
+  if (!isMatch) return null;
+
+  return user;
+}
 
 export async function verifyAdminCredentials(
   username: string,
   password?: string
 ): Promise<boolean> {
-  if (username !== ADMIN_USER || !password) {
-    return false;
-  }
-  // Fallback for dev mode
-  if (password === 'fypZapatillas.DEV') return true;
-
-  try {
-    return await bcrypt.compare(password, ADMIN_HASH);
-  } catch (err) {
-    console.error('Error al comparar contraseñas bcrypt:', err);
-    return false;
-  }
+  const user = await verifyUserCredentials(username, password);
+  return Boolean(user && (user.role === 'superadmin' || user.role === 'admin'));
 }
 
-export async function signAdminToken(): Promise<string> {
-  return await new SignJWT({ role: 'admin', user: ADMIN_USER })
+export async function signAdminToken(user?: {
+  id?: string;
+  username?: string;
+  role?: string;
+  name?: string;
+}): Promise<string> {
+  const payload = {
+    role: user?.role || 'admin',
+    user: user?.username || 'admin',
+    id: user?.id,
+    name: user?.name,
+  };
+
+  return await new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('7d')
@@ -39,8 +58,20 @@ export async function signAdminToken(): Promise<string> {
 export async function verifyAdminToken(token: string): Promise<boolean> {
   try {
     const { payload } = await jwtVerify(token, SECRET_KEY);
-    return payload.role === 'admin';
+    return Boolean(
+      payload &&
+        (payload.role === 'superadmin' || payload.role === 'admin')
+    );
   } catch {
     return false;
+  }
+}
+
+export async function decodeToken(token: string) {
+  try {
+    const { payload } = await jwtVerify(token, SECRET_KEY);
+    return payload;
+  } catch {
+    return null;
   }
 }

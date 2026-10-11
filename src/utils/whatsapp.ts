@@ -21,11 +21,9 @@ export interface WhatsAppMessagePayload {
 }
 
 export function buildWhatsAppShareUrl(payload: WhatsAppMessagePayload): string {
-  const phone =
-    payload.storePhone || process.env.NEXT_PUBLIC_WHATSAPP_PHONE || "-";
+  const phone = payload.storePhone || "-";
 
-  const alias =
-    payload.bankAlias || process.env.NEXT_PUBLIC_BANK_ALIAS || "CJ.STORE";
+  const alias = payload.bankAlias || "CJ.STORE";
 
   const itemsList = payload.items
     .map((item) => {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdminCredentials, signAdminToken } from '@/lib/auth';
+import { verifyUserCredentials, signAdminToken } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,24 +16,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const isValid = await verifyAdminCredentials(username, password);
+    const user = await verifyUserCredentials(username, password);
 
-    if (!isValid) {
+    if (!user) {
       return NextResponse.json(
         {
           ok: false,
           error: 'UNAUTHORIZED',
-          message: 'Credenciales de administrador inválidas',
+          message: 'Credenciales inválidas o usuario inactivo',
         },
         { status: 401 }
       );
     }
 
-    const token = await signAdminToken();
+    const token = await signAdminToken({
+      id: user._id.toString(),
+      username: user.username,
+      role: user.role,
+      name: user.name,
+    });
 
     const response = NextResponse.json({
       ok: true,
-      message: 'Autenticado exitosamente como Administrador',
+      message: 'Autenticado exitosamente',
+      user: {
+        id: user._id,
+        username: user.username,
+        name: user.name,
+        role: user.role,
+      },
     });
 
     // Set secure HTTP-only cookie

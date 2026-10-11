@@ -15,6 +15,7 @@ import {
   Settings,
   Boxes,
   DollarSign,
+  Users as UsersIcon,
 } from "lucide-react";
 
 export const AdminNav: React.FC = () => {
@@ -40,6 +41,7 @@ export const AdminNav: React.FC = () => {
     { label: "Promociones", href: "/admin/promotions", icon: ImageIcon },
     { label: "Reportes", href: "/admin/reports", icon: BarChart3 },
     { label: "Contabilidad", href: "/admin/accounting", icon: DollarSign },
+    { label: "Usuarios", href: "/admin/users", icon: UsersIcon },
     { label: "Ajustes", href: "/admin/settings", icon: Settings },
   ];
 
