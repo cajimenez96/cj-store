@@ -15,8 +15,12 @@ export type PaymentMethodType = 'transferencia' | 'efectivo' | 'tarjeta' | 'otro
 
 export interface IOrderItem {
   productId: Types.ObjectId;
+  variantId?: Types.ObjectId;
+  sku?: string;
   name: string;
   image?: string;
+  imageUrl?: string;
+  variantLabel?: string;
   variantName?: string;
   /** @deprecated Legacy shoe size */
   size?: number;
@@ -43,6 +47,7 @@ export interface IOrder {
   paymentMethod: PaymentMethodType;
   status: OrderStatus;
   notes?: string;
+  cancelReason?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -56,6 +61,14 @@ const OrderItemSchema = new Schema<IOrderItem>(
       ref: 'Product',
       required: [true, 'El producto es obligatorio'],
     },
+    variantId: {
+      type: Schema.Types.ObjectId,
+    },
+    sku: {
+      type: String,
+      trim: true,
+      uppercase: true,
+    },
     name: {
       type: String,
       required: [true, 'El nombre del producto en el ítem es obligatorio'],
@@ -63,6 +76,14 @@ const OrderItemSchema = new Schema<IOrderItem>(
     image: {
       type: String,
       default: '',
+    },
+    imageUrl: {
+      type: String,
+      default: '',
+    },
+    variantLabel: {
+      type: String,
+      trim: true,
     },
     variantName: {
       type: String,
@@ -170,6 +191,11 @@ const OrderSchema: Schema<IOrderDocument> = new Schema(
       index: true,
     },
     notes: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    cancelReason: {
       type: String,
       trim: true,
       default: '',

@@ -8,3 +8,6 @@ export { default as GenderSize, type IGenderSize, type IGenderSizeDocument } fro
 export { default as Expense, type IExpense, type IExpenseDocument, type ExpenseCategory } from './Expense';
 export { default as Settings, type ISettings, type ISettingsDocument } from './Settings';
 export { default as User, type IUser, type IUserDocument, type UserRole } from './User';
+export { default as Attribute, type IAttribute, type IAttributeDocument, type IAttributeOption, type AttributeType } from './Attribute';
+export { default as Category, type ICategory, type ICategoryDocument, type ISpecAttributeDefinition } from './Category';
+export { default as Counter, type ICounter, type ICounterDocument, getNextSequence } from './Counter';
