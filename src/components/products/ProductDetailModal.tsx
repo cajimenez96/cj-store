@@ -257,8 +257,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                             Precio mayorista: {formatPrice(wholesalePrice)} — te
                             faltan{" "}
                             <strong>
-                              {pairsToWholesale} par
-                              {pairsToWholesale !== 1 ? "es" : ""}
+                              {unitsToWholesale} unidad
+                              {unitsToWholesale !== 1 ? "es" : ""}
                             </strong>{" "}
                             más en el carrito.
                           </span>

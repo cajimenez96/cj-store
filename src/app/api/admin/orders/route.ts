@@ -110,13 +110,23 @@ export async function PUT(req: NextRequest) {
       for (const item of existingOrder.items) {
         const product = await Product.findById(item.productId);
         if (product) {
-          const sizesStock = product.sizesStock.map((s) => {
-            if (s.size === item.size) {
-              return { ...s, stock: Math.max(0, s.stock - item.qty) };
-            }
-            return s;
-          });
-          product.sizesStock = sizesStock;
+          if (item.variantName && product.variants) {
+            product.variants = product.variants.map((v) => {
+              if (v.name === item.variantName) {
+                return { ...v, stock: Math.max(0, v.stock - item.qty) };
+              }
+              return v;
+            });
+          } else if (item.size !== undefined && product.sizesStock) {
+            product.sizesStock = product.sizesStock.map((s) => {
+              if (s.size === item.size) {
+                return { ...s, stock: Math.max(0, s.stock - item.qty) };
+              }
+              return s;
+            });
+          } else if (product.stock !== undefined) {
+            product.stock = Math.max(0, product.stock - item.qty);
+          }
           await product.save();
         }
       }
@@ -127,13 +137,23 @@ export async function PUT(req: NextRequest) {
       for (const item of existingOrder.items) {
         const product = await Product.findById(item.productId);
         if (product) {
-          const sizesStock = product.sizesStock.map((s) => {
-            if (s.size === item.size) {
-              return { ...s, stock: s.stock + item.qty };
-            }
-            return s;
-          });
-          product.sizesStock = sizesStock;
+          if (item.variantName && product.variants) {
+            product.variants = product.variants.map((v) => {
+              if (v.name === item.variantName) {
+                return { ...v, stock: v.stock + item.qty };
+              }
+              return v;
+            });
+          } else if (item.size !== undefined && product.sizesStock) {
+            product.sizesStock = product.sizesStock.map((s) => {
+              if (s.size === item.size) {
+                return { ...s, stock: s.stock + item.qty };
+              }
+              return s;
+            });
+          } else if (product.stock !== undefined) {
+            product.stock = product.stock + item.qty;
+          }
           await product.save();
         }
       }

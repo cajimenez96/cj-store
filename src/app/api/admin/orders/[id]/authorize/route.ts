@@ -40,7 +40,7 @@ export async function POST(
     }
   }
 
-  const decrementedItems: Array<{ productId: any; size: number; qty: number }> = [];
+  const decrementedItems: Array<{ productId: any; size?: number; variantName?: string; qty: number }> = [];
 
   try {
     const { id } = await params;
@@ -111,8 +111,20 @@ export async function POST(
         );
       }
 
-      const sizeEntry = product.sizesStock.find((s) => s.size === item.size);
-      const availableStock = sizeEntry?.stock ?? 0;
+      let availableStock = 0;
+      let label = '';
+      if (item.variantName && product.variants && product.variants.length > 0) {
+        const variantEntry = product.variants.find((v) => v.name === item.variantName);
+        availableStock = variantEntry?.stock ?? 0;
+        label = `Variante ${item.variantName}`;
+      } else if (item.size !== undefined && product.sizesStock && product.sizesStock.length > 0) {
+        const sizeEntry = product.sizesStock.find((s) => s.size === item.size);
+        availableStock = sizeEntry?.stock ?? 0;
+        label = `Talle ${item.size}`;
+      } else {
+        availableStock = product.stock ?? 0;
+        label = 'Stock general';
+      }
 
       if (availableStock < item.qty) {
         if (session && useTransaction) {
@@ -123,7 +135,7 @@ export async function POST(
           {
             ok: false,
             error: 'INSUFFICIENT_STOCK',
-            message: `Stock insuficiente para "${item.name}" (Talle ${item.size}). Disponible: ${availableStock}, Requerido: ${item.qty}.`,
+            message: `Stock insuficiente para "${item.name}" (${label}). Disponible: ${availableStock}, Requerido: ${item.qty}.`,
           },
           { status: 409 }
         );
@@ -132,29 +144,29 @@ export async function POST(
 
     // 2. Decrement stock atomically for each item
     for (const item of order.items) {
+      const updateFilter = item.variantName
+        ? { _id: item.productId, 'variants.name': item.variantName }
+        : item.size !== undefined
+        ? { _id: item.productId, 'sizesStock.size': item.size }
+        : { _id: item.productId };
+
+      const updateOp = item.variantName
+        ? { $inc: { 'variants.$.stock': -item.qty } }
+        : item.size !== undefined
+        ? { $inc: { 'sizesStock.$.stock': -item.qty } }
+        : { $inc: { stock: -item.qty } };
+
       if (session && useTransaction) {
-        await Product.updateOne(
-          {
-            _id: item.productId,
-            'sizesStock.size': item.size,
-          },
-          {
-            $inc: { 'sizesStock.$.stock': -item.qty },
-          },
-          { session }
-        );
+        await Product.updateOne(updateFilter, updateOp, { session });
       } else {
-        await Product.updateOne(
-          {
-            _id: item.productId,
-            'sizesStock.size': item.size,
-          },
-          {
-            $inc: { 'sizesStock.$.stock': -item.qty },
-          }
-        );
+        await Product.updateOne(updateFilter, updateOp);
       }
-      decrementedItems.push({ productId: item.productId, size: item.size, qty: item.qty });
+      decrementedItems.push({
+        productId: item.productId,
+        size: item.size,
+        variantName: item.variantName,
+        qty: item.qty,
+      });
     }
 
     // 3. Update order to 'autorizado'
@@ -200,10 +212,22 @@ export async function POST(
     } else if (decrementedItems.length > 0) {
       // Manual rollback in non-replica set environment
       for (const item of decrementedItems) {
-        await Product.updateOne(
-          { _id: item.productId, 'sizesStock.size': item.size },
-          { $inc: { 'sizesStock.$.stock': item.qty } }
-        ).catch(() => {});
+        if (item.variantName) {
+          await Product.updateOne(
+            { _id: item.productId, 'variants.name': item.variantName },
+            { $inc: { 'variants.$.stock': item.qty } }
+          ).catch(() => {});
+        } else if (item.size !== undefined) {
+          await Product.updateOne(
+            { _id: item.productId, 'sizesStock.size': item.size },
+            { $inc: { 'sizesStock.$.stock': item.qty } }
+          ).catch(() => {});
+        } else {
+          await Product.updateOne(
+            { _id: item.productId },
+            { $inc: { stock: item.qty } }
+          ).catch(() => {});
+        }
       }
     }
 

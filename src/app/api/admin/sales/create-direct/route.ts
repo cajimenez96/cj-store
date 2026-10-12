@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const decrementedItems: Array<{ productId: any; size: number; qty: number }> = [];
+  const decrementedItems: Array<{ productId: any; size?: number; variantName?: string; qty: number }> = [];
 
   try {
     const body = await req.json();
@@ -99,8 +99,20 @@ export async function POST(req: NextRequest) {
       }
 
       // Verify stock availability
-      const sizeEntry = product.sizesStock.find((s) => s.size === Number(item.size));
-      const availableStock = sizeEntry?.stock ?? 0;
+      let availableStock = 0;
+      let label = '';
+      if (item.variantName && product.variants && product.variants.length > 0) {
+        const variantEntry = product.variants.find((v) => v.name === item.variantName);
+        availableStock = variantEntry?.stock ?? 0;
+        label = `Variante ${item.variantName}`;
+      } else if (item.size !== undefined && product.sizesStock && product.sizesStock.length > 0) {
+        const sizeEntry = product.sizesStock.find((s) => s.size === Number(item.size));
+        availableStock = sizeEntry?.stock ?? 0;
+        label = `Talle ${item.size}`;
+      } else {
+        availableStock = product.stock ?? 0;
+        label = 'Stock general';
+      }
       const itemQty = Math.max(1, Number(item.qty));
 
       if (availableStock < itemQty) {
@@ -112,7 +124,7 @@ export async function POST(req: NextRequest) {
           {
             ok: false,
             error: 'INSUFFICIENT_STOCK',
-            message: `Stock insuficiente para "${product.name}" (Talle ${item.size}). Disponible: ${availableStock}, Requerido: ${itemQty}.`,
+            message: `Stock insuficiente para "${product.name}" (${label}). Disponible: ${availableStock}, Requerido: ${itemQty}.`,
           },
           { status: 409 }
         );
@@ -143,7 +155,8 @@ export async function POST(req: NextRequest) {
         productId: product._id,
         name: product.name,
         image: principalImage,
-        size: Number(item.size),
+        size: item.size !== undefined ? Number(item.size) : undefined,
+        variantName: item.variantName,
         qty: itemQty,
         appliedPriceType,
         unitPrice,
@@ -153,19 +166,29 @@ export async function POST(req: NextRequest) {
 
     // 4. Atomically decrement stock for all items
     for (const item of validatedItems) {
+      const updateFilter = item.variantName
+        ? { _id: item.productId, 'variants.name': item.variantName }
+        : item.size !== undefined
+        ? { _id: item.productId, 'sizesStock.size': item.size }
+        : { _id: item.productId };
+
+      const updateOp = item.variantName
+        ? { $inc: { 'variants.$.stock': -item.qty } }
+        : item.size !== undefined
+        ? { $inc: { 'sizesStock.$.stock': -item.qty } }
+        : { $inc: { stock: -item.qty } };
+
       if (session && useTransaction) {
-        await Product.updateOne(
-          { _id: item.productId, 'sizesStock.size': item.size },
-          { $inc: { 'sizesStock.$.stock': -item.qty } },
-          { session }
-        );
+        await Product.updateOne(updateFilter, updateOp, { session });
       } else {
-        await Product.updateOne(
-          { _id: item.productId, 'sizesStock.size': item.size },
-          { $inc: { 'sizesStock.$.stock': -item.qty } }
-        );
+        await Product.updateOne(updateFilter, updateOp);
       }
-      decrementedItems.push({ productId: item.productId, size: item.size, qty: item.qty });
+      decrementedItems.push({
+        productId: item.productId,
+        size: item.size,
+        variantName: item.variantName,
+        qty: item.qty,
+      });
     }
 
     // 5. Generate order number
@@ -241,10 +264,22 @@ export async function POST(req: NextRequest) {
     } else if (decrementedItems.length > 0) {
       // Manual rollback in non-replica set environment
       for (const item of decrementedItems) {
-        await Product.updateOne(
-          { _id: item.productId, 'sizesStock.size': item.size },
-          { $inc: { 'sizesStock.$.stock': item.qty } }
-        ).catch(() => {});
+        if (item.variantName) {
+          await Product.updateOne(
+            { _id: item.productId, 'variants.name': item.variantName },
+            { $inc: { 'variants.$.stock': item.qty } }
+          ).catch(() => {});
+        } else if (item.size !== undefined) {
+          await Product.updateOne(
+            { _id: item.productId, 'sizesStock.size': item.size },
+            { $inc: { 'sizesStock.$.stock': item.qty } }
+          ).catch(() => {});
+        } else {
+          await Product.updateOne(
+            { _id: item.productId },
+            { $inc: { stock: item.qty } }
+          ).catch(() => {});
+        }
       }
     }
 

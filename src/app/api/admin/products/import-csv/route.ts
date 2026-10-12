@@ -108,7 +108,8 @@ export async function POST(req: NextRequest) {
         createdCount++;
       } else {
         // Update existing Product stock and price
-        const sizeMap = new Map(productDoc.sizesStock.map((s) => [s.size, s.stock]));
+        const currentSizes = productDoc.sizesStock || [];
+        const sizeMap = new Map(currentSizes.map((s) => [s.size, s.stock]));
         sizeMap.set(talle, stock); // Set stock for specific size
 
         const updatedSizesStock = Array.from(sizeMap.entries()).map(([sz, st]) => ({

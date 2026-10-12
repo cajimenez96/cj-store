@@ -125,7 +125,8 @@ export async function PUT(req: NextRequest) {
     const sizeNum = Number(size);
     const stockNum = Number(newStock);
 
-    const sizeMap = new Map(product.sizesStock.map((s) => [s.size, s.stock]));
+    const currentSizes = product.sizesStock || [];
+    const sizeMap = new Map(currentSizes.map((s) => [s.size, s.stock]));
     sizeMap.set(sizeNum, stockNum);
 
     product.sizesStock = Array.from(sizeMap.entries()).map(([sz, st]) => ({
