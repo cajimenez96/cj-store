@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdminToken } from '@/lib/auth';
+import { verifyAdminToken } from '@/lib/jwt';
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
