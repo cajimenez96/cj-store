@@ -1,46 +1,73 @@
-"use client";
+'use client';
 
-import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Save,
   ArrowLeft,
   AlertCircle,
   CheckCircle2,
   Loader2,
-  Lock,
   Plus,
   Trash2,
-} from "lucide-react";
-import type { GenderType, IProductImage, ISizeStock, IVariantStock } from "@/models/Product";
-import { DEFAULT_GENDER_SIZES } from "@/constants/sizes";
-import { ImageUploader } from "./ImageUploader";
-import { toast } from "@/components/ui/sonner";
+  Sparkles,
+  Layers,
+  Tag,
+  Boxes,
+  Percent,
+  Sliders,
+  DollarSign,
+  Copy,
+} from 'lucide-react';
+import type { IProductImage } from '@/models/Product';
+import { ImageUploader } from './ImageUploader';
+import { toast } from '@/components/ui/sonner';
+import { generateVariantCombinations, generateSku, formatVariantLabel } from '@/lib/variants';
 
 interface OptionItem {
   _id: string;
   name: string;
 }
 
+interface AttributeOption {
+  value: string;
+  label: string;
+  hex?: string;
+  order: number;
+}
+
+interface AttributeData {
+  _id: string;
+  key: string;
+  label: string;
+  type: string;
+  unit?: string;
+  options: AttributeOption[];
+}
+
+interface CategoryData {
+  _id: string;
+  name: string;
+  slug: string;
+  parentId?: string | null;
+  ancestors: string[];
+  variantAxes: string[];
+  imageAxis?: string;
+  specAttributes: { key: string; required: boolean }[];
+}
+
+interface FormVariant {
+  _id?: string;
+  sku: string;
+  options: { key: string; value: string }[];
+  retailPrice: number | '';
+  wholesalePrice?: number | '';
+  stock: number | '';
+  active: boolean;
+}
+
 interface ProductFormProps {
-  initialData?: {
-    _id?: string;
-    name: string;
-    description: string;
-    price?: number;
-    retailPrice?: number;
-    wholesalePrice?: number;
-    brandId: string | { _id: string; name: string };
-    typeId: string | { _id: string; name: string };
-    gender?: GenderType | null;
-    active: boolean;
-    isClearance?: boolean;
-    images: IProductImage[];
-    variants?: IVariantStock[];
-    stock?: number;
-    sizesStock?: ISizeStock[];
-    displayedSizes?: number[];
-  };
+  initialData?: any;
   isEditing?: boolean;
 }
 
@@ -50,826 +77,1090 @@ export const ProductForm: React.FC<ProductFormProps> = ({
 }) => {
   const router = useRouter();
 
+  // Reference lists
+  const [categories, setCategories] = useState<CategoryData[]>([]);
   const [brands, setBrands] = useState<OptionItem[]>([]);
-  const [types, setTypes] = useState<OptionItem[]>([]);
-  const [genderSizes, setGenderSizes] = useState<Record<string, number[]>>({});
-  const [loadingOptions, setLoadingOptions] = useState(true);
+  const [attributes, setAttributes] = useState<AttributeData[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Form Fields
-  const [name, setName] = useState(initialData?.name || "");
-  const [description, setDescription] = useState(
-    initialData?.description || "",
-  );
-  const [retailPrice, setRetailPrice] = useState<number | "">(
-    initialData?.retailPrice !== undefined
-      ? initialData.retailPrice
-      : initialData?.price !== undefined
-        ? initialData.price
-        : "",
-  );
-  const [wholesalePrice, setWholesalePrice] = useState<number | "">(
-    initialData?.wholesalePrice !== undefined
-      ? initialData.wholesalePrice
-      : initialData?.price !== undefined
-        ? initialData.price
-        : "",
-  );
+  // General Fields
+  const [name, setName] = useState(initialData?.name || '');
+  const [slug, setSlug] = useState(initialData?.slug || '');
+  const [description, setDescription] = useState(initialData?.description || '');
   const [brandId, setBrandId] = useState<string>(
-    typeof initialData?.brandId === "object"
-      ? initialData.brandId._id
-      : initialData?.brandId || "",
+    typeof initialData?.brandId === 'object' ? initialData.brandId?._id : initialData?.brandId || ''
   );
-  const [typeId, setTypeId] = useState<string>(
-    typeof initialData?.typeId === "object"
-      ? initialData.typeId._id
-      : initialData?.typeId || "",
-  );
-  const [gender, setGender] = useState<GenderType | null>(
-    initialData?.gender !== undefined ? initialData.gender : null,
+  const [categoryId, setCategoryId] = useState<string>(
+    typeof initialData?.categoryId === 'object'
+      ? initialData.categoryId?._id
+      : initialData?.categoryId || ''
   );
   const [active, setActive] = useState<boolean>(
-    initialData?.active !== undefined ? initialData.active : true,
+    initialData?.active !== undefined ? initialData.active : true
   );
   const [isClearance, setIsClearance] = useState<boolean>(
-    initialData?.isClearance || false,
+    initialData?.isClearance || false
   );
 
-  // Inventory mode: 'variants' | 'simple' | 'shoes'
-  const initialMode =
-    initialData?.variants && initialData.variants.length > 0
-      ? "variants"
-      : initialData?.sizesStock && initialData.sizesStock.length > 0
-      ? "shoes"
-      : initialData?.stock !== undefined
-      ? "simple"
-      : "variants";
+  // Specs Fields { [key]: value }
+  const [specsMap, setSpecsMap] = useState<Record<string, any>>({});
 
-  const [inventoryMode, setInventoryMode] = useState<"variants" | "simple" | "shoes">(initialMode);
-
-  // Generic variants state
-  const [variants, setVariants] = useState<IVariantStock[]>(
-    initialData?.variants && initialData.variants.length > 0
-      ? initialData.variants
-      : [{ name: "100ml", stock: 10 }]
+  // Wholesale Fields
+  const [wholesaleEnabled, setWholesaleEnabled] = useState<boolean>(
+    initialData?.wholesale?.enabled ?? Boolean(initialData?.wholesalePrice)
+  );
+  const [wholesaleMinQty, setWholesaleMinQty] = useState<number>(
+    initialData?.wholesale?.minQty || 5
   );
 
-  // Simple stock state
-  const [simpleStock, setSimpleStock] = useState<number | "">(
-    initialData?.stock !== undefined ? initialData.stock : 0
+  // Images
+  const [images, setImages] = useState<IProductImage[]>(initialData?.images || []);
+  const [selectedImageAxisValue, setSelectedImageAxisValue] = useState<string>('');
+
+  // Variants Matrix
+  const [variants, setVariants] = useState<FormVariant[]>([]);
+
+  // Selected values per axis for combination generator: { [axisKey]: string[] }
+  const [selectedAxisValues, setSelectedAxisValues] = useState<Record<string, string[]>>({});
+
+  // Simple Product Fields (when category has 0 axes)
+  const [simplePrice, setSimplePrice] = useState<number | ''>(
+    initialData?.retailPrice ?? initialData?.priceRange?.min ?? ''
   );
-
-  // Images state: array of { url, fileId, isPrincipal, position }
-  const [images, setImages] = useState<IProductImage[]>(
-    initialData?.images && initialData.images.length > 0
-      ? initialData.images
-      : [],
+  const [simpleWholesalePrice, setSimpleWholesalePrice] = useState<number | ''>(
+    initialData?.wholesalePrice ?? ''
   );
+  const [simpleStock, setSimpleStock] = useState<number | ''>(
+    initialData?.stock ?? initialData?.totalStock ?? 0
+  );
+  const [simpleSku, setSimpleSku] = useState<string>(initialData?.variants?.[0]?.sku || '');
 
-  // Sizes stock state: array of { size, stock }
-  const [sizesStock, setSizesStock] = useState<ISizeStock[]>([]);
+  // Mass action helpers
+  const [bulkPriceInput, setBulkPriceInput] = useState<string>('');
+  const [bulkStockInput, setBulkStockInput] = useState<string>('');
 
-  // Displayed sizes state: array of sizes to show in storefront
-  const [displayedSizes, setDisplayedSizes] = useState<number[]>([]);
-
-  // Toggle to show/hide sizes without stock
-  const [showHiddenSizes, setShowHiddenSizes] = useState(false);
-
-  // 1. Fetch Brands, Types & Dynamic Gender Sizes
+  // 1. Load initial reference data
   useEffect(() => {
-    async function fetchOptions() {
+    async function loadData() {
       try {
-        const [brandsRes, typesRes, sizesRes] = await Promise.all([
-          fetch("/api/brands"),
-          fetch("/api/types"),
-          fetch("/api/sizes"),
+        setLoadingData(true);
+        const [catsRes, brandsRes, attrsRes] = await Promise.all([
+          fetch('/api/admin/categories'),
+          fetch('/api/brands'),
+          fetch('/api/admin/attributes'),
         ]);
 
+        const catsJson = await catsRes.json();
         const brandsJson = await brandsRes.json();
-        const typesJson = await typesRes.json();
-        const sizesJson = await sizesRes.json();
+        const attrsJson = await attrsRes.json();
 
-        if (brandsJson.ok) setBrands(brandsJson.data);
-        if (typesJson.ok) setTypes(typesJson.data);
-        if (sizesJson.ok && sizesJson.data) setGenderSizes(sizesJson.data);
+        if (catsJson.ok) setCategories(catsJson.data || []);
+        if (brandsJson.ok) setBrands(brandsJson.data || []);
+        if (attrsJson.ok) setAttributes(attrsJson.data || []);
       } catch (err) {
-        console.error("Error al cargar listas de marcas, tipos y talles:", err);
+        console.error('Error al cargar datos de referencia:', err);
+        toast.error('Error al cargar categorías y marcas');
       } finally {
-        setLoadingOptions(false);
+        setLoadingData(false);
       }
     }
-    fetchOptions();
+    loadData();
   }, []);
 
-  // 2. Initialize size scale stock when Gender or genderSizes changes
+  // 2. Map initial specs and variants when initialData is present
   useEffect(() => {
-    const activeGenderKey = gender || "Unisex";
-    const scaleSizes = genderSizes[activeGenderKey] || DEFAULT_GENDER_SIZES[activeGenderKey] || [];
+    if (initialData) {
+      // Specs
+      if (Array.isArray(initialData.specs)) {
+        const m: Record<string, any> = {};
+        initialData.specs.forEach((s: any) => {
+          m[s.key] = s.value;
+        });
+        setSpecsMap(m);
+      } else if (initialData.gender) {
+        setSpecsMap({ genero: initialData.gender });
+      }
 
-    if (!isEditing) {
-      const initialized = scaleSizes.map((s) => ({
-        size: s,
-        stock: 0,
-      }));
-      setSizesStock(initialized);
-      setDisplayedSizes([]);
-    } else if (initialData?.sizesStock) {
-      const stockMap = new Map(
-        initialData.sizesStock.map((s) => [s.size, s.stock]),
-      );
+      // Variants
+      if (Array.isArray(initialData.variants) && initialData.variants.length > 0) {
+        setVariants(
+          initialData.variants.map((v: any) => ({
+            _id: v._id,
+            sku: v.sku,
+            options: v.options || [],
+            retailPrice: v.retailPrice,
+            wholesalePrice: v.wholesalePrice,
+            stock: v.stock,
+            active: v.active !== false,
+          }))
+        );
 
-      // Merge current scale sizes and any extra existing size already saved on the product
-      const allUniqueSizes = Array.from(
-        new Set([...scaleSizes, ...initialData.sizesStock.map((s) => s.size)])
-      ).sort((a, b) => a - b);
-
-      const combined = allUniqueSizes.map((s) => ({
-        size: s,
-        stock: stockMap.get(s) || 0,
-      }));
-
-      setSizesStock(combined);
+        // Pre-select axis values
+        const selectedM: Record<string, Set<string>> = {};
+        initialData.variants.forEach((v: any) => {
+          (v.options || []).forEach((opt: any) => {
+            if (!selectedM[opt.key]) selectedM[opt.key] = new Set();
+            selectedM[opt.key].add(opt.value);
+          });
+        });
+        const finalSelected: Record<string, string[]> = {};
+        Object.entries(selectedM).forEach(([k, s]) => {
+          finalSelected[k] = Array.from(s);
+        });
+        setSelectedAxisValues(finalSelected);
+      } else if (Array.isArray(initialData.sizesStock) && initialData.sizesStock.length > 0) {
+        // Fallback from legacy shoe sizes
+        const mapped: FormVariant[] = initialData.sizesStock.map((s: any) => ({
+          sku: `${(initialData.slug || 'PROD').toUpperCase()}-T${String(s.size).replace('.', '_')}`,
+          options: [{ key: 'talle_calzado', value: String(s.size) }],
+          retailPrice: initialData.retailPrice || 0,
+          wholesalePrice: initialData.wholesalePrice,
+          stock: s.stock || 0,
+          active: true,
+        }));
+        setVariants(mapped);
+        setSelectedAxisValues({
+          talle_calzado: initialData.sizesStock.map((s: any) => String(s.size)),
+        });
+      }
     }
-  }, [gender, genderSizes, isEditing, initialData]);
+  }, [initialData]);
 
-  // 3. Initialize displayedSizes based on stock or saved displayedSizes
-  useEffect(() => {
-    if (!isEditing) {
-      const sizesWithStock = sizesStock
-        .filter((s) => s.stock > 0)
-        .map((s) => s.size);
-      setDisplayedSizes(sizesWithStock);
-    } else if (initialData && "displayedSizes" in initialData) {
-      const saved = (initialData as any).displayedSizes || [];
-      setDisplayedSizes(saved);
+  // Selected Category
+  const selectedCategory = useMemo(() => {
+    return categories.find((c) => c._id === categoryId) || null;
+  }, [categories, categoryId]);
+
+  // Variant axes definitions for current category
+  const currentCategoryAxes = useMemo(() => {
+    if (!selectedCategory || !selectedCategory.variantAxes) return [];
+    return selectedCategory.variantAxes
+      .map((axisKey) => attributes.find((a) => a.key === axisKey))
+      .filter(Boolean) as AttributeData[];
+  }, [selectedCategory, attributes]);
+
+  const hasAxes = currentCategoryAxes.length > 0;
+
+  // Attributes dictionary for labels
+  const attributeLabelsMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    attributes.forEach((attr) => {
+      (attr.options || []).forEach((opt) => {
+        map[`${attr.key}:${opt.value}`] = opt.label;
+        map[opt.value] = opt.label;
+      });
+    });
+    return map;
+  }, [attributes]);
+
+  // Handle toggling option value in combination generator
+  const handleToggleAxisValue = (axisKey: string, val: string) => {
+    const currentList = selectedAxisValues[axisKey] || [];
+    if (currentList.includes(val)) {
+      setSelectedAxisValues({
+        ...selectedAxisValues,
+        [axisKey]: currentList.filter((v) => v !== val),
+      });
     } else {
-      const sizesWithStock = sizesStock
-        .filter((s) => s.stock > 0)
-        .map((s) => s.size);
-      setDisplayedSizes(sizesWithStock);
+      setSelectedAxisValues({
+        ...selectedAxisValues,
+        [axisKey]: [...currentList, val],
+      });
     }
-  }, [sizesStock, isEditing, initialData]);
+  };
 
-  // Size Stock Helpers
-  const handleStockChange = (size: number, newStock: number) => {
-    const validStock = Math.max(0, newStock);
-    setSizesStock((prev) =>
-      prev.map((s) => (s.size === size ? { ...s, stock: validStock } : s)),
+  // Generate Cartesian combinations
+  const handleGenerateCombinations = () => {
+    const axesForGeneration = currentCategoryAxes.map((axis) => ({
+      key: axis.key,
+      values: selectedAxisValues[axis.key] || [],
+    }));
+
+    // Verify all axes have at least one value selected
+    const emptyAxis = axesForGeneration.find((a) => a.values.length === 0);
+    if (emptyAxis) {
+      const attrLabel = attributes.find((a) => a.key === emptyAxis.key)?.label || emptyAxis.key;
+      toast.error(`Seleccioná al menos una opción para el eje "${attrLabel}"`);
+      return;
+    }
+
+    const defaultPrice = Number(simplePrice) || (variants[0]?.retailPrice as number) || 0;
+    const defaultWsPrice = wholesaleEnabled
+      ? Number(simpleWholesalePrice) || (variants[0]?.wholesalePrice as number) || undefined
+      : undefined;
+
+    const generated = generateVariantCombinations(
+      axesForGeneration,
+      slug || name,
+      defaultPrice,
+      defaultWsPrice
     );
+
+    // Merge with existing variants to preserve stock and price if combination matches
+    const existingMap = new Map<string, FormVariant>();
+    variants.forEach((v) => {
+      const key = v.options
+        .map((o) => `${o.key}:${o.value}`)
+        .sort()
+        .join('|');
+      existingMap.set(key, v);
+    });
+
+    const merged: FormVariant[] = generated.map((gen) => {
+      const key = gen.options
+        .map((o) => `${o.key}:${o.value}`)
+        .sort()
+        .join('|');
+      const existing = existingMap.get(key);
+      if (existing) {
+        return {
+          ...gen,
+          _id: existing._id,
+          sku: existing.sku || gen.sku,
+          retailPrice: existing.retailPrice,
+          wholesalePrice: existing.wholesalePrice,
+          stock: existing.stock,
+          active: existing.active,
+        };
+      }
+      return {
+        ...gen,
+        retailPrice: defaultPrice,
+        wholesalePrice: defaultWsPrice,
+      };
+    });
+
+    setVariants(merged);
+    toast.success(`Se generaron ${merged.length} combinaciones de variantes`);
   };
 
-  const handleToggleSizeDisplay = (size: number) => {
-    setDisplayedSizes((prev) =>
-      prev.includes(size)
-        ? prev.filter((s) => s !== size)
-        : [...prev, size].sort((a, b) => a - b)
-    );
+  // Variant editing handlers
+  const handleVariantChange = (index: number, field: keyof FormVariant, val: any) => {
+    setVariants((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: val };
+      return copy;
+    });
   };
 
-  const visibleSizesForToggle = showHiddenSizes
-    ? sizesStock
-    : sizesStock.filter((s) => s.stock > 0);
-
-  const handleAddVariant = () => {
-    setVariants((prev) => [...prev, { name: "", stock: 0 }]);
+  const handleApplyBulkPrice = () => {
+    const num = Number(bulkPriceInput);
+    if (isNaN(num) || num < 0) {
+      toast.error('Ingresá un precio válido');
+      return;
+    }
+    setVariants((prev) => prev.map((v) => ({ ...v, retailPrice: num })));
+    setBulkPriceInput('');
+    toast.success(`Precio minorista $${num} aplicado a todas las variantes`);
   };
 
-  const handleRemoveVariant = (index: number) => {
-    setVariants((prev) => prev.filter((_, i) => i !== index));
+  const handleApplyBulkStock = () => {
+    const num = Math.max(0, parseInt(bulkStockInput, 10) || 0);
+    setVariants((prev) => prev.map((v) => ({ ...v, stock: num })));
+    setBulkStockInput('');
+    toast.success(`Stock de ${num} unidades aplicado a todas las variantes`);
   };
 
-  const handleVariantChange = (
-    index: number,
-    field: keyof IVariantStock,
-    value: string | number
-  ) => {
-    setVariants((prev) =>
-      prev.map((v, i) => (i === index ? { ...v, [field]: value } : v))
-    );
-  };
-
-  // Submit Handler
+  // Form Submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validations
     if (!name.trim()) {
-      toast.error("El nombre del producto es obligatorio", {
-        description: "Completá el nombre para poder continuar.",
-      });
-      return;
-    }
-    if (!description.trim()) {
-      toast.error("La descripción es obligatoria", {
-        description: "Ingresá una breve descripción del producto.",
-      });
-      return;
-    }
-    if (isClearance) {
-      if (wholesalePrice === "" || Number(wholesalePrice) < 0) {
-        toast.error("Ingresá un precio de liquidación válido", {
-          description: "El valor debe ser mayor o igual a 0.",
-        });
-        return;
-      }
-    } else {
-      if (retailPrice === "" || Number(retailPrice) < 0) {
-        toast.error("Ingresá un precio minorista válido", {
-          description: "El valor debe ser mayor o igual a 0.",
-        });
-        return;
-      }
-      if (wholesalePrice === "" || Number(wholesalePrice) < 0) {
-        toast.error("Ingresá un precio mayorista válido", {
-          description: "El valor debe ser mayor o igual a 0.",
-        });
-        return;
-      }
-      if (Number(wholesalePrice) > Number(retailPrice)) {
-        toast.error("El precio mayorista no puede superar al minorista", {
-          description: "Ajustá los valores antes de guardar.",
-        });
-        return;
-      }
-    }
-    if (!brandId || !typeId) {
-      toast.error("Seleccioná la Marca y Categoría", {
-        description: "Ambos campos son requeridos para catalogar.",
-      });
+      toast.error('El nombre del producto es obligatorio');
       return;
     }
 
-    const validImages = images.filter((img) => img.url && img.url.trim());
-    if (validImages.length === 0) {
-      toast.error("Subí al menos una imagen válida", {
-        description: "El producto requiere una foto de portada.",
-      });
+    if (!categoryId) {
+      toast.error('Seleccioná una categoría para el producto');
       return;
     }
 
-    let finalVariants: IVariantStock[] = [];
-    let finalStock = 0;
-    let finalSizesStock: ISizeStock[] = [];
-    let finalDisplayedSizes: number[] = [];
+    if (images.length === 0) {
+      toast.error('Debe incluir al menos una imagen');
+      return;
+    }
 
-    if (inventoryMode === "variants") {
-      const validVariants = variants.filter((v) => v.name.trim().length > 0);
-      if (validVariants.length === 0) {
-        toast.error("Cargá al menos una variante con nombre", {
-          description: "Ej: 100ml, 50ml, etc.",
-        });
+    // Verify variants or simple stock
+    let finalVariants: any[] = [];
+    let finalRetailPrice = 0;
+    let finalWholesalePrice: number | undefined = undefined;
+
+    if (hasAxes) {
+      if (variants.length === 0) {
+        toast.error('Debés generar al menos una variante para esta categoría');
         return;
       }
-      finalVariants = validVariants.map((v) => ({
-        name: v.name.trim(),
+
+      // Check variant prices
+      for (const v of variants) {
+        if (v.retailPrice === '' || Number(v.retailPrice) <= 0) {
+          toast.error(`La variante ${v.sku} debe tener un precio minorista mayor a 0`);
+          return;
+        }
+        if (wholesaleEnabled && (v.wholesalePrice === '' || Number(v.wholesalePrice) <= 0)) {
+          toast.error(`La variante ${v.sku} debe tener un precio mayorista mayor a 0`);
+          return;
+        }
+        if (wholesaleEnabled && Number(v.wholesalePrice) >= Number(v.retailPrice)) {
+          toast.error(`El precio mayorista de ${v.sku} debe ser menor al minorista`);
+          return;
+        }
+      }
+
+      finalVariants = variants.map((v) => ({
+        ...v,
+        retailPrice: Number(v.retailPrice),
+        wholesalePrice: wholesaleEnabled && v.wholesalePrice !== '' ? Number(v.wholesalePrice) : undefined,
         stock: Math.max(0, Number(v.stock) || 0),
-        sku: v.sku?.trim() || undefined,
       }));
-    } else if (inventoryMode === "simple") {
-      finalStock = Math.max(0, Number(simpleStock) || 0);
+
+      finalRetailPrice = Number(variants[0].retailPrice);
+      finalWholesalePrice = wholesaleEnabled ? Number(variants[0].wholesalePrice) : undefined;
     } else {
-      finalSizesStock = sizesStock;
-      finalDisplayedSizes = displayedSizes;
+      // Simple product without axes
+      if (simplePrice === '' || Number(simplePrice) <= 0) {
+        toast.error('Ingresá un precio minorista válido para el producto');
+        return;
+      }
+      if (wholesaleEnabled && (simpleWholesalePrice === '' || Number(simpleWholesalePrice) <= 0)) {
+        toast.error('Ingresá un precio mayorista válido');
+        return;
+      }
+      if (wholesaleEnabled && Number(simpleWholesalePrice) >= Number(simplePrice)) {
+        toast.error('El precio mayorista debe ser menor al precio minorista');
+        return;
+      }
+
+      finalRetailPrice = Number(simplePrice);
+      finalWholesalePrice = wholesaleEnabled ? Number(simpleWholesalePrice) : undefined;
+
+      finalVariants = [
+        {
+          sku: simpleSku.trim() || generateSku(slug || name, []),
+          options: [],
+          retailPrice: finalRetailPrice,
+          wholesalePrice: finalWholesalePrice,
+          stock: Math.max(0, Number(simpleStock) || 0),
+          active: true,
+        },
+      ];
     }
+
+    // Convert specsMap to specs array
+    const specsArray = Object.entries(specsMap)
+      .filter(([_, val]) => val !== undefined && val !== null && val !== '')
+      .map(([key, value]) => ({ key, value }));
 
     setSaving(true);
-
     try {
-      const url = "/api/admin/products";
-      const method = isEditing ? "PUT" : "POST";
-
       const payload = {
-        ...(isEditing && { _id: initialData?._id }),
+        _id: initialData?._id,
         name: name.trim(),
+        slug: slug.trim() || undefined,
         description: description.trim(),
-        retailPrice: isClearance ? Number(wholesalePrice) : Number(retailPrice),
-        wholesalePrice: Number(wholesalePrice),
-        price: isClearance ? Number(wholesalePrice) : Number(retailPrice),
-        brandId,
-        typeId,
-        gender: gender || null,
+        categoryId,
+        brandId: brandId || undefined,
         active,
         isClearance,
-        images: validImages,
+        images,
+        specs: specsArray,
+        wholesale: {
+          enabled: wholesaleEnabled,
+          minQty: wholesaleEnabled ? Number(wholesaleMinQty) || 5 : 5,
+        },
         variants: finalVariants,
-        stock: finalStock,
-        sizesStock: finalSizesStock,
-        displayedSizes: finalDisplayedSizes,
+        retailPrice: finalRetailPrice,
+        wholesalePrice: finalWholesalePrice,
+        stock: finalVariants.reduce((acc, curr) => acc + curr.stock, 0),
       };
+
+      const url = isEditing ? '/api/admin/products' : '/api/admin/products';
+      const method = isEditing ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
       const json = await res.json();
-
       if (!json.ok) {
-        throw new Error(json.message || "Error al guardar el producto");
+        throw new Error(json.message || 'Error al guardar el producto');
       }
 
-      const msg = isEditing
-        ? "Producto actualizado correctamente"
-        : "Producto creado exitosamente";
+      toast.success(
+        isEditing
+          ? `Producto "${name}" actualizado correctamente`
+          : `Producto "${name}" creado exitosamente`
+      );
 
-      toast.success(msg, {
-        description: "Los cambios ya están reflejados en el catálogo.",
-      });
-
-      setTimeout(() => {
-        router.push("/admin/products");
-        router.refresh();
-      }, 1000);
+      router.push('/admin/products');
+      router.refresh();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Error procesando solicitud";
-      toast.error(msg, {
-        description: "Revisá los datos e intentá nuevamente.",
-      });
+      toast.error(err instanceof Error ? err.message : 'Error al guardar');
+    } finally {
       setSaving(false);
     }
   };
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-8 font-sans">
-      {/* Top Header Controls */}
-      <div className="flex justify-between items-center pb-4 border-b border-[#e5e5e5]">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="text-xs font-bold text-[#111111] hover:text-[#707072] flex items-center gap-1.5 cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4" /> Volver a Productos
-        </button>
+  if (loadingData) {
+    return (
+      <div className="bg-white border border-[#e5e5e5] p-12 text-center text-xs text-[#707072] flex items-center justify-center gap-2">
+        <Loader2 className="w-5 h-5 animate-spin text-[#111111]" /> Cargando formulario de producto...
+      </div>
+    );
+  }
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="py-3 px-6 bg-[#111111] hover:bg-black text-white font-bold text-xs uppercase tracking-wider rounded-full flex items-center gap-2 transition-all shadow-md cursor-pointer disabled:opacity-50"
-        >
-          {saving ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <>
-              <Save className="w-4 h-4" />{" "}
-              {isEditing ? "Guardar Cambios" : "Crear Producto"}
-            </>
-          )}
-        </button>
+  // Filter images if imageAxis is configured
+  const currentImageAxis = selectedCategory?.imageAxis;
+  const imageAxisAttr = currentImageAxis ? attributes.find((a) => a.key === currentImageAxis) : null;
+  const filteredImages = selectedImageAxisValue
+    ? images.filter((img) => img.axisValue === selectedImageAxisValue)
+    : images;
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-8">
+      {/* Top Header Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 border border-[#e5e5e5] shadow-sm sticky top-16 z-30">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => router.push('/admin/products')}
+            className="p-2 bg-[#f5f5f5] hover:bg-[#111111] text-[#111111] hover:text-white transition-colors cursor-pointer"
+            title="Volver"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div>
+            <h1 className="text-base font-extrabold uppercase tracking-tight text-[#111111]">
+              {isEditing ? `Editar: ${name || 'Producto'}` : 'Nuevo Producto'}
+            </h1>
+            <p className="text-xs text-[#707072]">
+              Configuración de catálogo agnóstico y gestión de stock por variantes.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 self-end sm:self-auto">
+          <button
+            type="button"
+            onClick={() => router.push('/admin/products')}
+            className="py-2.5 px-4 bg-white hover:bg-[#f5f5f5] text-[#111111] text-xs font-bold uppercase border border-[#e5e5e5] cursor-pointer"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="py-2.5 px-6 bg-[#111111] hover:bg-black text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-md cursor-pointer disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {isEditing ? 'Guardar Cambios' : 'Crear Producto'}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column: Basic Information & Stock */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Main Attributes Card */}
-          <div className="bg-white border border-[#e5e5e5] p-6 space-y-4 shadow-sm">
-            <h2 className="text-base font-extrabold uppercase tracking-tight text-[#111111]">
-              Información del Producto
-            </h2>
-
-            <div>
-              <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
-                Nombre del Producto *
-              </label>
-              <input
-                type="text"
-                placeholder="Ej: Nike Air Max 90"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-medium py-3 px-3 rounded-none border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
-              />
+        {/* Left Column (2 Cols): Info & Variants */}
+        <div className="lg:col-span-2 space-y-8">
+          {/* BLOQUE 1: Datos Generales y Categoría */}
+          <div className="bg-white border border-[#e5e5e5] p-6 sm:p-8 space-y-6 shadow-sm">
+            <div className="border-b border-[#e5e5e5] pb-3 flex items-center justify-between">
+              <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#111111] flex items-center gap-2">
+                <Layers className="w-4 h-4 text-[#007d48]" />
+                1. Información General y Clasificación
+              </h2>
             </div>
 
-            <div>
-              <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
-                Descripción Detallada *
-              </label>
-              <textarea
-                rows={4}
-                placeholder="Características, tecnología de amortiguación, materiales..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-medium p-3 rounded-none border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
-              />
-            </div>
-
-            {isClearance ? (
-              <div className="p-4 bg-[#d30005]/5 border border-[#d30005]/20 space-y-2">
-                <label className="block text-xs font-extrabold uppercase tracking-wider text-[#d30005] mb-1.5">
-                  🔥 Precio Liquidación ($ ARS) *
+            <div className="space-y-4">
+              {/* Product Name */}
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
+                  Nombre del Producto *
                 </label>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="Ej: 95000"
-                  value={wholesalePrice}
-                  onChange={(e) => {
-                    const val = e.target.value === "" ? "" : Number(e.target.value);
-                    setWholesalePrice(val);
-                    setRetailPrice(val);
-                  }}
-                  className="w-full bg-white text-[#d30005] text-base font-extrabold py-3 px-3 rounded-none border border-[#d30005]/40 focus:outline-none focus:ring-2 focus:ring-[#d30005]"
+                  type="text"
+                  placeholder="Ej: Remera Básica Algodón, Sauvage Dior 100ml, Zapatillas Air Max"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-bold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
                 />
-                <p className="text-[11px] text-[#707072] font-medium">
-                  Precio único promocional para este producto en liquidación (válido para compra minorista y mayorista).
-                </p>
               </div>
-            ) : (
+
+              {/* Category & Brand */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
-                    Precio Minorista ($ ARS) *
+                  <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
+                    Categoría *
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="Ej: 130000"
-                    value={retailPrice}
-                    onChange={(e) =>
-                      setRetailPrice(
-                        e.target.value === "" ? "" : Number(e.target.value),
-                      )
-                    }
-                    className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-extrabold py-3 px-3 rounded-none border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
-                  />
-                  <p className="text-[10px] text-[#707072] mt-1">
-                    Precio para compras de 1 a 4 pares
-                  </p>
+                  <select
+                    value={categoryId}
+                    onChange={(e) => setCategoryId(e.target.value)}
+                    required
+                    className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] cursor-pointer"
+                  >
+                    <option value="">Seleccionar Categoría...</option>
+                    {categories.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {c.ancestors.length > 0 ? '— ' : ''}{c.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
-                    Precio Mayorista ($ ARS) *
+                  <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
+                    Marca (Opcional)
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="Ej: 110000"
-                    value={wholesalePrice}
-                    onChange={(e) =>
-                      setWholesalePrice(
-                        e.target.value === "" ? "" : Number(e.target.value),
-                      )
-                    }
-                    className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-extrabold py-3 px-3 rounded-none border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
-                  />
-                  <p className="text-[10px] text-[#707072] mt-1">
-                    Precio para compras de 5 pares o más
-                  </p>
+                  <select
+                    value={brandId}
+                    onChange={(e) => setBrandId(e.target.value)}
+                    className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] cursor-pointer"
+                  >
+                    <option value="">Sin marca específica</option>
+                    {brands.map((b) => (
+                      <option key={b._id} value={b._id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
-            )}
 
-            <div className="flex flex-col sm:flex-row gap-4 pt-3 border-t border-[#e5e5e5]">
-              <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-[#111111]">
-                <input
-                  type="checkbox"
-                  checked={active}
-                  onChange={(e) => setActive(e.target.checked)}
-                  className="w-4 h-4 accent-[#111111] cursor-pointer"
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
+                  Descripción del Producto
+                </label>
+                <textarea
+                  rows={4}
+                  placeholder="Detalles sobre aromas, materiales, calce, notas olfativas o recomendaciones de uso."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-medium p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
                 />
-                <span>Producto Activo (Visible en tienda)</span>
-              </label>
+              </div>
 
-              <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-[#d30005]">
-                <input
-                  type="checkbox"
-                  checked={isClearance}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    setIsClearance(checked);
-                    if (checked) {
-                      if (wholesalePrice !== "" && Number(wholesalePrice) > 0) {
-                        setRetailPrice(wholesalePrice);
-                      } else if (retailPrice !== "" && Number(retailPrice) > 0) {
-                        setWholesalePrice(retailPrice);
-                      }
-                    }
-                  }}
-                  className="w-4 h-4 accent-[#d30005] cursor-pointer"
-                />
-                <span>🔥 Producto en Liquidación</span>
-              </label>
+              {/* Dynamic Specifications according to Category */}
+              {selectedCategory?.specAttributes && selectedCategory.specAttributes.length > 0 && (
+                <div className="pt-4 border-t border-[#e5e5e5] space-y-3">
+                  <h3 className="text-xs font-extrabold uppercase text-[#111111] flex items-center gap-1.5">
+                    <Sliders className="w-3.5 h-3.5 text-[#007d48]" />
+                    Especificaciones de Ficha Técnica
+                  </h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-[#fafafa] p-4 border border-[#e5e5e5]">
+                    {selectedCategory.specAttributes.map((specDef) => {
+                      const attr = attributes.find((a) => a.key === specDef.key);
+                      const currentVal = specsMap[specDef.key] ?? '';
+
+                      return (
+                        <div key={specDef.key}>
+                          <label className="block text-[11px] font-bold uppercase text-[#111111] mb-1">
+                            {attr?.label || specDef.key} {specDef.required && '*'}
+                          </label>
+
+                          {attr?.type === 'select' ? (
+                            <select
+                              value={currentVal}
+                              onChange={(e) =>
+                                setSpecsMap({ ...specsMap, [specDef.key]: e.target.value })
+                              }
+                              className="w-full bg-white text-[#111111] text-xs font-medium p-2.5 border border-[#e5e5e5] focus:outline-none focus:ring-1 focus:ring-[#111111] cursor-pointer"
+                            >
+                              <option value="">Seleccionar...</option>
+                              {attr.options.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          ) : attr?.type === 'boolean' ? (
+                            <label className="flex items-center gap-2 pt-2 cursor-pointer text-xs font-medium">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(currentVal)}
+                                onChange={(e) =>
+                                  setSpecsMap({ ...specsMap, [specDef.key]: e.target.checked })
+                                }
+                                className="w-4 h-4 text-[#111111]"
+                              />
+                              <span>Habilitado / Aplica</span>
+                            </label>
+                          ) : (
+                            <input
+                              type={attr?.type === 'number' ? 'number' : 'text'}
+                              value={currentVal}
+                              placeholder={attr?.unit ? `Ej: 100 (${attr.unit})` : 'Ingresar valor...'}
+                              onChange={(e) =>
+                                setSpecsMap({ ...specsMap, [specDef.key]: e.target.value })
+                              }
+                              className="w-full bg-white text-[#111111] text-xs font-medium p-2.5 border border-[#e5e5e5] focus:outline-none focus:ring-1 focus:ring-[#111111]"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Inventory & Stock Section */}
-          <div className="bg-white border border-[#e5e5e5] p-6 space-y-5 shadow-sm">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-[#e5e5e5]">
+          {/* BLOQUE 2: Variantes e Inventario */}
+          <div className="bg-white border border-[#e5e5e5] p-6 sm:p-8 space-y-6 shadow-sm">
+            <div className="border-b border-[#e5e5e5] pb-3 flex items-center justify-between">
               <div>
-                <h2 className="text-base font-extrabold uppercase tracking-tight text-[#111111]">
-                  Gestión de Stock e Inventario
+                <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#111111] flex items-center gap-2">
+                  <Boxes className="w-4 h-4 text-[#007d48]" />
+                  2. Variantes e Inventario
                 </h2>
-                <p className="text-xs text-[#707072] mt-0.5">
-                  Elegí cómo se gestiona el inventario de este producto
+                <p className="text-xs text-[#707072]">
+                  {hasAxes
+                    ? `Esta categoría utiliza ejes de variantes: ${currentCategoryAxes.map((a) => a.label).join(', ')}.`
+                    : 'Producto simple (sin variantes configuradas en su categoría).'}
                 </p>
-              </div>
-
-              {/* Mode Selector Tabs */}
-              <div className="flex gap-1 bg-[#f5f5f5] p-1 border border-[#e5e5e5]">
-                <button
-                  type="button"
-                  onClick={() => setInventoryMode("variants")}
-                  className={`px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                    inventoryMode === "variants"
-                      ? "bg-[#111111] text-white shadow-xs"
-                      : "text-[#707072] hover:text-[#111111]"
-                  }`}
-                >
-                  Variantes (ml, colores)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInventoryMode("simple")}
-                  className={`px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                    inventoryMode === "simple"
-                      ? "bg-[#111111] text-white shadow-xs"
-                      : "text-[#707072] hover:text-[#111111]"
-                  }`}
-                >
-                  Stock Simple
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInventoryMode("shoes")}
-                  className={`px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                    inventoryMode === "shoes"
-                      ? "bg-[#111111] text-white shadow-xs"
-                      : "text-[#707072] hover:text-[#111111]"
-                  }`}
-                >
-                  Talles Calzado
-                </button>
               </div>
             </div>
 
-            {/* Mode 1: Generic Variants */}
-            {inventoryMode === "variants" && (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-[#707072]">
-                    Total unidades:{" "}
-                    <strong className="text-[#111111]">
-                      {variants.reduce((acc, curr) => acc + (Number(curr.stock) || 0), 0)}
-                    </strong>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleAddVariant}
-                    className="px-3 py-1.5 bg-[#111111] text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 hover:bg-black transition-all cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Agregar Variante
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  {variants.map((v, idx) => (
-                    <div
-                      key={idx}
-                      className="flex flex-col sm:flex-row items-center gap-3 p-3 bg-[#f5f5f5] border border-[#e5e5e5]"
-                    >
-                      <div className="w-full sm:flex-1">
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#707072] mb-1">
-                          Presentación / Variante (Ej: 100ml, 50ml, Negro) *
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Ej: 100ml"
-                          value={v.name}
-                          onChange={(e) => handleVariantChange(idx, "name", e.target.value)}
-                          className="w-full bg-white text-[#111111] text-xs font-bold p-2 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
-                        />
-                      </div>
-                      <div className="w-full sm:w-32">
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#707072] mb-1">
-                          Stock Disponible *
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={v.stock}
-                          onChange={(e) =>
-                            handleVariantChange(idx, "stock", parseInt(e.target.value, 10) || 0)
-                          }
-                          className="w-full bg-white text-[#111111] text-xs font-bold p-2 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
-                        />
-                      </div>
-                      <div className="w-full sm:w-36">
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#707072] mb-1">
-                          SKU (Opcional)
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Ej: PERF-100"
-                          value={v.sku || ""}
-                          onChange={(e) => handleVariantChange(idx, "sku", e.target.value)}
-                          className="w-full bg-white text-[#111111] text-xs font-medium p-2 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
-                        />
-                      </div>
-                      <div className="flex sm:self-end pb-1">
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveVariant(idx)}
-                          disabled={variants.length <= 1}
-                          className="p-2 text-[#707072] hover:text-[#d30005] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
-                          title="Eliminar variante"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Mode 2: Simple Stock */}
-            {inventoryMode === "simple" && (
-              <div className="p-4 bg-[#f5f5f5] border border-[#e5e5e5] space-y-2">
-                <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111]">
-                  Stock Total Disponible *
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  placeholder="Ej: 50"
-                  value={simpleStock}
-                  onChange={(e) =>
-                    setSimpleStock(e.target.value === "" ? "" : parseInt(e.target.value, 10) || 0)
-                  }
-                  className="w-full sm:w-48 bg-white text-[#111111] text-base font-extrabold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
-                />
-                <p className="text-[11px] text-[#707072]">
-                  Usá esta opción para productos únicos sin variantes (ej. anteojos de sol modelo único o accesorios simples).
-                </p>
-              </div>
-            )}
-
-            {/* Mode 3: Traditional Shoe Sizes */}
-            {inventoryMode === "shoes" && (
-              <div className="space-y-4">
-                {sizesStock.length === 0 ? (
-                  <div className="p-4 bg-[#f9f9f9] border border-[#e5e5e5] text-center text-xs text-[#707072] space-y-1">
-                    <p className="font-bold text-[#111111]">
-                      El género seleccionado ({gender || "Sin género"}) no tiene talles configurados.
-                    </p>
-                    <p>
-                      Para productos como perfumes o cosmética, utilizá la pestaña <strong>Variantes (ml, colores)</strong> o <strong>Stock Simple</strong>.
-                    </p>
+            {/* CASO A: Sin ejes de variantes (Producto Simple: Crema, Gel, Accesorio Único) */}
+            {!hasAxes ? (
+              <div className="space-y-4 bg-[#fafafa] p-5 border border-[#e5e5e5]">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
+                      Precio Minorista ($) *
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="Ej: 15000"
+                      value={simplePrice}
+                      onChange={(e) =>
+                        setSimplePrice(e.target.value === '' ? '' : Number(e.target.value))
+                      }
+                      required
+                      className="w-full bg-white text-[#111111] text-sm font-extrabold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                    />
                   </div>
-                ) : (
-                  <>
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-xs font-bold uppercase text-[#707072]">
-                        Escala {gender || "Unisex"} ({sizesStock.reduce((acc, curr) => acc + curr.stock, 0)} pares)
-                      </h3>
-                      <button
-                        type="button"
-                        onClick={() => setShowHiddenSizes(!showHiddenSizes)}
-                        className="text-xs font-bold px-3 py-1.5 rounded-full border border-[#e5e5e5] bg-white hover:bg-[#f5f5f5] transition-colors cursor-pointer"
-                      >
-                        👁️ {showHiddenSizes ? "Ocultar sin stock" : "Mostrar sin stock"}
-                      </button>
-                    </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                      {sizesStock.map((item) => (
-                        <div
-                          key={item.size}
-                          className="p-3 bg-[#f5f5f5] border border-[#e5e5e5] space-y-1.5 text-center"
-                        >
-                          <span className="block text-xs font-extrabold text-[#111111]">
-                            Talle {item.size}
+                  {wholesaleEnabled && (
+                    <div>
+                      <label className="block text-xs font-bold uppercase text-[#007d48] mb-1">
+                        Precio Mayorista ($) *
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="Ej: 11000"
+                        value={simpleWholesalePrice}
+                        onChange={(e) =>
+                          setSimpleWholesalePrice(
+                            e.target.value === '' ? '' : Number(e.target.value)
+                          )
+                        }
+                        required
+                        className="w-full bg-white text-[#007d48] text-sm font-extrabold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#007d48]"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
+                      Stock Disponible *
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Ej: 20"
+                      value={simpleStock}
+                      onChange={(e) =>
+                        setSimpleStock(e.target.value === '' ? '' : Number(e.target.value))
+                      }
+                      required
+                      className="w-full bg-white text-[#111111] text-sm font-extrabold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-[#707072] mb-1">
+                    Código SKU (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: GEL-FIJACION-01"
+                    value={simpleSku}
+                    onChange={(e) => setSimpleSku(e.target.value)}
+                    className="w-full sm:w-64 bg-white text-[#111111] text-xs font-mono p-2.5 border border-[#e5e5e5] focus:outline-none focus:ring-1 focus:ring-[#111111]"
+                  />
+                </div>
+              </div>
+            ) : (
+              /* CASO B: Con Ejes de Variantes (Talle, Color, Volumen, etc.) */
+              <div className="space-y-6">
+                {/* 1. Selector de Valores por Eje */}
+                <div className="space-y-4 bg-[#fafafa] p-5 border border-[#e5e5e5]">
+                  <h3 className="text-xs font-extrabold uppercase text-[#111111]">
+                    Seleccioná las opciones disponibles para este producto
+                  </h3>
+
+                  {currentCategoryAxes.map((axis) => {
+                    const selectedVals = selectedAxisValues[axis.key] || [];
+
+                    return (
+                      <div key={axis.key} className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs font-bold text-[#111111]">
+                          <span>Eje: {axis.label}</span>
+                          <span className="text-[11px] font-semibold text-[#707072]">
+                            {selectedVals.length} seleccionados
                           </span>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1.5 p-2 bg-white border border-[#e5e5e5]">
+                          {axis.options.map((opt) => {
+                            const isSelected = selectedVals.includes(opt.value);
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => handleToggleAxisValue(axis.key, opt.value)}
+                                className={`text-xs font-bold px-3 py-1.5 border transition-all flex items-center gap-1.5 cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-[#111111] text-white border-[#111111] shadow-2xs'
+                                    : 'bg-[#f5f5f5] text-[#111111] border-[#e5e5e5] hover:border-[#111111]'
+                                }`}
+                              >
+                                {opt.hex && (
+                                  <span
+                                    className="w-2.5 h-2.5 rounded-full border border-black/20"
+                                    style={{ backgroundColor: opt.hex }}
+                                  />
+                                )}
+                                <span>{opt.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleGenerateCombinations}
+                      className="py-2.5 px-4 bg-[#111111] hover:bg-black text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-[#007d48]" />
+                      Generar / Actualizar Combinaciones
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Tabla de Variantes Generadas */}
+                {variants.length > 0 && (
+                  <div className="space-y-3">
+                    {/* Bulk Actions Bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-[#f5f5f5] border border-[#e5e5e5]">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-[#111111]">
+                          Total: {variants.length} variantes
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3">
+                        {/* Apply Price Bulk */}
+                        <div className="flex items-center gap-1">
                           <input
                             type="number"
-                            min="0"
-                            value={item.stock}
-                            onChange={(e) =>
-                              handleStockChange(item.size, parseInt(e.target.value, 10) || 0)
-                            }
-                            className="w-full text-center bg-white text-[#111111] font-extrabold text-sm py-1.5 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                            placeholder="Precio común"
+                            value={bulkPriceInput}
+                            onChange={(e) => setBulkPriceInput(e.target.value)}
+                            className="w-28 bg-white text-xs p-1.5 border border-[#e5e5e5]"
                           />
+                          <button
+                            type="button"
+                            onClick={handleApplyBulkPrice}
+                            className="px-2.5 py-1.5 bg-[#111111] text-white text-[11px] font-bold uppercase cursor-pointer"
+                          >
+                            Aplicar $
+                          </button>
                         </div>
-                      ))}
+
+                        {/* Apply Stock Bulk */}
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            placeholder="Stock común"
+                            value={bulkStockInput}
+                            onChange={(e) => setBulkStockInput(e.target.value)}
+                            className="w-28 bg-white text-xs p-1.5 border border-[#e5e5e5]"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleApplyBulkStock}
+                            className="px-2.5 py-1.5 bg-[#111111] text-white text-[11px] font-bold uppercase cursor-pointer"
+                          >
+                            Aplicar Stock
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </>
+
+                    {/* Matrix Table */}
+                    <div className="overflow-x-auto border border-[#e5e5e5]">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-[#111111] text-white text-[11px] font-extrabold uppercase tracking-wider">
+                          <tr>
+                            <th className="p-3">Variante</th>
+                            <th className="p-3">SKU</th>
+                            <th className="p-3">Precio Minorista *</th>
+                            {wholesaleEnabled && <th className="p-3">Precio Mayorista *</th>}
+                            <th className="p-3">Stock *</th>
+                            <th className="p-3 text-center">Activa</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#e5e5e5] bg-white">
+                          {variants.map((v, idx) => (
+                            <tr key={idx} className="hover:bg-[#fafafa]">
+                              <td className="p-3 font-bold text-[#111111]">
+                                {formatVariantLabel(v.options, attributeLabelsMap)}
+                              </td>
+                              <td className="p-2">
+                                <input
+                                  type="text"
+                                  value={v.sku}
+                                  onChange={(e) => handleVariantChange(idx, 'sku', e.target.value)}
+                                  className="w-full bg-[#f5f5f5] text-[11px] font-mono p-1.5 border border-[#e5e5e5]"
+                                />
+                              </td>
+                              <td className="p-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={v.retailPrice}
+                                  onChange={(e) =>
+                                    handleVariantChange(
+                                      idx,
+                                      'retailPrice',
+                                      e.target.value === '' ? '' : Number(e.target.value)
+                                    )
+                                  }
+                                  className="w-28 bg-white font-bold p-1.5 border border-[#e5e5e5] text-[#111111]"
+                                />
+                              </td>
+                              {wholesaleEnabled && (
+                                <td className="p-2">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={v.wholesalePrice ?? ''}
+                                    onChange={(e) =>
+                                      handleVariantChange(
+                                        idx,
+                                        'wholesalePrice',
+                                        e.target.value === '' ? '' : Number(e.target.value)
+                                      )
+                                    }
+                                    className="w-28 bg-white font-bold p-1.5 border border-[#e5e5e5] text-[#007d48]"
+                                  />
+                                </td>
+                              )}
+                              <td className="p-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={v.stock}
+                                  onChange={(e) =>
+                                    handleVariantChange(
+                                      idx,
+                                      'stock',
+                                      e.target.value === '' ? '' : Number(e.target.value)
+                                    )
+                                  }
+                                  className="w-24 bg-white font-bold p-1.5 border border-[#e5e5e5]"
+                                />
+                              </td>
+                              <td className="p-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={v.active}
+                                  onChange={(e) =>
+                                    handleVariantChange(idx, 'active', e.target.checked)
+                                  }
+                                  className="w-4 h-4 text-[#111111] cursor-pointer"
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
           </div>
         </div>
 
-        {/* Right Column: Classification & ImageUploader */}
-        <div className="space-y-6">
-          {/* Classification Attributes */}
+        {/* Right Column (1 Col): Mayorista, Imágenes & Estado */}
+        <div className="space-y-8">
+          {/* BLOQUE 3: Reglas Mayoristas */}
           <div className="bg-white border border-[#e5e5e5] p-6 space-y-4 shadow-sm">
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-extrabold uppercase tracking-tight text-[#111111]">
-                Clasificación
-              </h2>
-              {isEditing && (
-                <span className="text-[10px] bg-[#f5f5f5] text-[#707072] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-[#e5e5e5]">
-                  <Lock className="w-3 h-3" /> Fija
-                </span>
-              )}
-            </div>
+            <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#111111] flex items-center gap-2">
+              <Percent className="w-4 h-4 text-[#007d48]" />
+              3. Configuración Mayorista
+            </h2>
 
-            {/* Brand Dropdown */}
-            <div>
-              <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
-                Marca *
-              </label>
-              {isEditing ? (
-                <div className="w-full bg-[#f5f5f5] text-[#707072] text-xs font-bold py-3 px-3 border border-[#e5e5e5]">
-                  {typeof initialData?.brandId === "object"
-                    ? initialData.brandId.name
-                    : "Marca Bloqueada"}
+            <div className="space-y-3">
+              <label className="flex items-center justify-between p-3 bg-[#fafafa] border border-[#e5e5e5] cursor-pointer">
+                <div>
+                  <span className="text-xs font-bold uppercase text-[#111111]">
+                    Venta Mayorista
+                  </span>
+                  <p className="text-[11px] text-[#707072]">
+                    Permite precios diferenciales por volumen
+                  </p>
                 </div>
-              ) : (
-                <select
-                  value={brandId}
-                  onChange={(e) => setBrandId(e.target.value)}
-                  disabled={loadingOptions}
-                  className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold py-3 px-3 rounded-none border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] cursor-pointer"
-                >
-                  <option value="">-- Seleccionar Marca --</option>
-                  {brands.map((b) => (
-                    <option key={b._id} value={b._id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-
-            {/* Category / Type Dropdown */}
-            <div>
-              <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
-                Categoría / Tipo de Producto *
+                <input
+                  type="checkbox"
+                  checked={wholesaleEnabled}
+                  onChange={(e) => setWholesaleEnabled(e.target.checked)}
+                  className="w-4 h-4 text-[#111111] cursor-pointer"
+                />
               </label>
-              {isEditing ? (
-                <div className="w-full bg-[#f5f5f5] text-[#707072] text-xs font-bold py-3 px-3 border border-[#e5e5e5]">
-                  {typeof initialData?.typeId === "object"
-                    ? initialData.typeId.name
-                    : "Categoría Bloqueada"}
+
+              {wholesaleEnabled && (
+                <div className="p-3 bg-[#f0f9f4] border border-[#ceead6] space-y-2">
+                  <label className="block text-xs font-bold uppercase text-[#007d48]">
+                    Mínimo de Unidades Requeridas *
+                  </label>
+                  <input
+                    type="number"
+                    min="2"
+                    value={wholesaleMinQty}
+                    onChange={(e) => setWholesaleMinQty(parseInt(e.target.value, 10) || 2)}
+                    className="w-full bg-white text-xs font-bold p-2 border border-[#ceead6] focus:outline-none"
+                  />
+                  <p className="text-[11px] text-[#707072]">
+                    El cliente puede combinar cualquier variante de este producto para alcanzar el mínimo (ej: {wholesaleMinQty} u.).
+                  </p>
                 </div>
-              ) : (
-                <select
-                  value={typeId}
-                  onChange={(e) => setTypeId(e.target.value)}
-                  disabled={loadingOptions}
-                  className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold py-3 px-3 rounded-none border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] cursor-pointer"
-                >
-                  <option value="">-- Seleccionar Categoría --</option>
-                  {types.map((t) => (
-                    <option key={t._id} value={t._id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
               )}
-            </div>
-
-            {/* Gender Select */}
-            <div>
-              <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
-                Género (Opcional)
-              </label>
-              <select
-                value={gender || ""}
-                onChange={(e) =>
-                  setGender(e.target.value ? (e.target.value as GenderType) : null)
-                }
-                className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold py-3 px-3 rounded-none border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] cursor-pointer"
-              >
-                <option value="">Sin género / No aplica</option>
-                {Array.from(
-                  new Set([...Object.keys(genderSizes), ...(gender ? [gender] : [])])
-                )
-                  .sort()
-                  .map((g) => (
-                    <option key={g} value={g}>
-                      {g}
-                    </option>
-                  ))}
-              </select>
             </div>
           </div>
 
-          {/* Dual Mode ImageUploader Card */}
+          {/* BLOQUE 4: Imágenes */}
           <div className="bg-white border border-[#e5e5e5] p-6 space-y-4 shadow-sm">
-            <h2 className="text-base font-extrabold uppercase tracking-tight text-[#111111]">
-              Gestión de Imágenes
-            </h2>
+            <div className="flex items-center justify-between border-b border-[#e5e5e5] pb-2">
+              <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#111111]">
+                4. Imágenes del Producto
+              </h2>
+              <span className="text-xs font-bold text-[#707072]">
+                {images.length} fotos
+              </span>
+            </div>
+
+            {/* Filter by image axis if category configures one */}
+            {imageAxisAttr && (
+              <div className="space-y-2">
+                <label className="block text-[11px] font-bold uppercase text-[#707072]">
+                  Agrupación de fotos por: {imageAxisAttr.label}
+                </label>
+                <div className="flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedImageAxisValue('')}
+                    className={`text-[11px] font-bold px-2.5 py-1 border cursor-pointer ${
+                      selectedImageAxisValue === ''
+                        ? 'bg-[#111111] text-white border-[#111111]'
+                        : 'bg-white text-[#111111] border-[#e5e5e5]'
+                    }`}
+                  >
+                    Fotos Generales ({images.filter((i) => !i.axisValue).length})
+                  </button>
+                  {(selectedAxisValues[imageAxisAttr.key] || []).map((val) => {
+                    const opt = imageAxisAttr.options.find((o) => o.value === val);
+                    const count = images.filter((i) => i.axisValue === val).length;
+                    return (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setSelectedImageAxisValue(val)}
+                        className={`text-[11px] font-bold px-2.5 py-1 border cursor-pointer ${
+                          selectedImageAxisValue === val
+                            ? 'bg-[#111111] text-white border-[#111111]'
+                            : 'bg-white text-[#111111] border-[#e5e5e5]'
+                        }`}
+                      >
+                        {opt?.label || val} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <ImageUploader
-              images={images}
-              onChange={setImages}
-              folder="/products"
+              images={filteredImages}
+              onChange={(updatedSubset) => {
+                // If filtering by axisValue, merge back with images of other axisValues
+                if (selectedImageAxisValue) {
+                  const markedSubset = updatedSubset.map((img) => ({
+                    ...img,
+                    axisValue: selectedImageAxisValue,
+                  }));
+                  const others = images.filter((i) => i.axisValue !== selectedImageAxisValue);
+                  setImages([...others, ...markedSubset]);
+                } else {
+                  setImages(updatedSubset);
+                }
+              }}
             />
+          </div>
+
+          {/* BLOQUE 5: Estado y Visibilidad */}
+          <div className="bg-white border border-[#e5e5e5] p-6 space-y-4 shadow-sm">
+            <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#111111]">
+              5. Estado y Destacados
+            </h2>
+
+            <div className="space-y-3">
+              <label className="flex items-center justify-between p-3 bg-[#fafafa] border border-[#e5e5e5] cursor-pointer">
+                <div>
+                  <span className="text-xs font-bold uppercase text-[#111111]">
+                    Producto Activo
+                  </span>
+                  <p className="text-[11px] text-[#707072]">Visible en la tienda pública</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={active}
+                  onChange={(e) => setActive(e.target.checked)}
+                  className="w-4 h-4 text-[#111111] cursor-pointer"
+                />
+              </label>
+
+              <label className="flex items-center justify-between p-3 bg-[#fafafa] border border-[#e5e5e5] cursor-pointer">
+                <div>
+                  <span className="text-xs font-bold uppercase text-[#d30005]">
+                    🔥 En Liquidación / Oferta
+                  </span>
+                  <p className="text-[11px] text-[#707072]">Destacar en sección de ofertas</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={isClearance}
+                  onChange={(e) => setIsClearance(e.target.checked)}
+                  className="w-4 h-4 text-[#d30005] cursor-pointer"
+                />
+              </label>
+            </div>
           </div>
         </div>
       </div>

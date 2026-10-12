@@ -14,6 +14,7 @@ import {
   Shield,
   Settings,
   Boxes,
+  Sliders,
   DollarSign,
   Users as UsersIcon,
 } from "lucide-react";
@@ -35,9 +36,10 @@ export const AdminNav: React.FC = () => {
   const links = [
     { label: "Solicitudes", href: "/admin/orders", icon: ShoppingBag },
     { label: "Productos", href: "/admin/products", icon: Package },
+    { label: "Categorías", href: "/admin/categories", icon: Layers },
+    { label: "Atributos", href: "/admin/attributes", icon: Sliders },
     { label: "Stock", href: "/admin/stock", icon: Boxes },
     { label: "Marcas", href: "/admin/brands", icon: Tag },
-    { label: "Tipos", href: "/admin/types", icon: Layers },
     { label: "Promociones", href: "/admin/promotions", icon: ImageIcon },
     { label: "Reportes", href: "/admin/reports", icon: BarChart3 },
     { label: "Contabilidad", href: "/admin/accounting", icon: DollarSign },

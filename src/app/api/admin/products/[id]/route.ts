@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
-import Product from '@/models/Product';
-import Brand from '@/models/Brand';
-import FootwearType from '@/models/FootwearType';
+import { Product, Brand, FootwearType, Category } from '@/models';
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -13,14 +11,14 @@ export async function GET(
     const { id } = await params;
 
     // Ensure models registered
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     Brand;
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     FootwearType;
+    Category;
 
     const product = await Product.findById(id)
       .populate('brandId', 'name')
       .populate('typeId', 'name')
+      .populate('categoryId', 'name slug variantAxes imageAxis specAttributes ancestors')
       .lean();
 
     if (!product) {

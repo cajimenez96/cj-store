@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
-import Product from '@/models/Product';
-import Brand from '@/models/Brand';
-import FootwearType from '@/models/FootwearType';
+import { Product, Brand, FootwearType, Category } from '@/models';
+import { calculateDerivedProductFields } from '@/lib/derived';
 
 export const dynamic = 'force-dynamic';
+
+function slugify(text: string): string {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/[^\w\-]+/g, '')
+    .replace(/\-\-+/g, '-');
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -12,6 +23,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
 
     const brandId = searchParams.get('brandId');
+    const categoryId = searchParams.get('categoryId');
     const typeId = searchParams.get('typeId');
     const gender = searchParams.get('gender');
     const active = searchParams.get('active');
@@ -27,6 +39,7 @@ export async function GET(req: NextRequest) {
     const query: Record<string, any> = {};
 
     if (brandId) query.brandId = brandId;
+    if (categoryId) query.categoryId = categoryId;
     if (typeId) query.typeId = typeId;
     if (gender) query.gender = gender;
     if (active !== null && active !== undefined && active !== '') {
@@ -40,15 +53,15 @@ export async function GET(req: NextRequest) {
     }
 
     // Ensure models are registered
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     Brand;
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     FootwearType;
+    Category;
 
     const total = await Product.countDocuments(query);
     let productQuery = Product.find(query)
       .populate('brandId', 'name')
       .populate('typeId', 'name')
+      .populate('categoryId', 'name slug variantAxes')
       .sort({ createdAt: -1, _id: -1 });
 
     if (hasPagination) {
@@ -59,23 +72,24 @@ export async function GET(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const products: any[] = await productQuery.lean();
 
-    // Format total stock
+    // Format total stock and display metrics
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const formattedProducts = products.map((prod: any) => {
-      let totalStock = 0;
+      let totalStock = prod.totalStock ?? 0;
       if (Array.isArray(prod.variants) && prod.variants.length > 0) {
         totalStock = prod.variants.reduce(
-          (acc: number, curr: { stock: number }) => acc + curr.stock,
+          (acc: number, curr: { stock: number }) => acc + (Number(curr.stock) || 0),
           0
         );
       } else if (typeof prod.stock === 'number') {
         totalStock = prod.stock;
       } else if (Array.isArray(prod.sizesStock) && prod.sizesStock.length > 0) {
         totalStock = prod.sizesStock.reduce(
-          (acc: number, curr: { stock: number }) => acc + curr.stock,
+          (acc: number, curr: { stock: number }) => acc + (Number(curr.stock) || 0),
           0
         );
       }
+
       return {
         ...prod,
         totalStock,
@@ -108,16 +122,20 @@ export async function POST(req: NextRequest) {
 
     const {
       name,
+      slug: userSlug,
       description,
       retailPrice,
       wholesalePrice,
       brandId,
+      categoryId,
       typeId,
       gender,
       active,
       isClearance,
       images,
       variants,
+      specs,
+      wholesale,
       stock,
       sizesStock,
       displayedSizes,
@@ -131,34 +149,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!description || !description.trim()) {
-      return NextResponse.json(
-        { ok: false, error: 'BAD_REQUEST', message: 'La descripción es obligatoria' },
-        { status: 400 }
-      );
-    }
-
-    if (retailPrice === undefined || retailPrice === null || Number(retailPrice) < 0) {
-      return NextResponse.json(
-        { ok: false, error: 'BAD_REQUEST', message: 'El precio minorista debe ser un número mayor o igual a 0' },
-        { status: 400 }
-      );
-    }
-
-    if (wholesalePrice === undefined || wholesalePrice === null || Number(wholesalePrice) < 0) {
-      return NextResponse.json(
-        { ok: false, error: 'BAD_REQUEST', message: 'El precio mayorista debe ser un número mayor o igual a 0' },
-        { status: 400 }
-      );
-    }
-
-    if (!brandId || !typeId) {
-      return NextResponse.json(
-        { ok: false, error: 'BAD_REQUEST', message: 'Marca y categoría son obligatorios' },
-        { status: 400 }
-      );
-    }
-
     if (!images || !Array.isArray(images) || images.length === 0) {
       return NextResponse.json(
         { ok: false, error: 'BAD_REQUEST', message: 'Debe incluir al menos una imagen' },
@@ -166,30 +156,93 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Slug generation
+    const cleanName = name.trim();
+    let productSlug = userSlug ? slugify(userSlug) : slugify(cleanName);
+    const existingSlug = await Product.findOne({ slug: productSlug });
+    if (existingSlug) {
+      productSlug = `${productSlug}-${Date.now().toString().slice(-4)}`;
+    }
+
+    // Resolve Category and CategoryAncestors
+    let finalCategoryId = categoryId || null;
+    let categoryAncestors: any[] = [];
+
+    if (finalCategoryId) {
+      const cat = await Category.findById(finalCategoryId);
+      if (cat) {
+        categoryAncestors = cat.ancestors || [];
+      }
+    }
+
+    // Prepare variants
     const hasVariants = Array.isArray(variants) && variants.length > 0;
     const hasSizes = Array.isArray(sizesStock) && sizesStock.length > 0;
     const hasDirectStock = stock !== undefined && stock !== null;
 
-    if (!hasVariants && !hasSizes && !hasDirectStock) {
-      return NextResponse.json(
-        { ok: false, error: 'BAD_REQUEST', message: 'Debe cargar stock para el producto o sus variantes' },
-        { status: 400 }
-      );
+    let processedVariants: any[] = [];
+    if (hasVariants) {
+      processedVariants = variants.map((v: any, idx: number) => ({
+        sku: v.sku || `${productSlug.toUpperCase()}-${idx + 1}`,
+        options: Array.isArray(v.options) ? v.options : [],
+        retailPrice: Number(v.retailPrice) || Number(retailPrice) || 0,
+        wholesalePrice: v.wholesalePrice !== undefined && v.wholesalePrice !== null ? Number(v.wholesalePrice) : undefined,
+        stock: Math.max(0, Number(v.stock) || 0),
+        active: v.active !== undefined ? Boolean(v.active) : true,
+      }));
+    } else if (hasSizes) {
+      processedVariants = sizesStock.map((s: any) => ({
+        sku: `${productSlug.toUpperCase()}-T${String(s.size).replace('.', '_')}`,
+        options: [{ key: 'talle_calzado', value: String(s.size) }],
+        retailPrice: Number(retailPrice) || 0,
+        wholesalePrice: wholesalePrice ? Number(wholesalePrice) : undefined,
+        stock: Math.max(0, Number(s.stock) || 0),
+        active: true,
+      }));
+    } else {
+      // Single default variant
+      processedVariants = [
+        {
+          sku: `${productSlug.toUpperCase()}-01`,
+          options: [],
+          retailPrice: Number(retailPrice) || 0,
+          wholesalePrice: wholesalePrice ? Number(wholesalePrice) : undefined,
+          stock: hasDirectStock ? Math.max(0, Number(stock)) : 0,
+          active: true,
+        },
+      ];
     }
 
+    // Calculate derived fields
+    const isWholesaleEnabled = Boolean(wholesale?.enabled);
+    const derived = calculateDerivedProductFields(processedVariants, isWholesaleEnabled);
+
     const newProduct = await Product.create({
-      name: name.trim(),
-      description: description.trim(),
-      retailPrice: Number(retailPrice),
-      wholesalePrice: Number(wholesalePrice),
-      brandId,
-      typeId,
+      name: cleanName,
+      slug: productSlug,
+      description: description ? description.trim() : '',
+      brandId: brandId || undefined,
+      categoryId: finalCategoryId || undefined,
+      categoryAncestors,
+      typeId: typeId || undefined,
       gender: gender ? gender : null,
       active: active !== undefined ? Boolean(active) : true,
       isClearance: isClearance !== undefined ? Boolean(isClearance) : false,
       images,
-      variants: hasVariants ? variants : [],
-      stock: hasDirectStock ? Number(stock) : 0,
+      specs: Array.isArray(specs) ? specs : [],
+      wholesale: {
+        enabled: isWholesaleEnabled,
+        minQty: Number(wholesale?.minQty) || 5,
+      },
+      variants: processedVariants,
+      priceRange: derived.priceRange,
+      totalStock: derived.totalStock,
+      hasWholesale: derived.hasWholesale,
+
+      // Legacy fields
+      retailPrice: Number(retailPrice) || derived.priceRange.min,
+      wholesalePrice: wholesalePrice ? Number(wholesalePrice) : undefined,
+      stock: hasDirectStock ? Number(stock) : derived.totalStock,
       sizesStock: hasSizes ? sizesStock : [],
       displayedSizes: displayedSizes || [],
     });
@@ -209,22 +262,6 @@ export async function PUT(req: NextRequest) {
     await connectToDatabase();
     const body = await req.json();
     const productId = body._id || body.id;
-    const {
-      name,
-      description,
-      retailPrice,
-      wholesalePrice,
-      active,
-      isClearance,
-      images,
-      variants,
-      stock,
-      sizesStock,
-      brandId,
-      typeId,
-      gender,
-      displayedSizes,
-    } = body;
 
     if (!productId) {
       return NextResponse.json(
@@ -233,37 +270,95 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updateFields: Record<string, any> = {};
-
-    if (name !== undefined) updateFields.name = name.trim();
-    if (description !== undefined) updateFields.description = description.trim();
-    if (retailPrice !== undefined) updateFields.retailPrice = Number(retailPrice);
-    if (wholesalePrice !== undefined) updateFields.wholesalePrice = Number(wholesalePrice);
-    if (brandId !== undefined) updateFields.brandId = brandId;
-    if (typeId !== undefined) updateFields.typeId = typeId;
-    if (gender !== undefined) updateFields.gender = gender ? gender : null;
-    if (active !== undefined) updateFields.active = Boolean(active);
-    if (isClearance !== undefined) updateFields.isClearance = Boolean(isClearance);
-    if (images !== undefined) updateFields.images = images;
-    if (variants !== undefined) updateFields.variants = variants;
-    if (stock !== undefined) updateFields.stock = Number(stock);
-    if (sizesStock !== undefined) updateFields.sizesStock = sizesStock;
-    if (displayedSizes !== undefined) updateFields.displayedSizes = displayedSizes;
-
-    const updatedProduct = await Product.findByIdAndUpdate(productId, updateFields, {
-      returnDocument: 'after',
-      runValidators: true,
-    });
-
-    if (!updatedProduct) {
+    const product = await Product.findById(productId);
+    if (!product) {
       return NextResponse.json(
         { ok: false, error: 'NOT_FOUND', message: 'Producto no encontrado' },
         { status: 404 }
       );
     }
 
-    return NextResponse.json({ ok: true, data: updatedProduct });
+    const {
+      name,
+      slug,
+      description,
+      retailPrice,
+      wholesalePrice,
+      active,
+      isClearance,
+      images,
+      variants,
+      specs,
+      wholesale,
+      stock,
+      sizesStock,
+      brandId,
+      categoryId,
+      typeId,
+      gender,
+      displayedSizes,
+    } = body;
+
+    if (name !== undefined) product.name = name.trim();
+    if (description !== undefined) product.description = description.trim();
+    if (slug !== undefined && slug.trim()) product.slug = slugify(slug);
+    if (brandId !== undefined) product.brandId = brandId || undefined;
+    if (typeId !== undefined) product.typeId = typeId || undefined;
+    if (gender !== undefined) product.gender = gender ? gender : null;
+    if (active !== undefined) product.active = Boolean(active);
+    if (isClearance !== undefined) product.isClearance = Boolean(isClearance);
+    if (images !== undefined) product.images = images;
+    if (specs !== undefined) product.specs = specs;
+    if (displayedSizes !== undefined) product.displayedSizes = displayedSizes;
+
+    // Category update
+    if (categoryId !== undefined) {
+      product.categoryId = categoryId || undefined;
+      if (categoryId) {
+        const cat = await Category.findById(categoryId);
+        product.categoryAncestors = cat?.ancestors || [];
+      } else {
+        product.categoryAncestors = [];
+      }
+    }
+
+    // Wholesale update
+    if (wholesale !== undefined) {
+      product.wholesale = {
+        enabled: Boolean(wholesale.enabled),
+        minQty: Number(wholesale.minQty) || 5,
+      };
+    }
+
+    // Variants update
+    if (variants !== undefined && Array.isArray(variants)) {
+      product.variants = variants.map((v: any, idx: number) => ({
+        sku: v.sku || `${(product.slug || 'PROD').toUpperCase()}-${idx + 1}`,
+        options: Array.isArray(v.options) ? v.options : [],
+        retailPrice: Number(v.retailPrice) || 0,
+        wholesalePrice: v.wholesalePrice !== undefined && v.wholesalePrice !== null ? Number(v.wholesalePrice) : undefined,
+        stock: Math.max(0, Number(v.stock) || 0),
+        active: v.active !== undefined ? Boolean(v.active) : true,
+      }));
+
+      const derived = calculateDerivedProductFields(
+        product.variants,
+        product.wholesale?.enabled ?? false
+      );
+      product.priceRange = derived.priceRange;
+      product.totalStock = derived.totalStock;
+      product.hasWholesale = derived.hasWholesale;
+    }
+
+    // Legacy fields
+    if (retailPrice !== undefined) product.retailPrice = Number(retailPrice);
+    if (wholesalePrice !== undefined) product.wholesalePrice = wholesalePrice ? Number(wholesalePrice) : undefined;
+    if (stock !== undefined) product.stock = Number(stock);
+    if (sizesStock !== undefined) product.sizesStock = sizesStock;
+
+    await product.save();
+
+    return NextResponse.json({ ok: true, data: product });
   } catch (error) {
     console.error('Error al actualizar producto:', error);
     return NextResponse.json(
@@ -296,13 +391,11 @@ export async function DELETE(req: NextRequest) {
     }
 
     if (permanent) {
-      // Check if product is in any existing orders
       const orderCount = await (await import('@/models/Order')).default.countDocuments({
         'items.productId': id,
       });
 
       if (orderCount > 0) {
-        // Deactivate instead to preserve historical records
         await Product.findByIdAndUpdate(id, { active: false });
         return NextResponse.json({
           ok: true,
@@ -311,7 +404,6 @@ export async function DELETE(req: NextRequest) {
         });
       }
 
-      // Hard delete if never sold/ordered
       await Product.findByIdAndDelete(id);
       return NextResponse.json({
         ok: true,
@@ -320,7 +412,6 @@ export async function DELETE(req: NextRequest) {
       });
     }
 
-    // Standard toggle / soft delete
     const updated = await Product.findByIdAndUpdate(id, { active: false }, { returnDocument: 'after' });
 
     return NextResponse.json({
