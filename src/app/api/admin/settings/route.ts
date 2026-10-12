@@ -48,6 +48,7 @@ export async function PUT(req: NextRequest) {
       minStockAlert,
       wholesaleMinPairs,
       shippingInfo,
+      enableGenders,
     } = body;
 
     // Basic required validations
@@ -97,6 +98,7 @@ export async function PUT(req: NextRequest) {
     if (minStockAlert !== undefined) settings.minStockAlert = Math.max(0, Number(minStockAlert));
     if (wholesaleMinPairs !== undefined) settings.wholesaleMinPairs = Math.max(1, Number(wholesaleMinPairs));
     if (shippingInfo !== undefined) settings.shippingInfo = shippingInfo.trim();
+    if (enableGenders !== undefined) settings.enableGenders = Boolean(enableGenders);
 
     await settings.save();
 

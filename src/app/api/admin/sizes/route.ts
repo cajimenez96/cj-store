@@ -1,18 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
 import GenderSize, { DEFAULT_GENDER_SIZES } from '@/models/GenderSize';
-import { GenderType } from '@/models/Product';
 
 export const dynamic = 'force-dynamic';
 
-const VALID_GENDERS: GenderType[] = ['Hombre', 'Mujer', 'Niño', 'Unisex'];
+const INITIAL_DEFAULT_GENDERS = ['Hombre', 'Mujer', 'Niño', 'Unisex'];
 
-async function ensureDefaultSizes() {
-  const existing = await GenderSize.find({}).lean();
-  const existingMap = new Map(existing.map((doc) => [doc.gender, doc.sizes]));
-
-  for (const gender of VALID_GENDERS) {
-    if (!existingMap.has(gender)) {
+async function ensureDefaultGendersIfEmpty() {
+  const count = await GenderSize.countDocuments();
+  if (count === 0) {
+    for (const gender of INITIAL_DEFAULT_GENDERS) {
       await GenderSize.create({
         gender,
         sizes: DEFAULT_GENDER_SIZES[gender] || [],
@@ -24,14 +21,13 @@ async function ensureDefaultSizes() {
 export async function GET() {
   try {
     await connectToDatabase();
-    await ensureDefaultSizes();
+    await ensureDefaultGendersIfEmpty();
 
     const docs = await GenderSize.find({}).sort({ gender: 1 }).lean();
     const sizesByGender: Record<string, number[]> = {};
 
-    for (const gender of VALID_GENDERS) {
-      const found = docs.find((d) => d.gender === gender);
-      sizesByGender[gender] = found ? found.sizes : (DEFAULT_GENDER_SIZES[gender] || []);
+    for (const doc of docs) {
+      sizesByGender[doc.gender] = doc.sizes || [];
     }
 
     return NextResponse.json({
@@ -39,9 +35,57 @@ export async function GET() {
       data: sizesByGender,
     });
   } catch (error) {
-    console.error('Error al obtener talles por género:', error);
+    console.error('Error al obtener géneros y talles:', error);
     return NextResponse.json(
-      { ok: false, error: 'INTERNAL_SERVER_ERROR', message: 'Error al consultar escalas de talles' },
+      { ok: false, error: 'INTERNAL_SERVER_ERROR', message: 'Error al consultar géneros y talles' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    await connectToDatabase();
+    const body = await req.json();
+
+    const genderName = typeof body.gender === 'string' ? body.gender.trim() : '';
+    if (!genderName) {
+      return NextResponse.json(
+        { ok: false, error: 'BAD_REQUEST', message: 'El nombre del género es obligatorio' },
+        { status: 400 }
+      );
+    }
+
+    const existing = await GenderSize.findOne({
+      gender: { $regex: new RegExp(`^${genderName}$`, 'i') },
+    });
+    if (existing) {
+      return NextResponse.json(
+        { ok: false, error: 'CONFLICT', message: `El género "${genderName}" ya existe` },
+        { status: 409 }
+      );
+    }
+
+    const rawSizes = Array.isArray(body.sizes) ? body.sizes : [];
+    const parsed: number[] = rawSizes
+      .map((s: unknown) => Number(s))
+      .filter((s: number) => !isNaN(s) && s > 0 && s < 100);
+    const cleanSizes = Array.from(new Set(parsed)).sort((a, b) => a - b);
+
+    const created = await GenderSize.create({
+      gender: genderName,
+      sizes: cleanSizes,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      data: created,
+      message: `Género "${genderName}" creado correctamente`,
+    });
+  } catch (error) {
+    console.error('Error al crear género:', error);
+    return NextResponse.json(
+      { ok: false, error: 'INTERNAL_SERVER_ERROR', message: 'Error al crear género' },
       { status: 500 }
     );
   }
@@ -52,29 +96,22 @@ export async function PUT(req: NextRequest) {
     await connectToDatabase();
     const body = await req.json();
 
-    // Check for single gender update or bulk update
+    // Check for single gender update
     if (body.gender && Array.isArray(body.sizes)) {
-      const gender = body.gender as GenderType;
-      if (!VALID_GENDERS.includes(gender)) {
+      const gender = String(body.gender).trim();
+      if (!gender) {
         return NextResponse.json(
-          { ok: false, error: 'BAD_REQUEST', message: 'Género no válido' },
+          { ok: false, error: 'BAD_REQUEST', message: 'El género es obligatorio' },
           { status: 400 }
         );
       }
 
-      // Clean & sort sizes
+      // Clean & sort sizes (can be empty for perfumes!)
       const parsed: number[] = body.sizes
         .map((s: unknown) => Number(s))
         .filter((s: number) => !isNaN(s) && s > 0 && s < 100);
 
       const cleanSizes: number[] = Array.from(new Set(parsed)).sort((a, b) => a - b);
-
-      if (cleanSizes.length === 0) {
-        return NextResponse.json(
-          { ok: false, error: 'BAD_REQUEST', message: 'Debe incluir al menos un talle válido' },
-          { status: 400 }
-        );
-      }
 
       const updated = await GenderSize.findOneAndUpdate(
         { gender },
@@ -91,15 +128,9 @@ export async function PUT(req: NextRequest) {
 
     // Reset to defaults
     if (body.reset && body.gender) {
-      const gender = body.gender as GenderType;
-      if (!VALID_GENDERS.includes(gender)) {
-        return NextResponse.json(
-          { ok: false, error: 'BAD_REQUEST', message: 'Género no válido' },
-          { status: 400 }
-        );
-      }
-
+      const gender = String(body.gender).trim();
       const defaultScale = DEFAULT_GENDER_SIZES[gender] || [];
+
       const updated = await GenderSize.findOneAndUpdate(
         { gender },
         { sizes: defaultScale },
@@ -121,6 +152,50 @@ export async function PUT(req: NextRequest) {
     console.error('Error al actualizar talles:', error);
     return NextResponse.json(
       { ok: false, error: 'INTERNAL_SERVER_ERROR', message: 'Error al actualizar escalas de talles' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    await connectToDatabase();
+    const url = new URL(req.url);
+    let gender = url.searchParams.get('gender');
+
+    if (!gender) {
+      try {
+        const body = await req.json();
+        gender = body.gender;
+      } catch {
+        // no body
+      }
+    }
+
+    const genderName = typeof gender === 'string' ? gender.trim() : '';
+    if (!genderName) {
+      return NextResponse.json(
+        { ok: false, error: 'BAD_REQUEST', message: 'Debe especificar el género a eliminar' },
+        { status: 400 }
+      );
+    }
+
+    const deleted = await GenderSize.findOneAndDelete({ gender: genderName });
+    if (!deleted) {
+      return NextResponse.json(
+        { ok: false, error: 'NOT_FOUND', message: `No se encontró el género "${genderName}"` },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      message: `Género "${genderName}" eliminado correctamente`,
+    });
+  } catch (error) {
+    console.error('Error al eliminar género:', error);
+    return NextResponse.json(
+      { ok: false, error: 'INTERNAL_SERVER_ERROR', message: 'Error al eliminar género' },
       { status: 500 }
     );
   }

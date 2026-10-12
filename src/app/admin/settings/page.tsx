@@ -53,6 +53,7 @@ export default function AdminSettingsPage() {
   const [minStockAlert, setMinStockAlert] = useState<number | "">(3);
   const [wholesaleMinPairs, setWholesaleMinPairs] = useState<number | "">(5);
   const [shippingInfo, setShippingInfo] = useState("");
+  const [enableGenders, setEnableGenders] = useState<boolean>(true);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -86,6 +87,7 @@ export default function AdminSettingsPage() {
           setMinStockAlert(s.minStockAlert ?? 3);
           setWholesaleMinPairs(s.wholesaleMinPairs ?? 5);
           setShippingInfo(s.shippingInfo || "");
+          setEnableGenders(s.enableGenders ?? true);
         }
       } catch (err) {
         console.error("Error al cargar configuraciones:", err);
@@ -125,6 +127,7 @@ export default function AdminSettingsPage() {
           wholesaleMinPairs:
             wholesaleMinPairs === "" ? 5 : Number(wholesaleMinPairs),
           shippingInfo,
+          enableGenders,
         }),
       });
 
@@ -555,7 +558,44 @@ export default function AdminSettingsPage() {
               </div>
             </div>
 
-            {/* SECCIÓN 6: Escala de Talles por Género (ABM) */}
+            {/* SECCIÓN 6: Visibilidad y Clasificación por Género */}
+            <div className="bg-white border border-[#e5e5e5] p-6 sm:p-8 space-y-6 shadow-sm">
+              <div className="border-b border-[#e5e5e5] pb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sliders className="w-5 h-5 text-[#007d48]" />
+                  <div>
+                    <h2 className="text-base font-extrabold uppercase tracking-wider text-[#111111]">
+                      Visibilidad y Clasificación por Género
+                    </h2>
+                    <p className="text-xs text-[#707072]">
+                      Controlá si la tienda utiliza filtros y navegación por género (Hombre, Mujer, Unisex, etc.).
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-[#f9f9f9] border border-[#e5e5e5]">
+                <div className="space-y-1 pr-4">
+                  <h3 className="text-sm font-extrabold text-[#111111]">
+                    Habilitar navegación y filtros por género en la tienda
+                  </h3>
+                  <p className="text-xs text-[#707072]">
+                    Si se desactiva, se ocultan los botones y enlaces de género en el catálogo y menú. Ideal para tiendas de fragancias o productos donde no se discrimina por género.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={enableGenders}
+                    onChange={(e) => setEnableGenders(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-[#e5e5e5] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#111111]"></div>
+                </label>
+              </div>
+            </div>
+
+            {/* SECCIÓN 7: Gestión de Géneros y Escalas de Talles (ABM) */}
             <GenderSizesManager />
 
             {/* Submit Button */}

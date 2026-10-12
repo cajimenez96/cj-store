@@ -111,30 +111,53 @@ export const Footer: React.FC = () => {
             Fragancias
           </h4>
           <ul className="space-y-2 text-xs text-[#707072]">
-            <li>
-              <Link
-                href="/?gender=Hombre#catalogo"
-                className="hover:text-[#111111] transition-colors"
-              >
-                Fragancias Hombre
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/?gender=Mujer#catalogo"
-                className="hover:text-[#111111] transition-colors"
-              >
-                Fragancias Mujer
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/?gender=Unisex#catalogo"
-                className="hover:text-[#111111] transition-colors"
-              >
-                Fragancias Unisex
-              </Link>
-            </li>
+            {settings.enableGenders !== false ? (
+              <>
+                <li>
+                  <Link
+                    href="/?gender=Hombre#catalogo"
+                    className="hover:text-[#111111] transition-colors"
+                  >
+                    Fragancias Hombre
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/?gender=Mujer#catalogo"
+                    className="hover:text-[#111111] transition-colors"
+                  >
+                    Fragancias Mujer
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/?gender=Unisex#catalogo"
+                    className="hover:text-[#111111] transition-colors"
+                  >
+                    Fragancias Unisex
+                  </Link>
+                </li>
+              </>
+            ) : (
+              <>
+                <li>
+                  <Link
+                    href="/#catalogo"
+                    className="hover:text-[#111111] transition-colors"
+                  >
+                    Todas las Fragancias
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/?clearance=true#catalogo"
+                    className="hover:text-[#111111] transition-colors"
+                  >
+                    Ofertas Exclusivas
+                  </Link>
+                </li>
+              </>
+            )}
             <li>
               <Link
                 href="/#catalogo"

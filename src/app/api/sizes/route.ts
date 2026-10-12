@@ -1,21 +1,24 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
 import GenderSize, { DEFAULT_GENDER_SIZES } from '@/models/GenderSize';
-import { GenderType } from '@/models/Product';
 
 export const dynamic = 'force-dynamic';
-
-const VALID_GENDERS: GenderType[] = ['Hombre', 'Mujer', 'Niño', 'Unisex'];
 
 export async function GET() {
   try {
     await connectToDatabase();
-    const docs = await GenderSize.find({}).lean();
+    const docs = await GenderSize.find({}).sort({ gender: 1 }).lean();
     const sizesByGender: Record<string, number[]> = {};
 
-    for (const gender of VALID_GENDERS) {
-      const found = docs.find((d) => d.gender === gender);
-      sizesByGender[gender] = found ? found.sizes : (DEFAULT_GENDER_SIZES[gender] || []);
+    if (docs.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        data: DEFAULT_GENDER_SIZES,
+      });
+    }
+
+    for (const doc of docs) {
+      sizesByGender[doc.gender] = doc.sizes || [];
     }
 
     return NextResponse.json({

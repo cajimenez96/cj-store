@@ -29,6 +29,7 @@ export interface ISettings {
   // Commercial Rules
   wholesaleMinPairs: number;
   shippingInfo: string;
+  enableGenders: boolean;
 
   updatedAt?: Date;
 }
@@ -140,6 +141,10 @@ const SettingsSchema: Schema<ISettingsDocument> = new Schema(
       type: String,
       default: "Envíos a todo el país en 24/48hs",
       trim: true,
+    },
+    enableGenders: {
+      type: Boolean,
+      default: true,
     },
   },
   {

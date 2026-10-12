@@ -192,7 +192,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 <div className="flex items-center gap-2 text-xs font-bold text-[#707072] uppercase tracking-wider">
                   <span>{brandName}</span>
                   {typeName && <span>• {typeName}</span>}
-                  <span>• {product.gender}</span>
+                  {product.gender && <span>• {product.gender}</span>}
                 </div>
 
                 {product.isClearance && (

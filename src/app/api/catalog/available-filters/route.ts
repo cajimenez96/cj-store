@@ -42,7 +42,9 @@ export async function GET(req: NextRequest) {
     const availableGenders = new Set<string>();
 
     products.forEach((prod: any) => {
-      availableGenders.add(prod.gender);
+      if (prod.gender && typeof prod.gender === "string" && prod.gender.trim()) {
+        availableGenders.add(prod.gender.trim());
+      }
 
       const sizesStock = (prod.sizesStock as { size: number; stock: number }[]) || [];
       const displayedSizes = (prod.displayedSizes as number[]) || [];

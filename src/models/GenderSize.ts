@@ -17,13 +17,12 @@ const GenderSizeSchema: Schema<IGenderSizeDocument> = new Schema(
   {
     gender: {
       type: String,
-      required: true,
+      required: [true, 'El nombre del género es obligatorio'],
       unique: true,
-      enum: ["Hombre", "Mujer", "Niño", "Unisex"],
+      trim: true,
     },
     sizes: {
       type: [Number],
-      required: true,
       default: [],
     },
   },

@@ -29,9 +29,13 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange }) => {
 
   const navLinks = [
     { label: "Catálogo", href: "/#catalogo" },
-    { label: "Hombre", href: "/?gender=Hombre#catalogo" },
-    { label: "Mujer", href: "/?gender=Mujer#catalogo" },
-    { label: "Unisex", href: "/?gender=Unisex#catalogo" },
+    ...(settings.enableGenders !== false
+      ? [
+          { label: "Hombre", href: "/?gender=Hombre#catalogo" },
+          { label: "Mujer", href: "/?gender=Mujer#catalogo" },
+          { label: "Unisex", href: "/?gender=Unisex#catalogo" },
+        ]
+      : []),
     { label: "🔥 Ofertas", href: "/?clearance=true#catalogo", isClearance: true },
   ];
 

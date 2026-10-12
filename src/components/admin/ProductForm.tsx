@@ -52,7 +52,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
 
   const [brands, setBrands] = useState<OptionItem[]>([]);
   const [types, setTypes] = useState<OptionItem[]>([]);
-  const [genderSizes, setGenderSizes] = useState<Record<GenderType, number[]>>(DEFAULT_GENDER_SIZES);
+  const [genderSizes, setGenderSizes] = useState<Record<string, number[]>>({});
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -711,40 +711,53 @@ export const ProductForm: React.FC<ProductFormProps> = ({
             {/* Mode 3: Traditional Shoe Sizes */}
             {inventoryMode === "shoes" && (
               <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-xs font-bold uppercase text-[#707072]">
-                    Escala {gender || "Unisex"} ({sizesStock.reduce((acc, curr) => acc + curr.stock, 0)} pares)
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => setShowHiddenSizes(!showHiddenSizes)}
-                    className="text-xs font-bold px-3 py-1.5 rounded-full border border-[#e5e5e5] bg-white hover:bg-[#f5f5f5] transition-colors cursor-pointer"
-                  >
-                    👁️ {showHiddenSizes ? "Ocultar sin stock" : "Mostrar sin stock"}
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                  {sizesStock.map((item) => (
-                    <div
-                      key={item.size}
-                      className="p-3 bg-[#f5f5f5] border border-[#e5e5e5] space-y-1.5 text-center"
-                    >
-                      <span className="block text-xs font-extrabold text-[#111111]">
-                        Talle {item.size}
-                      </span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={item.stock}
-                        onChange={(e) =>
-                          handleStockChange(item.size, parseInt(e.target.value, 10) || 0)
-                        }
-                        className="w-full text-center bg-white text-[#111111] font-extrabold text-sm py-1.5 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
-                      />
+                {sizesStock.length === 0 ? (
+                  <div className="p-4 bg-[#f9f9f9] border border-[#e5e5e5] text-center text-xs text-[#707072] space-y-1">
+                    <p className="font-bold text-[#111111]">
+                      El género seleccionado ({gender || "Sin género"}) no tiene talles configurados.
+                    </p>
+                    <p>
+                      Para productos como perfumes o cosmética, utilizá la pestaña <strong>Variantes (ml, colores)</strong> o <strong>Stock Simple</strong>.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-xs font-bold uppercase text-[#707072]">
+                        Escala {gender || "Unisex"} ({sizesStock.reduce((acc, curr) => acc + curr.stock, 0)} pares)
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => setShowHiddenSizes(!showHiddenSizes)}
+                        className="text-xs font-bold px-3 py-1.5 rounded-full border border-[#e5e5e5] bg-white hover:bg-[#f5f5f5] transition-colors cursor-pointer"
+                      >
+                        👁️ {showHiddenSizes ? "Ocultar sin stock" : "Mostrar sin stock"}
+                      </button>
                     </div>
-                  ))}
-                </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                      {sizesStock.map((item) => (
+                        <div
+                          key={item.size}
+                          className="p-3 bg-[#f5f5f5] border border-[#e5e5e5] space-y-1.5 text-center"
+                        >
+                          <span className="block text-xs font-extrabold text-[#111111]">
+                            Talle {item.size}
+                          </span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={item.stock}
+                            onChange={(e) =>
+                              handleStockChange(item.size, parseInt(e.target.value, 10) || 0)
+                            }
+                            className="w-full text-center bg-white text-[#111111] font-extrabold text-sm py-1.5 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -826,25 +839,24 @@ export const ProductForm: React.FC<ProductFormProps> = ({
               <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
                 Género (Opcional)
               </label>
-              {isEditing ? (
-                <div className="w-full bg-[#f5f5f5] text-[#707072] text-xs font-bold py-3 px-3 border border-[#e5e5e5]">
-                  {gender || "Sin género / No aplica"}
-                </div>
-              ) : (
-                <select
-                  value={gender || ""}
-                  onChange={(e) =>
-                    setGender(e.target.value ? (e.target.value as GenderType) : null)
-                  }
-                  className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold py-3 px-3 rounded-none border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] cursor-pointer"
-                >
-                  <option value="">Sin género / No aplica</option>
-                  <option value="Unisex">Unisex</option>
-                  <option value="Hombre">Hombre</option>
-                  <option value="Mujer">Mujer</option>
-                  <option value="Niño">Niño</option>
-                </select>
-              )}
+              <select
+                value={gender || ""}
+                onChange={(e) =>
+                  setGender(e.target.value ? (e.target.value as GenderType) : null)
+                }
+                className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold py-3 px-3 rounded-none border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] cursor-pointer"
+              >
+                <option value="">Sin género / No aplica</option>
+                {Array.from(
+                  new Set([...Object.keys(genderSizes), ...(gender ? [gender] : [])])
+                )
+                  .sort()
+                  .map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+              </select>
             </div>
           </div>
 

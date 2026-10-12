@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Model, Types } from 'mongoose';
 
-export type GenderType = 'Hombre' | 'Mujer' | 'Niño' | 'Unisex';
+export type GenderType = string;
 
 export interface IProductImage {
   url: string;
@@ -111,11 +111,8 @@ const ProductSchema: Schema<IProductDocument> = new Schema(
     },
     gender: {
       type: String,
-      enum: {
-        values: ['Hombre', 'Mujer', 'Niño', 'Unisex', null],
-        message: '{VALUE} no es un género válido',
-      },
       default: null,
+      trim: true,
     },
     active: {
       type: Boolean,

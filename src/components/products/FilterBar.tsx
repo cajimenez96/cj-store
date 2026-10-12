@@ -9,6 +9,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { SearchBar } from "@/components/common/SearchBar";
+import { useSettings } from "@/context/SettingsContext";
 
 interface FilterOption {
   _id: string;
@@ -94,11 +95,30 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   onSelectSort,
   onClearFilters,
 }) => {
+  const { settings } = useSettings();
   const [isOpen, setIsOpen] = useState(false);
   const [availableSizes, setAvailableSizes] = useState<number[]>([]);
   const [availableGenders, setAvailableGenders] = useState<string[]>([]);
+  const [configuredGenders, setConfiguredGenders] = useState<string[]>([]);
 
-  const genders = ["Hombre", "Mujer", "Niño", "Unisex"];
+  // Fetch configured genders from DB
+  useEffect(() => {
+    fetch("/api/sizes")
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.ok && json.data) {
+          setConfiguredGenders(Object.keys(json.data).sort());
+        }
+      })
+      .catch((err) => console.error("Error fetching genders:", err));
+  }, []);
+
+  const genders =
+    configuredGenders.length > 0
+      ? configuredGenders
+      : availableGenders.length > 0
+      ? availableGenders
+      : ["Hombre", "Mujer", "Unisex"];
 
   // Fetch available filters dynamically based on selected filters
   useEffect(() => {
@@ -134,7 +154,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     selectedBrandIds.length +
     selectedTypeIds.length +
     (selectedSize !== null ? 1 : 0) +
-    (selectedGender !== null ? 1 : 0);
+    (settings.enableGenders !== false && selectedGender !== null ? 1 : 0);
 
   const hasActiveFilters = activeFiltersCount > 0;
 
@@ -313,29 +333,31 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               )}
 
               {/* 3. Género Filter */}
-              <div>
-                <h4 className="text-xs font-bold text-[#707072] uppercase tracking-wider mb-2.5">
-                  Género
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {genders.map((gender) => {
-                    const isActive = selectedGender === gender;
-                    return (
-                      <button
-                        key={gender}
-                        onClick={() => onSelectGender(isActive ? null : gender)}
-                        className={`transition-all cursor-pointer ${
-                          isActive
-                            ? "bg-[#111111] text-white font-bold rounded-full px-3.5 py-1.5 text-xs shadow-xs"
-                            : "bg-white text-[#111111] font-semibold border border-[#e5e5e5] hover:border-[#111111] rounded-full px-3.5 py-1.5 text-xs"
-                        }`}
-                      >
-                        {gender}
-                      </button>
-                    );
-                  })}
+              {settings.enableGenders !== false && (
+                <div>
+                  <h4 className="text-xs font-bold text-[#707072] uppercase tracking-wider mb-2.5">
+                    Género
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {genders.map((gender) => {
+                      const isActive = selectedGender === gender;
+                      return (
+                        <button
+                          key={gender}
+                          onClick={() => onSelectGender(isActive ? null : gender)}
+                          className={`transition-all cursor-pointer ${
+                            isActive
+                              ? "bg-[#111111] text-white font-bold rounded-full px-3.5 py-1.5 text-xs shadow-xs"
+                              : "bg-white text-[#111111] font-semibold border border-[#e5e5e5] hover:border-[#111111] rounded-full px-3.5 py-1.5 text-xs"
+                          }`}
+                        >
+                          {gender}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* 4. Talles Grid Selector */}
               <TallesFilter
