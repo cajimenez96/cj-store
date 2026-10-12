@@ -64,11 +64,11 @@ export const Footer: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-8 py-12 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
         <div>
           <h3 className="font-extrabold text-xl tracking-tighter uppercase mb-3">
-            {settings.storeName}
+            {settings.storeName || "The Point"}
           </h3>
           <p className="text-xs text-[#707072] leading-relaxed mb-4">
-            Catálogo e-commerce de calzado. Seleccioná tus modelos favoritos y
-            completá tu compra fácil y rápido vía WhatsApp.
+            {settings.footerDescription ||
+              "Perfumería de lujo y fragancias de autor. Seleccioná tus aromas favoritos y completá tu pedido de forma fácil y directa vía WhatsApp."}
           </p>
           <div className="flex items-center gap-2 text-xs text-[#707072]">
             <Clock className="w-4 h-4 text-[#111111]" />
@@ -108,7 +108,7 @@ export const Footer: React.FC = () => {
 
         <div>
           <h4 className="font-bold text-sm uppercase tracking-wider mb-4">
-            Categorías
+            Fragancias
           </h4>
           <ul className="space-y-2 text-xs text-[#707072]">
             <li>
@@ -116,7 +116,7 @@ export const Footer: React.FC = () => {
                 href="/?gender=Hombre#catalogo"
                 className="hover:text-[#111111] transition-colors"
               >
-                Calzado Hombre
+                Fragancias Hombre
               </Link>
             </li>
             <li>
@@ -124,15 +124,7 @@ export const Footer: React.FC = () => {
                 href="/?gender=Mujer#catalogo"
                 className="hover:text-[#111111] transition-colors"
               >
-                Calzado Mujer
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/?gender=Niño#catalogo"
-                className="hover:text-[#111111] transition-colors"
-              >
-                Calzado Niño
+                Fragancias Mujer
               </Link>
             </li>
             <li>
@@ -140,7 +132,15 @@ export const Footer: React.FC = () => {
                 href="/?gender=Unisex#catalogo"
                 className="hover:text-[#111111] transition-colors"
               >
-                Calzado Unisex
+                Fragancias Unisex
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/#catalogo"
+                className="hover:text-[#111111] transition-colors"
+              >
+                Accesorios & Diseños
               </Link>
             </li>
           </ul>
@@ -153,7 +153,7 @@ export const Footer: React.FC = () => {
           <ul className="space-y-2 text-xs text-[#707072]">
             <li>• Transferencia Bancaria (CBU / Alias)</li>
             <li>• Pago en Efectivo (Contra entrega)</li>
-            <li>• Precios Mayoristas (desde {settings.wholesaleMinPairs} pares)</li>
+            <li>• Precios Mayoristas (desde {settings.wholesaleMinPairs} unidades)</li>
           </ul>
         </div>
 
@@ -162,7 +162,7 @@ export const Footer: React.FC = () => {
             Contacto Directo
           </h4>
           <p className="text-xs text-[#707072] mb-3">
-            ¿Tenés alguna duda sobre tu talle o modelo?
+            ¿Tenés alguna duda sobre alguna fragancia o producto?
           </p>
           <a
             href={whatsappUrl}

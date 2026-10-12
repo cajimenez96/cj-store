@@ -20,6 +20,8 @@ import {
   Tag,
   Sliders,
   DollarSign,
+  Search,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { GenderSizesManager } from "@/components/admin/GenderSizesManager";
@@ -33,6 +35,12 @@ export default function AdminSettingsPage() {
   const [whatsappInquiryMessage, setWhatsappInquiryMessage] = useState("");
   const [instagramUrl, setInstagramUrl] = useState("");
   const [facebookUrl, setFacebookUrl] = useState("");
+
+  // SEO & Social Meta
+  const [metaTitle, setMetaTitle] = useState("");
+  const [metaDescription, setMetaDescription] = useState("");
+  const [metaKeywords, setMetaKeywords] = useState("");
+  const [footerDescription, setFooterDescription] = useState("");
 
   // Bank Data
   const [bankAlias, setBankAlias] = useState("");
@@ -63,6 +71,11 @@ export default function AdminSettingsPage() {
           setWhatsappInquiryMessage(s.whatsappInquiryMessage || "");
           setInstagramUrl(s.instagramUrl || "");
           setFacebookUrl(s.facebookUrl || "");
+
+          setMetaTitle(s.metaTitle || "");
+          setMetaDescription(s.metaDescription || "");
+          setMetaKeywords(s.metaKeywords || "");
+          setFooterDescription(s.footerDescription || "");
 
           setBankAlias(s.bankAlias || "");
           setBankCbu(s.bankCbu || "");
@@ -99,6 +112,10 @@ export default function AdminSettingsPage() {
           whatsappInquiryMessage,
           instagramUrl,
           facebookUrl,
+          metaTitle,
+          metaDescription,
+          metaKeywords,
+          footerDescription,
           bankAlias,
           bankCbu,
           bankHolder,
@@ -176,7 +193,7 @@ export default function AdminSettingsPage() {
                   </label>
                   <input
                     type="text"
-                    placeholder="Ej: FP Zapatillas"
+                    placeholder="Ej: The Point"
                     value={storeName}
                     onChange={(e) => setStoreName(e.target.value)}
                     className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-bold py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
@@ -195,7 +212,7 @@ export default function AdminSettingsPage() {
                     className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-bold py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
                   />
                   <p className="text-[10px] text-[#707072] mt-1">
-                    Sin espacios ni signos (+, -). Ej: 5493813101800
+                    Sin espacios ni signos (+, -). Ej: 5491123456789
                   </p>
                 </div>
 
@@ -218,7 +235,7 @@ export default function AdminSettingsPage() {
                   </label>
                   <input
                     type="email"
-                    placeholder="Ej: contacto@fpzapatillas.com"
+                    placeholder="Ej: contacto@thepoint.com"
                     value={storeEmail}
                     onChange={(e) => setStoreEmail(e.target.value)}
                     className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-medium py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
@@ -231,7 +248,7 @@ export default function AdminSettingsPage() {
                   </label>
                   <input
                     type="text"
-                    placeholder="Ej: Hola! Tengo una consulta sobre un calzado"
+                    placeholder="Ej: Hola! Tengo una consulta sobre una fragancia"
                     value={whatsappInquiryMessage}
                     onChange={(e) => setWhatsappInquiryMessage(e.target.value)}
                     className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-medium py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
@@ -249,7 +266,7 @@ export default function AdminSettingsPage() {
                   </label>
                   <input
                     type="text"
-                    placeholder="Ej: https://instagram.com/fpzapatillas"
+                    placeholder="Ej: https://instagram.com/thepoint"
                     value={instagramUrl}
                     onChange={(e) => setInstagramUrl(e.target.value)}
                     className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-medium py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
@@ -263,7 +280,7 @@ export default function AdminSettingsPage() {
                   </label>
                   <input
                     type="text"
-                    placeholder="Ej: https://facebook.com/fpzapatillas"
+                    placeholder="Ej: https://facebook.com/thepoint"
                     value={facebookUrl}
                     onChange={(e) => setFacebookUrl(e.target.value)}
                     className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-medium py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
@@ -294,7 +311,7 @@ export default function AdminSettingsPage() {
                   </label>
                   <input
                     type="text"
-                    placeholder="Ej: FP.ZAPATILLAS"
+                    placeholder="Ej: THE.POINT"
                     value={bankAlias}
                     onChange={(e) => setBankAlias(e.target.value)}
                     className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-extrabold py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
@@ -320,7 +337,7 @@ export default function AdminSettingsPage() {
                   </label>
                   <input
                     type="text"
-                    placeholder="Ej: FP Calzados"
+                    placeholder="Ej: The Point"
                     value={bankHolder}
                     onChange={(e) => setBankHolder(e.target.value)}
                     className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-bold py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
@@ -462,7 +479,83 @@ export default function AdminSettingsPage() {
               </div>
             </div>
 
-            {/* SECCIÓN 5: Escala de Talles por Género (ABM) */}
+            {/* SECCIÓN 5: SEO & Posicionamiento */}
+            <div className="bg-white border border-[#e5e5e5] p-6 sm:p-8 space-y-5 shadow-sm">
+              <div className="border-b border-[#e5e5e5] pb-3 flex items-center gap-2">
+                <Search className="w-5 h-5 text-[#111111]" />
+                <div>
+                  <h2 className="text-base font-extrabold uppercase tracking-wider text-[#111111] flex items-center gap-2">
+                    <span>SEO, Buscadores & Redes Sociales</span>
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                  </h2>
+                  <p className="text-xs text-[#707072]">
+                    Configurá cómo aparece The Point en Google, WhatsApp, Facebook y buscadores.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
+                    Título Global de la Página (Meta Title) *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: The Point | Perfumes Importados & Fragancias Exclusivas"
+                    value={metaTitle}
+                    onChange={(e) => setMetaTitle(e.target.value)}
+                    className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-bold py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                  />
+                  <p className="text-[10px] text-[#707072] mt-1">
+                    Es el título que se muestra en la pestaña del navegador y en los resultados de Google.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
+                    Descripción del Sitio (Meta Description) *
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Ej: Catálogo exclusivo de perfumes importados y fragancias de autor en The Point. Comprá online con atención personalizada por WhatsApp y envíos a todo el país."
+                    value={metaDescription}
+                    onChange={(e) => setMetaDescription(e.target.value)}
+                    className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-medium py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                  />
+                  <p className="text-[10px] text-[#707072] mt-1">
+                    Resumen visible bajo el título en Google y al compartir el link en WhatsApp o redes sociales.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
+                    Palabras Clave (Keywords separadas por comas)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: perfumes, fragancias, perfumes importados, the point, dior, chanel"
+                    value={metaKeywords}
+                    onChange={(e) => setMetaKeywords(e.target.value)}
+                    className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-medium py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
+                    Texto Descriptivo del Pie de Página (Footer)
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Ej: Perfumería de lujo y fragancias de autor. Seleccioná tus aromas favoritos y completá tu pedido de forma fácil y directa vía WhatsApp."
+                    value={footerDescription}
+                    onChange={(e) => setFooterDescription(e.target.value)}
+                    className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-medium py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* SECCIÓN 6: Escala de Talles por Género (ABM) */}
             <GenderSizesManager />
 
             {/* Submit Button */}

@@ -36,6 +36,10 @@ export async function PUT(req: NextRequest) {
       whatsappInquiryMessage,
       instagramUrl,
       facebookUrl,
+      metaTitle,
+      metaDescription,
+      metaKeywords,
+      footerDescription,
       bankAlias,
       bankCbu,
       bankHolder,
@@ -75,6 +79,12 @@ export async function PUT(req: NextRequest) {
     if (whatsappInquiryMessage !== undefined) settings.whatsappInquiryMessage = whatsappInquiryMessage.trim();
     if (instagramUrl !== undefined) settings.instagramUrl = instagramUrl.trim();
     if (facebookUrl !== undefined) settings.facebookUrl = facebookUrl.trim();
+
+    // Update SEO & Social Meta
+    if (metaTitle !== undefined) settings.metaTitle = metaTitle.trim();
+    if (metaDescription !== undefined) settings.metaDescription = metaDescription.trim();
+    if (metaKeywords !== undefined) settings.metaKeywords = metaKeywords.trim();
+    if (footerDescription !== undefined) settings.footerDescription = footerDescription.trim();
 
     // Update Bank Data
     if (bankAlias !== undefined) settings.bankAlias = bankAlias.trim();

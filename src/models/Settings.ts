@@ -10,6 +10,12 @@ export interface ISettings {
   instagramUrl: string;
   facebookUrl: string;
 
+  // SEO & Social Meta
+  metaTitle: string;
+  metaDescription: string;
+  metaKeywords: string;
+  footerDescription: string;
+
   // Bank Data
   bankAlias: string;
   bankCbu: string;
@@ -34,7 +40,7 @@ const SettingsSchema: Schema<ISettingsDocument> = new Schema(
     // Identity & Contact
     storeName: {
       type: String,
-      default: "FP Zapatillas",
+      default: "The Point",
       trim: true,
     },
     storePhone: {
@@ -44,7 +50,7 @@ const SettingsSchema: Schema<ISettingsDocument> = new Schema(
     },
     storeEmail: {
       type: String,
-      default: "contacto@fpzapatillas.com",
+      default: "contacto@thepoint.com",
       trim: true,
     },
     businessHours: {
@@ -54,7 +60,7 @@ const SettingsSchema: Schema<ISettingsDocument> = new Schema(
     },
     whatsappInquiryMessage: {
       type: String,
-      default: "Hola! Tengo una consulta sobre un calzado",
+      default: "Hola! Tengo una consulta sobre una fragancia",
       trim: true,
     },
     instagramUrl: {
@@ -68,10 +74,32 @@ const SettingsSchema: Schema<ISettingsDocument> = new Schema(
       trim: true,
     },
 
+    // SEO & Social Meta
+    metaTitle: {
+      type: String,
+      default: "The Point | Perfumes Importados & Fragancias Exclusivas",
+      trim: true,
+    },
+    metaDescription: {
+      type: String,
+      default: "Catálogo exclusivo de perfumes importados y fragancias de autor en The Point. Comprá online con atención personalizada por WhatsApp y envíos a todo el país.",
+      trim: true,
+    },
+    metaKeywords: {
+      type: String,
+      default: "perfumes, fragancias, perfumes importados, the point, decants, hombre, mujer, unisex",
+      trim: true,
+    },
+    footerDescription: {
+      type: String,
+      default: "Perfumería de lujo y fragancias de autor. Seleccioná tus aromas favoritos y completá tu pedido de forma fácil y directa vía WhatsApp.",
+      trim: true,
+    },
+
     // Bank Data
     bankAlias: {
       type: String,
-      default: "FP.ZAPATILLAS",
+      default: "THE.POINT",
       trim: true,
     },
     bankCbu: {
@@ -81,7 +109,7 @@ const SettingsSchema: Schema<ISettingsDocument> = new Schema(
     },
     bankHolder: {
       type: String,
-      default: "FP Calzados",
+      default: "The Point",
       trim: true,
     },
     bankCuit: {
@@ -95,7 +123,7 @@ const SettingsSchema: Schema<ISettingsDocument> = new Schema(
       trim: true,
     },
 
-    // Inventory & Alerts (evaluated over TOTAL pairs per product)
+    // Inventory & Alerts
     minStockAlert: {
       type: Number,
       default: 3,
@@ -110,7 +138,7 @@ const SettingsSchema: Schema<ISettingsDocument> = new Schema(
     },
     shippingInfo: {
       type: String,
-      default: "Envíos a todo el país en 24hs",
+      default: "Envíos a todo el país en 24/48hs",
       trim: true,
     },
   },

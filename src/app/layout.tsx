@@ -6,6 +6,8 @@ import { CartProvider } from "@/context/CartContext";
 import { SettingsProvider } from "@/context/SettingsContext";
 import { Toaster } from "@/components/ui/sonner";
 import { Suspense } from "react";
+import { connectToDatabase } from "@/lib/db";
+import Settings from "@/models/Settings";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,10 +19,49 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "FP Zapatillas | Catálogo de Calzado E-Commerce",
-  description: "Catálogo e-commerce de calzado. Navegá productos, seleccioná tu talle y hacé tu pedido por WhatsApp en simples pasos.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  let title = "The Point | Perfumes Importados & Fragancias Exclusivas";
+  let description =
+    "Catálogo exclusivo de perfumes importados y fragancias de autor en The Point. Comprá online con atención personalizada por WhatsApp y envíos a todo el país.";
+  let keywords =
+    "perfumes, fragancias, perfumes importados, the point, diseñador, decants, hombre, mujer, unisex";
+  let storeName = "The Point";
+
+  try {
+    await connectToDatabase();
+    const settings = await Settings.findOne({}).lean();
+    if (settings) {
+      if (settings.metaTitle) title = settings.metaTitle;
+      if (settings.metaDescription) description = settings.metaDescription;
+      if (settings.metaKeywords) keywords = settings.metaKeywords;
+      if (settings.storeName) storeName = settings.storeName;
+    }
+  } catch (error) {
+    console.error("Error cargando metadatos dinámicos de Settings:", error);
+  }
+
+  return {
+    title,
+    description,
+    keywords,
+    openGraph: {
+      title,
+      description,
+      siteName: storeName,
+      locale: "es_AR",
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
+    robots: {
+      index: true,
+      follow: true,
+    },
+  };
+}
 
 export default function RootLayout({
   children,

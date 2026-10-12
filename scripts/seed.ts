@@ -91,23 +91,27 @@ async function runSeed() {
 
     // 5. Crear Configuración General Inicial
     await Settings.create({
-      storeName: 'CJ Store',
+      storeName: 'The Point',
       storePhone: '+5491100000000',
-      storeEmail: 'contacto@cjstore.com',
+      storeEmail: 'contacto@thepoint.com',
       businessHours: 'Lun a Sáb: 9:00 a 20:00 hs',
-      whatsappInquiryMessage: 'Hola! Tengo una consulta sobre un producto',
+      whatsappInquiryMessage: 'Hola! Tengo una consulta sobre una fragancia',
       instagramUrl: '',
       facebookUrl: '',
-      bankAlias: 'CJ.STORE',
+      metaTitle: 'The Point | Perfumes Importados & Fragancias Exclusivas',
+      metaDescription: 'Catálogo exclusivo de perfumes importados y fragancias de autor en The Point. Comprá online con atención personalizada por WhatsApp y envíos a todo el país.',
+      metaKeywords: 'perfumes, fragancias, perfumes importados, the point, decants, hombre, mujer, unisex',
+      footerDescription: 'Perfumería de lujo y fragancias de autor. Seleccioná tus aromas favoritos y completá tu pedido de forma fácil y directa vía WhatsApp.',
+      bankAlias: 'THE.POINT',
       bankCbu: '0000003100010000000000',
-      bankHolder: 'CJ Store',
+      bankHolder: 'The Point',
       bankCuit: '20-00000000-9',
       bankName: 'Banco Galicia',
       minStockAlert: 3,
       wholesaleMinPairs: 5,
       shippingInfo: 'Envíos a todo el país en 24/48hs',
     });
-    console.log('   ✓ Ajustes de la tienda inicializados (CJ Store)');
+    console.log('   ✓ Ajustes de la tienda inicializados (The Point)');
 
     // 6. Crear Usuario Superadmin Inicial
     console.log('\n👤 [5/5] Creando usuario Superadmin inicial...');

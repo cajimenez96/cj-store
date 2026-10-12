@@ -17,6 +17,12 @@ export interface StoreSettings {
   instagramUrl: string;
   facebookUrl: string;
 
+  // SEO & Social Meta
+  metaTitle: string;
+  metaDescription: string;
+  metaKeywords: string;
+  footerDescription: string;
+
   bankAlias: string;
   bankCbu: string;
   bankHolder: string;
@@ -29,23 +35,28 @@ export interface StoreSettings {
 }
 
 const DEFAULT_SETTINGS: StoreSettings = {
-  storeName: "FP Zapatillas",
+  storeName: "The Point",
   storePhone: "-",
-  storeEmail: "contacto@fpzapatillas.com",
+  storeEmail: "contacto@thepoint.com",
   businessHours: "Lun a Sáb: 9:00 a 20:00 hs",
-  whatsappInquiryMessage: "Hola! Tengo una consulta sobre un calzado",
+  whatsappInquiryMessage: "Hola! Tengo una consulta sobre una fragancia",
   instagramUrl: "",
   facebookUrl: "",
 
-  bankAlias: "FP.ZAPATILLAS",
+  metaTitle: "The Point | Perfumes Importados & Fragancias Exclusivas",
+  metaDescription: "Catálogo exclusivo de perfumes importados y fragancias de autor en The Point. Comprá online con atención personalizada por WhatsApp y envíos a todo el país.",
+  metaKeywords: "perfumes, fragancias, perfumes importados, the point, decants, hombre, mujer, unisex",
+  footerDescription: "Perfumería de lujo y fragancias de autor. Seleccioná tus aromas favoritos y completá tu pedido de forma fácil y directa vía WhatsApp.",
+
+  bankAlias: "THE.POINT",
   bankCbu: "",
-  bankHolder: "FP Calzados",
+  bankHolder: "The Point",
   bankCuit: "",
   bankName: "Banco Galicia",
 
   minStockAlert: 3,
   wholesaleMinPairs: 5,
-  shippingInfo: "Envíos a todo el país en 24hs",
+  shippingInfo: "Envíos a todo el país en 24/48hs",
 };
 
 interface SettingsContextType {

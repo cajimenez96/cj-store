@@ -2,12 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { ShoppingBag, Menu, X, Phone } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useSettings } from "@/context/SettingsContext";
 import { SearchBar } from "@/components/common/SearchBar";
-import navbarLogo from "@/assets/navbar.png";
 
 interface HeaderProps {
   onSearchChange?: (term: string) => void;
@@ -30,12 +28,11 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange }) => {
   }, [settings.storePhone, settings.whatsappInquiryMessage, formatPhoneNumber]);
 
   const navLinks = [
-    { label: "Todos", href: "/#catalogo" },
+    { label: "Catálogo", href: "/#catalogo" },
     { label: "Hombre", href: "/?gender=Hombre#catalogo" },
     { label: "Mujer", href: "/?gender=Mujer#catalogo" },
-    { label: "Niño", href: "/?gender=Niño#catalogo" },
     { label: "Unisex", href: "/?gender=Unisex#catalogo" },
-    { label: "🔥 Liquidación", href: "/?clearance=true#catalogo", isClearance: true },
+    { label: "🔥 Ofertas", href: "/?clearance=true#catalogo", isClearance: true },
   ];
 
   return (
@@ -54,9 +51,9 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange }) => {
           </span>
         </a>
         <div className="hidden md:flex gap-4 text-[#707072]">
-          <span>{settings.shippingInfo || 'Envíos a todo el país en 24hs'}</span>
+          <span>{settings.shippingInfo || 'Envíos a todo el país en 24/48hs'}</span>
           <span>•</span>
-          <span>Catálogo Directo</span>
+          <span>Fragancias 100% Originales</span>
         </div>
       </div>
 
@@ -76,13 +73,15 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange }) => {
             )}
           </button>
 
-          <Link href="/" className="flex items-center group cursor-pointer">
-            <Image
-              src={navbarLogo}
-              alt={settings.storeName || "FP Zapatillas"}
-              className="h-12 w-xs mt-4 object-cover group-hover:opacity-80 transition-opacity"
-              priority
-            />
+          <Link href="/" className="flex items-center gap-2 group cursor-pointer py-1">
+            <div className="flex flex-col">
+              <span className="font-serif font-black tracking-widest text-xl sm:text-2xl uppercase text-[#111111] group-hover:opacity-80 transition-opacity leading-none">
+                {settings.storeName || "The Point"}
+              </span>
+              <span className="text-[9px] font-bold tracking-[0.3em] text-[#707072] uppercase leading-tight mt-1">
+                Parfumerie
+              </span>
+            </div>
           </Link>
         </div>
 
@@ -108,8 +107,8 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange }) => {
           {/* Search Pill */}
           <SearchBar
             onSearchChange={onSearchChange}
-            placeholder="Buscar modelo..."
-            className="hidden sm:block w-48 md:w-60"
+            placeholder="Buscar perfumes, fragancias..."
+            className="hidden sm:block w-52 md:w-64"
           />
 
           {/* Cart Button */}
@@ -133,7 +132,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange }) => {
         <div className="md:hidden bg-white border-b border-[#e5e5e5] px-6 py-4 space-y-4 animate-in slide-in-from-top duration-200">
           <SearchBar
             onSearchChange={onSearchChange}
-            placeholder="Buscar calzado..."
+            placeholder="Buscar perfumes, fragancias..."
             className="w-full"
             inputClassName="text-sm py-2.5 pl-10 pr-8"
           />

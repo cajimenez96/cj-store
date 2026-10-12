@@ -238,21 +238,21 @@ function HomeContent() {
             <h2 className="text-2xl sm:text-3xl font-extrabold text-[#111111] uppercase tracking-tight flex items-center gap-2">
               {isClearanceOnly ? (
                 <>
-                  <span className="text-[#d30005]">🔥 Calzado en Liquidación</span>
+                  <span className="text-[#d30005]">🔥 Fragancias en Oferta</span>
                   <span className="text-xs font-bold text-[#d30005] bg-[#d30005]/10 px-2.5 py-0.5 rounded-full border border-[#d30005]/20">
                     OFERTAS EXCLUSIVAS
                   </span>
                 </>
               ) : (
-                "Catálogo de Calzado"
+                "Catálogo de Fragancias"
               )}
             </h2>
             <p className="text-xs text-[#707072] mt-0.5">
               {isClearanceOnly
-                ? "Aprovechá modelos seleccionados con precios de liquidación y descuentos especiales."
+                ? "Aprovechá productos seleccionados con precios promocionales y descuentos especiales."
                 : searchQueryParam
                 ? `Resultados para "${searchQueryParam}"`
-                : "Descubrí nuestro stock disponible. Elegí tu talle y hacé tu pedido directo por WhatsApp."}
+                : "Descubrí nuestro stock disponible. Elegí tu fragancia o presentación y hacé tu pedido directo por WhatsApp."}
             </p>
           </div>
           {isClearanceOnly && (
