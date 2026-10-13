@@ -45,7 +45,7 @@ Fabricante o casa del producto (ej: Paco Rabanne, Dior).
 Dimensión reutilizable que describe productos y variantes.
 - **Atributos:** `key` (inmutable, único, minúsculas y guiones bajos), `label`, `type` (`select` | `text` | `number` | `boolean`), `unit` (para numéricos, ej: `ml`), `filterable`.
 - **Opciones** (tipo `select`): `value` (slug inmutable), `label` (editable), `order` (orden lógico, no alfabético), `hex` (solo colores) y `active`. Una opción en uso se **desactiva** en lugar de borrarse.
-- **Género:** ya no es una entidad propia. Se modela como el atributo `genero` (tipo selección) y se activa agregándolo a los `specAttributes` de una categoría. El filtro por género del catálogo toma las opciones activas de ese atributo y se puede ocultar con el ajuste *Habilitar el filtro por género*.
+- **Género:** ya no es una entidad propia. Se modela como el atributo `genero` (tipo selección) y se activa agregándolo a los `specAttributes` de una categoría. El filtro por género del catálogo toma las opciones activas de ese atributo y se puede ocultar con el ajuste *Habilitar el filtro por género*. No hay géneros predefinidos y se administra en un único lugar, *Ajustes*: allí se crean, ocultan y eliminan sus opciones (Hombre, Mujer, etc.) y se elige qué categorías lo usan (en *Atributos* aparece bloqueado). Mientras no haya opciones activas el filtro no se muestra.
 - **Talles de calzado:** si en el futuro se vende calzado, se resuelven con un atributo de talle como eje de variantes de la categoría correspondiente.
 
 ### 2.4 Producto
@@ -111,7 +111,7 @@ Configuración única, editable desde el panel y expuesta a la tienda.
    - Carrusel de promociones activas.
    - Encabezado con **Catálogo, los rubros (con un desplegable de sus categorías) y Ofertas**, y buscador.
    - Grilla de productos con imagen, marca, categoría, variantes disponibles y precio (con indicación de precio mayorista).
-2. **Filtros** (panel lateral): marca, categoría (con jerarquía) y, si está habilitado, género. También orden por precio y búsqueda por nombre.
+2. **Filtros** (panel lateral): marca (con buscador y lista alfabética de selección múltiple), categoría (con jerarquía) y género, cuando está habilitado y hay opciones activas. También orden por precio y búsqueda por nombre.
 3. Los enlaces del encabezado y del pie abren el catálogo ya filtrado por la categoría elegida.
 
 ### 3.2 Ver Detalle de Producto
@@ -189,7 +189,7 @@ Governed by [DESIGN.md](DESIGN.md). In the current implementation the storefront
 
 - **Brand:** unique name; 1-to-N with Products.
 - **Category:** tree. Root categories are the store's *rubros*; children are categories inside them. Fields: `name`, unique `slug`, `parentId`, derived `ancestors`, `variantAxes` (select attributes that generate variants), `imageAxis`, `specAttributes` (spec sheet), `order`, `active`. Filtering by a category includes its descendants. The header menu and the footer *Categorías* column are built from this tree.
-- **Attribute:** reusable dimension with an immutable `key`, a `label`, a `type` (`select` | `text` | `number` | `boolean`), a `unit` and a `filterable` flag. Select options have an immutable slug `value`, a `label`, an `order`, an optional `hex` and an `active` flag (options in use are deactivated, never deleted). **Gender is the `genero` attribute**, enabled by adding it to a category's `specAttributes`.
+- **Attribute:** reusable dimension with an immutable `key`, a `label`, a `type` (`select` | `text` | `number` | `boolean`), a `unit` and a `filterable` flag. Select options have an immutable slug `value`, a `label`, an `order`, an optional `hex` and an `active` flag (options in use are deactivated, never deleted). **Gender is the `genero` attribute**, enabled by adding it to a category's `specAttributes`. There are no built-in genders and they are managed in one place, the admin *Ajustes* page: its options are created, hidden and removed there and it also picks which categories use gender (the attribute is locked in *Atributos*). The storefront filter is hidden while no option is active.
 - **Product:** `name`, `slug`, `description`, `active`, `isClearance`, `images`, `specs`, `wholesale { enabled, minQty }`, a Brand, a Category and its **variants**. Derived fields (`priceRange`, `totalStock`, `hasWholesale`) are recomputed on save; **variants are the source of truth** for stock and sale prices.
 - **Variant:** sellable combination (e.g. *100 ml*). Fields: `sku`, optional `name`, `options` (axis key/value pairs), `retailPrice`, optional `wholesalePrice`, `stock`, `active`. A simple product has a single option-less variant. A variant's `_id` is stable across product edits because carts and pending orders reference it.
 - **Promotion:** carousel banner (`imageUrl`, `active`, `order`, optional dates).
@@ -203,7 +203,7 @@ Governed by [DESIGN.md](DESIGN.md). In the current implementation the storefront
 
 ## 3. USER FLOW: CUSTOMER
 
-- **Discovery:** promotion carousel, header with *Catálogo*, rubros (with a dropdown of their categories) and *Ofertas*, search, and a product grid. Filters: brand, category (hierarchical) and, when enabled, gender; sorting by price. Header and footer links open the catalog filtered by category.
+- **Discovery:** promotion carousel, header with *Catálogo*, rubros (with a dropdown of their categories) and *Ofertas*, search, and a product grid. Filters: brand (searchable, alphabetical multi-select list), category (hierarchical) and gender when enabled and configured; sorting by price. Header and footer links open the catalog filtered by category.
 - **Product detail:** gallery, spec sheet, description, prices, variant selector driven by the category axes, stock of the selected variant, quantity and *Add to cart*.
 - **Cart:** unit totals across all products with live repricing (see rules below); persisted in the browser.
 - **Checkout (3 steps):** customer data; order review (saved as `pendiente`); bank details and WhatsApp redirection.

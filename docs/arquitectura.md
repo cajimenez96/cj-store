@@ -238,7 +238,7 @@ El servidor ignora los precios del cliente y, para cada ítem: resuelve la varia
 | `products/[id]/stock` | PATCH | Ajuste de stock por variante (`variantId` o `sku`). |
 | `stock` | GET, PUT | Reporte por producto y variante, y ajuste de una variante (`productId`, `variantId`, `newStock`). |
 | `categories`, `categories/[id]` | GET, POST · GET, PUT, DELETE | No permite cambiar los ejes de una categoría con productos ni eliminarla; al moverla actualiza los ancestros de sus productos. |
-| `attributes`, `attributes/[id]` | GET, POST · GET, PUT, DELETE | Atributos y opciones. |
+| `attributes`, `attributes/[id]` | GET, POST · GET, PUT, DELETE | Atributos y opciones. No permite quitar una opción usada en variantes o en la ficha técnica de algún producto. |
 | `brands`, `promotions`, `expenses` | CRUD | Expenses: GET, POST, DELETE. |
 | `orders` | GET, PUT | El GET lista y filtra pedidos; el PUT (cambio de estado `completada`/`cancelada`) es un flujo heredado que el panel no usa. |
 | `orders/[id]` | GET, PUT, PATCH | PUT edita un pedido pendiente y conserva el vínculo con cada variante; PATCH con `{ action: "cancel" }` cancela. |
