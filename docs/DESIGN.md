@@ -573,3 +573,14 @@ All interactive elements meet WCAG AAA (44×44px minimum). Pills (`{component.bu
 - **Dialog / modal styling** beyond the geo-selector and the country-confirmation pill pair could not be confirmed from the captured surfaces; bag, wishlist, and login overlays are not documented.
 - **Form field styling** for checkout, sign-up, and address forms is not present in the captured surfaces — only the search pill is documented.
 - **Bag and wishlist** icon-state variants (filled count badges) not visible in the captured pages.
+
+## Implementation Notes (cj-store)
+
+This section records how the storefront in this repository applies — and deliberately departs from — the system above. It does not change any front matter token.
+
+- **Brand and content:** The Point, a perfumery store. The product grid follows the flat-card + photography-on-`{colors.soft-cloud}` vocabulary.
+- **Dark header and footer:** the storefront header and footer sit on a dark surface (`#111111` base, `#18181b` raised, `#27272a` hairlines, `#f5f5f5` text, `#a1a1aa` muted text) while the main content keeps the light canvas described above. Solid CTAs inside the dark regions invert: `#f5f5f5` fill with `#111111` ink. The search pill has a `tone="dark"` variant used by the header; its default tone stays light.
+- **Navigation built from data:** `primary-nav` shows *Catálogo*, the root categories (rubros) and *Ofertas*. A rubro with child categories opens a dropdown on hover or keyboard focus (`#18181b` panel, 1px `#27272a` border, `rounded-2xl`); on mobile the drawer lists the categories nested under their rubro. The bar shows up to 6 rubros; the footer lists every category.
+- **Nav items:** pill shaped (`rounded-full`), uppercase with wide tracking; hover inverts to a light fill with dark ink. *Ofertas* uses red `#d30005` with a 10% tint on hover.
+- **Admin panel:** two-tier dark header (`#111111` / `#161619`) with tab pills whose active state is inverted (white fill, `#111111` text). Admin content keeps the light canvas.
+- **Colors in code:** components use hex utility classes directly instead of CSS variables; `globals.css` only sets the light body defaults.
