@@ -21,12 +21,13 @@ function HomeContent() {
   const searchParams = useSearchParams();
   const searchQueryParam = searchParams.get("search") || "";
   const genderQueryParam = searchParams.get("gender") || null;
+  const categoryQueryParam = searchParams.get("categoryId") || null;
   const clearanceQueryParam = searchParams.get("clearance") === "true";
 
   const [promotions, setPromotions] = useState<IPromotion[]>([]);
   const [products, setProducts] = useState<FormattedProduct[]>([]);
   const [brands, setBrands] = useState<{ _id: string; name: string }[]>([]);
-  const [types, setTypes] = useState<{ _id: string; name: string }[]>([]);
+  const [categories, setCategories] = useState<{ _id: string; name: string }[]>([]);
 
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -39,8 +40,9 @@ function HomeContent() {
 
   // Filter States
   const [selectedBrandIds, setSelectedBrandIds] = useState<string[]>([]);
-  const [selectedTypeIds, setSelectedTypeIds] = useState<string[]>([]);
-  const [selectedSize, setSelectedSize] = useState<number | null>(null);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(
+    categoryQueryParam ? [categoryQueryParam] : [],
+  );
   const [selectedGender, setSelectedGender] = useState<string | null>(
     genderQueryParam,
   );
@@ -48,6 +50,14 @@ function HomeContent() {
   const [selectedSort, setSelectedSort] = useState<ProductSort>(null);
 
   const { addToCart } = useCart();
+
+  // Menu and footer links open the catalog filtered by category through `?categoryId=`.
+  // The selection is adjusted while rendering when the param changes, so no effect is needed.
+  const [appliedCategoryParam, setAppliedCategoryParam] = useState(categoryQueryParam);
+  if (appliedCategoryParam !== categoryQueryParam) {
+    setAppliedCategoryParam(categoryQueryParam);
+    setSelectedCategoryIds(categoryQueryParam ? [categoryQueryParam] : []);
+  }
 
   useEffect(() => {
     setSelectedGender(genderQueryParam);
@@ -77,17 +87,30 @@ function HomeContent() {
     fetchPromotions();
   }, []);
 
-  // 2. Fetch Brands & Types for FilterBar
+  // 2. Fetch Brands & Categories for FilterBar
   useEffect(() => {
     async function fetchFilterData() {
       try {
-        const [brandsRes, typesRes] = await Promise.all([
+        const [brandsRes, categoriesRes] = await Promise.all([
           apiClient.get("/api/brands"),
-          apiClient.get("/api/types"),
+          apiClient.get("/api/categories"),
         ]);
 
         if (brandsRes.data.ok) setBrands(brandsRes.data.data);
-        if (typesRes.data.ok) setTypes(typesRes.data.data);
+        if (categoriesRes.data.ok) {
+          const list: { _id: string; name: string; ancestors?: string[] }[] =
+            categoriesRes.data.data;
+          const nameById = new Map(list.map((c) => [c._id, c.name]));
+          // Child categories read "Parent › Child" so the flat chip list keeps its hierarchy
+          setCategories(
+            list.map((c) => ({
+              _id: c._id,
+              name: [...(c.ancestors ?? []).map((id) => nameById.get(id)), c.name]
+                .filter(Boolean)
+                .join(" › "),
+            })),
+          );
+        }
       } catch (err) {
         console.error("Error al cargar opciones de filtro:", err);
       }
@@ -106,11 +129,8 @@ function HomeContent() {
       if (selectedBrandIds.length > 0) {
         params.append("brandId", selectedBrandIds.join(","));
       }
-      if (selectedTypeIds.length > 0) {
-        params.append("typeId", selectedTypeIds.join(","));
-      }
-      if (selectedSize !== null) {
-        params.append("size", selectedSize.toString());
+      if (selectedCategoryIds.length > 0) {
+        params.append("categoryId", selectedCategoryIds.join(","));
       }
       if (selectedGender !== null) {
         params.append("gender", selectedGender);
@@ -129,8 +149,7 @@ function HomeContent() {
     [
       searchQueryParam,
       selectedBrandIds,
-      selectedTypeIds,
-      selectedSize,
+      selectedCategoryIds,
       selectedGender,
       isClearanceOnly,
       selectedSort,
@@ -201,18 +220,17 @@ function HomeContent() {
     );
   };
 
-  const handleToggleType = (typeId: string) => {
-    setSelectedTypeIds((prev) =>
-      prev.includes(typeId)
-        ? prev.filter((id) => id !== typeId)
-        : [...prev, typeId],
+  const handleToggleCategory = (categoryId: string) => {
+    setSelectedCategoryIds((prev) =>
+      prev.includes(categoryId)
+        ? prev.filter((id) => id !== categoryId)
+        : [...prev, categoryId],
     );
   };
 
   const handleClearFilters = () => {
     setSelectedBrandIds([]);
-    setSelectedTypeIds([]);
-    setSelectedSize(null);
+    setSelectedCategoryIds([]);
     setSelectedGender(null);
     setIsClearanceOnly(false);
     setSelectedSort(null);
@@ -228,7 +246,6 @@ function HomeContent() {
         sku: payload.sku,
         retailPrice: payload.retailPrice,
         wholesalePrice: payload.wholesalePrice,
-        size: payload.size,
       },
       payload.qty
     );
@@ -280,15 +297,13 @@ function HomeContent() {
         {/* Filter Bar */}
         <FilterBar
           brands={brands}
-          types={types}
+          categories={categories}
           selectedBrandIds={selectedBrandIds}
-          selectedTypeIds={selectedTypeIds}
-          selectedSize={selectedSize}
+          selectedCategoryIds={selectedCategoryIds}
           selectedGender={selectedGender}
           selectedSort={selectedSort}
           onToggleBrand={handleToggleBrand}
-          onToggleType={handleToggleType}
-          onSelectSize={setSelectedSize}
+          onToggleCategory={handleToggleCategory}
           onSelectGender={setSelectedGender}
           onSelectSort={setSelectedSort}
           onClearFilters={handleClearFilters}

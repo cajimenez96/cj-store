@@ -24,7 +24,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
-import { GenderSizesManager } from "@/components/admin/GenderSizesManager";
 
 export default function AdminSettingsPage() {
   // Identity & Contact
@@ -392,7 +391,7 @@ export default function AdminSettingsPage() {
 
               <div>
                 <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
-                  Stock Mínimo de Alerta (Cantidad Total de Pares por Producto)
+                  Stock Mínimo de Alerta (Cantidad Total de Unidades por Producto)
                   *
                 </label>
                 <div className="flex items-center gap-3">
@@ -409,11 +408,11 @@ export default function AdminSettingsPage() {
                     className="w-32 bg-[#f5f5f5] text-[#111111] text-base font-extrabold py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
                   />
                   <span className="text-xs font-semibold text-[#707072]">
-                    pares en total sumando todos los talles.
+                    unidades en total sumando todas las variantes.
                   </span>
                 </div>
                 <p className="text-[11px] text-[#707072] mt-2">
-                  Cuando la <strong>suma total de pares</strong> de un modelo
+                  Cuando la <strong>suma total de unidades</strong> de un producto
                   sea menor o igual a este valor, aparecerá resaltado en naranja
                   en la sección de Control de Stock.
                 </p>
@@ -437,7 +436,7 @@ export default function AdminSettingsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5 flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 text-[#007d48]" /> Pares Mínimos
+                    <Tag className="w-3.5 h-3.5 text-[#007d48]" /> Unidades Mínimas
                     para Precio Mayorista *
                   </label>
                   <div className="flex items-center gap-2">
@@ -454,7 +453,7 @@ export default function AdminSettingsPage() {
                       className="w-28 bg-[#f5f5f5] text-[#111111] text-base font-extrabold py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
                     />
                     <span className="text-xs text-[#707072] font-semibold">
-                      pares
+                      unidades
                     </span>
                   </div>
                   <p className="text-[10px] text-[#707072] mt-1">
@@ -577,10 +576,10 @@ export default function AdminSettingsPage() {
               <div className="flex items-center justify-between p-4 bg-[#f9f9f9] border border-[#e5e5e5]">
                 <div className="space-y-1 pr-4">
                   <h3 className="text-sm font-extrabold text-[#111111]">
-                    Habilitar navegación y filtros por género en la tienda
+                    Habilitar el filtro por género en la tienda
                   </h3>
                   <p className="text-xs text-[#707072]">
-                    Si se desactiva, se ocultan los botones y enlaces de género en el catálogo y menú. Ideal para tiendas de fragancias o productos donde no se discrimina por género.
+                    Si se desactiva, se oculta el filtro de género en el catálogo (el menú y el pie se arman con las categorías). Ideal para tiendas de fragancias o productos donde no se discrimina por género. Las opciones de género se administran en Atributos.
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -594,9 +593,6 @@ export default function AdminSettingsPage() {
                 </label>
               </div>
             </div>
-
-            {/* SECCIÓN 7: Gestión de Géneros y Escalas de Talles (ABM) */}
-            <GenderSizesManager />
 
             {/* Submit Button */}
             <div className="pt-2">
