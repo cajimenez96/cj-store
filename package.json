@@ -11,7 +11,8 @@
     "seed": "tsx scripts/seed.ts",
     "seed:prod": "ENV_FILE=.env.prod tsx scripts/seed.ts",
     "seed:test-products": "tsx scripts/seed-test-products.ts",
-    "migrate:multiproduct": "tsx scripts/migrate-multiproduct.ts"
+    "migrate:multiproduct": "tsx scripts/migrate-multiproduct.ts",
+    "wipe:data": "tsx scripts/wipe-data.ts"
   },
   "dependencies": {
     "axios": "^1.20.0",
