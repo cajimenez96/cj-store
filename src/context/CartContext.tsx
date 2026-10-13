@@ -14,8 +14,6 @@ export interface CartItem {
   wholesalePrice: number;
   variantLabel?: string;
   variantName?: string;
-  /** @deprecated Legacy shoe size */
-  size?: number;
   qty: number;
   image: string;
   maxStock: number;
@@ -30,10 +28,8 @@ export type VariantParam =
       sku?: string;
       retailPrice?: number;
       wholesalePrice?: number;
-      size?: number;
       maxStock?: number;
     }
-  | number
   | string
   | undefined;
 
@@ -57,17 +53,14 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY = 'fp_zapatillas_cart_v2';
+const LOCAL_STORAGE_KEY = 'cj_store_cart_v1';
 
 function matchVariant(item: CartItem, variant?: VariantParam): boolean {
   if (variant === undefined || variant === null) {
-    return !item.variantId && !item.variantName && !item.size;
-  }
-  if (typeof variant === 'number') {
-    return item.size === variant;
+    return !item.variantId && !item.variantName;
   }
   if (typeof variant === 'string') {
-    return item.variantId === variant || item.variantName === variant || String(item.size) === variant;
+    return item.variantId === variant || item.variantName === variant;
   }
   if (variant.variantId && item.variantId) {
     return item.variantId === variant.variantId;
@@ -75,10 +68,7 @@ function matchVariant(item: CartItem, variant?: VariantParam): boolean {
   if (variant.variantName && item.variantName) {
     return item.variantName === variant.variantName;
   }
-  if (variant.size !== undefined && item.size !== undefined) {
-    return item.size === variant.size;
-  }
-  return !item.variantId && !item.variantName && !item.size;
+  return !item.variantId && !item.variantName;
 }
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -158,16 +148,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let resolvedVariantLabel: string | undefined;
     let resolvedVariantName: string | undefined;
     let resolvedSku: string | undefined;
-    let resolvedSize: number | undefined;
     let resolvedRetailPrice = product.retailPrice || product.price || 0;
     let resolvedWholesalePrice = product.wholesalePrice || resolvedRetailPrice;
     let maxStock = product.totalStock || 0;
 
-    if (typeof variant === 'number') {
-      resolvedSize = variant;
-      const sizeStockObj = product.sizesStock?.find((s) => s.size === variant);
-      if (sizeStockObj) maxStock = sizeStockObj.stock;
-    } else if (typeof variant === 'string') {
+    if (typeof variant === 'string') {
       resolvedVariantName = variant;
       const variantObj = product.variants?.find((v) => v.name === variant || v._id === variant);
       if (variantObj) {
@@ -182,7 +167,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       resolvedVariantLabel = variant.variantLabel;
       resolvedVariantName = variant.variantName;
       resolvedSku = variant.sku;
-      resolvedSize = variant.size;
 
       if (variant.retailPrice !== undefined) resolvedRetailPrice = variant.retailPrice;
       if (variant.wholesalePrice !== undefined) resolvedWholesalePrice = variant.wholesalePrice;
@@ -194,9 +178,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else if (resolvedVariantName && product.variants) {
         const variantObj = product.variants.find((v) => v.name === resolvedVariantName);
         if (variantObj) maxStock = variantObj.stock;
-      } else if (resolvedSize !== undefined && product.sizesStock) {
-        const sizeStockObj = product.sizesStock.find((s) => s.size === resolvedSize);
-        if (sizeStockObj) maxStock = sizeStockObj.stock;
       }
     }
 
@@ -232,7 +213,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           wholesalePrice: resolvedWholesalePrice,
           variantLabel: resolvedVariantLabel,
           variantName: resolvedVariantName,
-          size: resolvedSize,
           qty: Math.min(qty, maxStock > 0 ? maxStock : qty),
           image: imageUrl,
           maxStock: maxStock > 0 ? maxStock : 9999,

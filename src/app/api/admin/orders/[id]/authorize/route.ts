@@ -8,7 +8,7 @@ import mongoose from 'mongoose';
 /**
  * POST /api/admin/orders/:id/authorize
  * Authorizes a pending order:
- * 1. Verifies stock availability for each item+size
+ * 1. Verifies stock availability for each item+variant
  * 2. Atomically decrements stock (supports Replica Set transactions & Standalone local)
  * 3. Transitions order status to 'autorizado'
  * 4. Creates a SalesRecord
@@ -40,7 +40,7 @@ export async function POST(
     }
   }
 
-  const decrementedItems: Array<{ productId: any; variantId?: any; size?: number; variantName?: string; qty: number }> = [];
+  const decrementedItems: Array<{ productId: any; variantId?: any; variantName?: string; qty: number }> = [];
 
   try {
     const { id } = await params;
@@ -121,10 +121,6 @@ export async function POST(
         const variantEntry = product.variants.find((v) => v.name === item.variantName);
         availableStock = variantEntry?.stock ?? 0;
         label = `Variante ${item.variantName}`;
-      } else if (item.size !== undefined && product.sizesStock && product.sizesStock.length > 0) {
-        const sizeEntry = product.sizesStock.find((s) => s.size === item.size);
-        availableStock = sizeEntry?.stock ?? 0;
-        label = `Talle ${item.size}`;
       } else {
         availableStock = product.stock ?? 0;
         label = 'Stock general';
@@ -152,14 +148,10 @@ export async function POST(
         ? { _id: item.productId, 'variants._id': item.variantId }
         : item.variantName
         ? { _id: item.productId, 'variants.name': item.variantName }
-        : item.size !== undefined
-        ? { _id: item.productId, 'sizesStock.size': item.size }
         : { _id: item.productId };
 
       const updateOp = (item.variantId || item.variantName)
         ? { $inc: { 'variants.$.stock': -item.qty } }
-        : item.size !== undefined
-        ? { $inc: { 'sizesStock.$.stock': -item.qty } }
         : { $inc: { stock: -item.qty } };
 
       if (session && useTransaction) {
@@ -170,7 +162,6 @@ export async function POST(
       decrementedItems.push({
         productId: item.productId,
         variantId: item.variantId,
-        size: item.size,
         variantName: item.variantName,
         qty: item.qty,
       });
@@ -228,11 +219,6 @@ export async function POST(
           await Product.updateOne(
             { _id: item.productId, 'variants.name': item.variantName },
             { $inc: { 'variants.$.stock': item.qty } }
-          ).catch(() => {});
-        } else if (item.size !== undefined) {
-          await Product.updateOne(
-            { _id: item.productId, 'sizesStock.size': item.size },
-            { $inc: { 'sizesStock.$.stock': item.qty } }
           ).catch(() => {});
         } else {
           await Product.updateOne(

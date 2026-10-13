@@ -72,7 +72,6 @@ export async function POST(req: NextRequest) {
       }
 
       const itemQty = Math.max(1, parseInt(String(item.qty), 10) || 1);
-      const parsedSize = item.size ? parseInt(String(item.size), 10) : undefined;
 
       // Locate variant if present
       let matchedVariant: any = null;
@@ -92,10 +91,6 @@ export async function POST(req: NextRequest) {
         if (!variantLabel && Array.isArray(matchedVariant.options)) {
           variantLabel = matchedVariant.options.map((o: any) => o.value).join(' / ');
         }
-      } else if (parsedSize !== undefined && Array.isArray(dbProd.sizesStock) && dbProd.sizesStock.length > 0) {
-        const sizeEntry = dbProd.sizesStock.find((s: any) => s.size === parsedSize);
-        availableStock = sizeEntry?.stock ?? 0;
-        variantLabel = variantLabel || `Talle ${parsedSize}`;
       } else {
         availableStock = dbProd.stock ?? dbProd.totalStock ?? 0;
       }
@@ -144,8 +139,7 @@ export async function POST(req: NextRequest) {
         name: dbProd.name,
         image: principalImage,
         variantLabel: variantLabel || (item.variantName ? String(item.variantName) : undefined),
-        variantName: item.variantName || (parsedSize !== undefined ? String(parsedSize) : undefined),
-        size: !isNaN(Number(parsedSize)) ? parsedSize : undefined,
+        variantName: item.variantName || undefined,
         qty: itemQty,
         appliedPriceType: (isWholesaleItem ? 'wholesale' : 'retail') as 'retail' | 'wholesale',
         unitPrice,

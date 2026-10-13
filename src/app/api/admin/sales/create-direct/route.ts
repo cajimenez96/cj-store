@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const decrementedItems: Array<{ productId: any; variantId?: any; size?: number; variantName?: string; qty: number }> = [];
+  const decrementedItems: Array<{ productId: any; variantId?: any; variantName?: string; qty: number }> = [];
 
   try {
     const body = await req.json();
@@ -111,10 +111,6 @@ export async function POST(req: NextRequest) {
         matchedVariant = product.variants.find((v: any) => v.name === item.variantName);
         availableStock = matchedVariant?.stock ?? 0;
         label = `Variante ${item.variantName}`;
-      } else if (item.size !== undefined && product.sizesStock && product.sizesStock.length > 0) {
-        const sizeEntry = product.sizesStock.find((s: any) => s.size === Number(item.size));
-        availableStock = sizeEntry?.stock ?? 0;
-        label = `Talle ${item.size}`;
       } else {
         availableStock = product.stock ?? 0;
         label = 'Stock general';
@@ -166,7 +162,6 @@ export async function POST(req: NextRequest) {
         sku: matchedVariant?.sku || item.sku,
         name: product.name,
         image: principalImage,
-        size: item.size !== undefined ? Number(item.size) : undefined,
         variantLabel: item.variantLabel || item.variantName,
         variantName: item.variantName,
         qty: itemQty,
@@ -182,14 +177,10 @@ export async function POST(req: NextRequest) {
         ? { _id: item.productId, 'variants._id': item.variantId }
         : item.variantName
         ? { _id: item.productId, 'variants.name': item.variantName }
-        : item.size !== undefined
-        ? { _id: item.productId, 'sizesStock.size': item.size }
         : { _id: item.productId };
 
       const updateOp = (item.variantId || item.variantName)
         ? { $inc: { 'variants.$.stock': -item.qty } }
-        : item.size !== undefined
-        ? { $inc: { 'sizesStock.$.stock': -item.qty } }
         : { $inc: { stock: -item.qty } };
 
       if (session && useTransaction) {
@@ -200,7 +191,6 @@ export async function POST(req: NextRequest) {
       decrementedItems.push({
         productId: item.productId,
         variantId: item.variantId,
-        size: item.size,
         variantName: item.variantName,
         qty: item.qty,
       });
@@ -288,11 +278,6 @@ export async function POST(req: NextRequest) {
           await Product.updateOne(
             { _id: item.productId, 'variants.name': item.variantName },
             { $inc: { 'variants.$.stock': item.qty } }
-          ).catch(() => {});
-        } else if (item.size !== undefined) {
-          await Product.updateOne(
-            { _id: item.productId, 'sizesStock.size': item.size },
-            { $inc: { 'sizesStock.$.stock': item.qty } }
           ).catch(() => {});
         } else {
           await Product.updateOne(

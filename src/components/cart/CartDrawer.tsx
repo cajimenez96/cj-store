@@ -103,8 +103,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onStartCheckout }) => {
               items.map((item) => {
                 const effectivePrice = getEffectivePrice(item);
                 const isDiscounted = item.wholesalePrice > 0 && effectivePrice < item.retailPrice;
-                const itemKey = `${item.productId}-${item.variantId || item.variantName || item.size || 'default'}`;
-                const variantIdentifier = item.variantId ? { variantId: item.variantId } : (item.variantName ?? item.size);
+                const itemKey = `${item.productId}-${item.variantId || item.variantName || 'default'}`;
+                const variantIdentifier = item.variantId ? { variantId: item.variantId } : item.variantName;
 
                 return (
                   <div
@@ -141,15 +141,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onStartCheckout }) => {
                         </button>
                       </div>
 
-                      {(item.variantLabel || item.variantName || item.size !== undefined) && (
+                      {(item.variantLabel || item.variantName) && (
                         <p className="text-[11px] font-semibold text-[#707072]">
-                          {item.variantLabel ? (
-                            <>Variante: <strong className="text-[#111111]">{item.variantLabel}</strong></>
-                          ) : item.variantName ? (
-                            <>Variante: <strong className="text-[#111111]">{item.variantName}</strong></>
-                          ) : (
-                            <>Talle: <strong className="text-[#111111]">{item.size}</strong></>
-                          )}
+                          Variante: <strong className="text-[#111111]">{item.variantLabel || item.variantName}</strong>
                         </p>
                       )}
 

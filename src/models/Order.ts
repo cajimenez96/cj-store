@@ -22,8 +22,6 @@ export interface IOrderItem {
   imageUrl?: string;
   variantLabel?: string;
   variantName?: string;
-  /** @deprecated Legacy shoe size */
-  size?: number;
   qty: number;
   appliedPriceType: AppliedPriceType;
   unitPrice: number;
@@ -88,9 +86,6 @@ const OrderItemSchema = new Schema<IOrderItem>(
     variantName: {
       type: String,
       trim: true,
-    },
-    size: {
-      type: Number,
     },
     qty: {
       type: Number,

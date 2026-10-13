@@ -279,7 +279,7 @@ export default function AdminOrdersPage() {
                       </td>
 
                       <td className="py-3 px-4 text-center font-bold text-[#111111]">
-                        {ord.items.reduce((acc, curr) => acc + curr.qty, 0)} pares
+                        {ord.items.reduce((acc, curr) => acc + curr.qty, 0)} unidades
                       </td>
 
                       <td className="py-3 px-4 text-center">

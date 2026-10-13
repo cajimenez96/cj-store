@@ -153,7 +153,7 @@ export default function AdminReportsPage() {
                             {formatPrice(prod.totalAmount)}
                           </span>
                           <span className="text-[10px] text-[#707072] font-semibold">
-                            {prod.qty} pares vendidos
+                            {prod.qty} unidades vendidas
                           </span>
                         </div>
                       </div>

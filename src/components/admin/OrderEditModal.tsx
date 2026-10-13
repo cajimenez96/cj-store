@@ -11,7 +11,10 @@ interface EditableOrderItem {
   productId: string;
   name: string;
   image?: string;
-  size: number;
+  variantId?: string;
+  sku?: string;
+  variantLabel?: string;
+  variantName?: string;
   qty: number;
   unitPrice: number;
   appliedPriceType: 'retail' | 'wholesale' | 'custom';
@@ -24,16 +27,32 @@ interface OrderEditModalProps {
   onSaved: () => void;
 }
 
+interface SearchVariant {
+  _id: string;
+  sku: string;
+  name?: string;
+  options?: { key: string; value: string }[];
+  retailPrice: number;
+  wholesalePrice?: number;
+  stock: number;
+  active?: boolean;
+}
+
 interface ProductSearchResult {
   _id: string;
   name: string;
   retailPrice: number;
   wholesalePrice: number;
-  sizesStock: { size: number; stock: number }[];
+  stock?: number;
+  variants?: SearchVariant[];
   images?: { url: string; isPrincipal?: boolean }[];
   brandId?: { name: string } | string;
-  gender?: string;
 }
+
+const variantLabelOf = (variant: SearchVariant): string =>
+  variant.options && variant.options.length > 0
+    ? variant.options.map((o) => o.value).join(' / ')
+    : variant.name || variant.sku;
 
 export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, onSaved }) => {
   const [items, setItems] = useState<EditableOrderItem[]>([]);
@@ -60,7 +79,10 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, 
           productId: i.productId,
           name: i.name,
           image: i.image,
-          size: i.size,
+          variantId: i.variantId,
+          sku: i.sku,
+          variantLabel: i.variantLabel,
+          variantName: i.variantName,
           qty: i.qty,
           unitPrice: i.unitPrice,
           appliedPriceType: (i.appliedPriceType as 'retail' | 'wholesale' | 'custom') ?? 'custom',
@@ -111,9 +133,9 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, 
     }
   };
 
-  const addProductToOrder = (product: ProductSearchResult, size: number) => {
+  const addProductToOrder = (product: ProductSearchResult, variant?: SearchVariant) => {
     const existingIdx = items.findIndex(
-      (i) => i.productId === product._id && i.size === size
+      (i) => i.productId === product._id && i.variantId === variant?._id
     );
     if (existingIdx > -1) {
       updateItem(existingIdx, 'qty', items[existingIdx].qty + 1);
@@ -121,14 +143,17 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, 
     }
 
     const mainImg = product.images?.find((img) => img.isPrincipal)?.url || product.images?.[0]?.url || '';
-    const unitPrice = product.retailPrice ?? 0;
+    const unitPrice = variant?.retailPrice ?? product.retailPrice ?? 0;
     setItems((prev) => [
       ...prev,
       {
         productId: product._id,
         name: product.name,
         image: mainImg,
-        size,
+        variantId: variant?._id,
+        sku: variant?.sku,
+        variantLabel: variant ? variantLabelOf(variant) : undefined,
+        variantName: variant?.name,
         qty: 1,
         unitPrice,
         appliedPriceType: 'custom',
@@ -157,7 +182,10 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, 
             productId: i.productId,
             name: i.name,
             image: i.image,
-            size: i.size,
+            variantId: i.variantId,
+            sku: i.sku,
+            variantLabel: i.variantLabel,
+            variantName: i.variantName,
             qty: i.qty,
             unitPrice: i.unitPrice,
             appliedPriceType: i.appliedPriceType,
@@ -270,7 +298,9 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, 
 
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-[#111111] truncate">{item.name}</p>
-                    <p className="text-[#707072]">Talle {item.size}</p>
+                    {(item.variantLabel || item.variantName) && (
+                      <p className="text-[#707072]">{item.variantLabel || item.variantName}</p>
+                    )}
                   </div>
 
                   {/* Qty */}
@@ -344,6 +374,9 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, 
                 {searchResults.map((prod) => {
                   const mainImage = prod.images?.find((img) => img.isPrincipal)?.url || prod.images?.[0]?.url;
                   const brandName = typeof prod.brandId === 'object' ? prod.brandId?.name : '';
+                  const availableVariants = (prod.variants ?? []).filter(
+                    (v) => v.active !== false && v.stock > 0
+                  );
 
                   return (
                     <div key={prod._id} className="p-3 text-xs space-y-2 hover:bg-[#fafafa] transition-colors">
@@ -366,10 +399,8 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, 
 
                         <div className="flex-1 min-w-0">
                           <p className="font-bold text-[#111111] truncate">{prod.name}</p>
-                          {(brandName || prod.gender) && (
-                            <p className="text-[10px] text-[#707072]">
-                              {[brandName, prod.gender].filter(Boolean).join(' • ')}
-                            </p>
+                          {brandName && (
+                            <p className="text-[10px] text-[#707072]">{brandName}</p>
                           )}
                           <p className="text-[#707072] text-[10px] mt-0.5">
                             Min: {formatPrice(prod.retailPrice)} • May: {formatPrice(prod.wholesalePrice)}
@@ -378,18 +409,27 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, 
                       </div>
 
                       <div className="flex flex-wrap items-center gap-1.5 pl-0 sm:pl-[60px]">
-                        <span className="text-[10px] font-bold text-[#707072]">Talles:</span>
-                        {prod.sizesStock
-                          .filter((s) => s.stock > 0)
-                          .map((s) => (
-                            <button
-                              key={s.size}
-                              onClick={() => addProductToOrder(prod, s.size)}
-                              className="px-2 py-0.5 bg-[#f5f5f5] text-[#111111] font-bold text-[11px] border border-[#e5e5e5] hover:bg-[#111111] hover:text-white transition-all cursor-pointer"
-                            >
-                              Talle {s.size} ({s.stock})
-                            </button>
-                          ))}
+                        <span className="text-[10px] font-bold text-[#707072]">Variantes:</span>
+                        {availableVariants.map((v) => (
+                          <button
+                            key={v._id}
+                            onClick={() => addProductToOrder(prod, v)}
+                            className="px-2 py-0.5 bg-[#f5f5f5] text-[#111111] font-bold text-[11px] border border-[#e5e5e5] hover:bg-[#111111] hover:text-white transition-all cursor-pointer"
+                          >
+                            {variantLabelOf(v)} ({v.stock})
+                          </button>
+                        ))}
+                        {availableVariants.length === 0 && (prod.stock ?? 0) > 0 && (
+                          <button
+                            onClick={() => addProductToOrder(prod)}
+                            className="px-2 py-0.5 bg-[#f5f5f5] text-[#111111] font-bold text-[11px] border border-[#e5e5e5] hover:bg-[#111111] hover:text-white transition-all cursor-pointer"
+                          >
+                            Stock general ({prod.stock})
+                          </button>
+                        )}
+                        {availableVariants.length === 0 && !((prod.stock ?? 0) > 0) && (
+                          <span className="text-[10px] text-[#707072]">Sin stock disponible</span>
+                        )}
                       </div>
                     </div>
                   );
