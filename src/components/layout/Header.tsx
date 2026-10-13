@@ -6,6 +6,7 @@ import { ShoppingBag, Menu, X, Phone } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useSettings } from "@/context/SettingsContext";
 import { SearchBar } from "@/components/common/SearchBar";
+import Image from "next/image";
 
 interface HeaderProps {
   onSearchChange?: (term: string) => void;
@@ -78,14 +79,14 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange }) => {
           </button>
 
           <Link href="/" className="flex items-center gap-2 group cursor-pointer py-1">
-            <div className="flex flex-col">
-              <span className="font-serif font-black tracking-widest text-xl sm:text-2xl uppercase text-[#111111] group-hover:opacity-80 transition-opacity leading-none">
-                {settings.storeName || "The Point"}
-              </span>
-              <span className="text-[9px] font-bold tracking-[0.3em] text-[#707072] uppercase leading-tight mt-1">
-                Parfumerie
-              </span>
-            </div>
+            <Image
+              src="/logo-nav.png"
+              alt={settings.storeName || "The Point"}
+              width={180}
+              height={32}
+              priority
+              className="h-8 sm:h-9 w-auto object-contain group-hover:opacity-85 transition-opacity"
+            />
           </Link>
         </div>
 

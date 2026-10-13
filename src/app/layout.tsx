@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Header, Footer } from "@/components/layout";
+import { StoreLayoutWrapper } from "@/components/layout";
 import { CartProvider } from "@/context/CartContext";
 import { SettingsProvider } from "@/context/SettingsContext";
 import { Toaster } from "@/components/ui/sonner";
@@ -60,6 +60,10 @@ export async function generateMetadata(): Promise<Metadata> {
       index: true,
       follow: true,
     },
+    icons: {
+      icon: '/logotipo.png',
+      apple: '/logotipo.png',
+    },
   };
 }
 
@@ -77,11 +81,7 @@ export default function RootLayout({
         <Toaster />
         <SettingsProvider>
           <CartProvider>
-            <Suspense fallback={<div className="h-16 bg-white border-b border-[#e5e5e5]" />}>
-              <Header />
-            </Suspense>
-            <main className="flex-1">{children}</main>
-            <Footer />
+            <StoreLayoutWrapper>{children}</StoreLayoutWrapper>
           </CartProvider>
         </SettingsProvider>
       </body>

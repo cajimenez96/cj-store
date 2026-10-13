@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Phone, ShieldCheck, Truck, Clock, Globe } from 'lucide-react';
 import { useSettings } from '@/context/SettingsContext';
 
@@ -62,10 +63,16 @@ export const Footer: React.FC = () => {
 
       {/* 2. Main Footer Columns */}
       <div className="max-w-7xl mx-auto px-4 sm:px-8 py-12 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
-        <div>
-          <h3 className="font-extrabold text-xl tracking-tighter uppercase mb-3">
-            {settings.storeName || "The Point"}
-          </h3>
+        <div className="space-y-3">
+          <Link href="/" className="inline-block mb-1">
+            <Image
+              src="/logotipo.png"
+              alt={settings.storeName || "The Point"}
+              width={140}
+              height={110}
+              className="h-14 w-auto object-contain hover:opacity-85 transition-opacity"
+            />
+          </Link>
           <p className="text-xs text-[#707072] leading-relaxed mb-4">
             {settings.footerDescription ||
               "Perfumería de lujo y fragancias de autor. Seleccioná tus aromas favoritos y completá tu pedido de forma fácil y directa vía WhatsApp."}
