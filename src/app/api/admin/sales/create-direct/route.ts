@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const decrementedItems: Array<{ productId: any; size?: number; variantName?: string; qty: number }> = [];
+  const decrementedItems: Array<{ productId: any; variantId?: any; size?: number; variantName?: string; qty: number }> = [];
 
   try {
     const body = await req.json();
@@ -99,14 +99,20 @@ export async function POST(req: NextRequest) {
       }
 
       // Verify stock availability
+      let matchedVariant: any = null;
       let availableStock = 0;
       let label = '';
-      if (item.variantName && product.variants && product.variants.length > 0) {
-        const variantEntry = product.variants.find((v) => v.name === item.variantName);
-        availableStock = variantEntry?.stock ?? 0;
+
+      if (item.variantId && product.variants && product.variants.length > 0) {
+        matchedVariant = product.variants.find((v: any) => v._id?.toString() === item.variantId?.toString());
+        availableStock = matchedVariant?.stock ?? 0;
+        label = item.variantLabel || `Variante ${item.variantId}`;
+      } else if (item.variantName && product.variants && product.variants.length > 0) {
+        matchedVariant = product.variants.find((v: any) => v.name === item.variantName);
+        availableStock = matchedVariant?.stock ?? 0;
         label = `Variante ${item.variantName}`;
       } else if (item.size !== undefined && product.sizesStock && product.sizesStock.length > 0) {
-        const sizeEntry = product.sizesStock.find((s) => s.size === Number(item.size));
+        const sizeEntry = product.sizesStock.find((s: any) => s.size === Number(item.size));
         availableStock = sizeEntry?.stock ?? 0;
         label = `Talle ${item.size}`;
       } else {
@@ -130,18 +136,21 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Use custom price if admin explicitly set it, otherwise resolve from catalog
+      // Use custom price if admin explicitly set it, otherwise resolve from catalog / variant
       let unitPrice: number;
       let appliedPriceType: 'retail' | 'wholesale' | 'custom';
+
+      const vRetail = Number(matchedVariant?.retailPrice ?? product.retailPrice ?? product.price ?? 0);
+      const vWholesale = Number(matchedVariant?.wholesalePrice ?? product.wholesalePrice ?? vRetail);
 
       if (item.unitPrice !== undefined && item.unitPrice !== null) {
         unitPrice = Number(item.unitPrice);
         appliedPriceType = 'custom';
       } else if (isWholesale) {
-        unitPrice = product.wholesalePrice ?? product.retailPrice ?? product.price ?? 0;
+        unitPrice = vWholesale > 0 ? vWholesale : vRetail;
         appliedPriceType = 'wholesale';
       } else {
-        unitPrice = product.retailPrice ?? product.price ?? 0;
+        unitPrice = vRetail;
         appliedPriceType = 'retail';
       }
 
@@ -153,9 +162,12 @@ export async function POST(req: NextRequest) {
 
       validatedItems.push({
         productId: product._id,
+        variantId: matchedVariant?._id,
+        sku: matchedVariant?.sku || item.sku,
         name: product.name,
         image: principalImage,
         size: item.size !== undefined ? Number(item.size) : undefined,
+        variantLabel: item.variantLabel || item.variantName,
         variantName: item.variantName,
         qty: itemQty,
         appliedPriceType,
@@ -166,13 +178,15 @@ export async function POST(req: NextRequest) {
 
     // 4. Atomically decrement stock for all items
     for (const item of validatedItems) {
-      const updateFilter = item.variantName
+      const updateFilter = item.variantId
+        ? { _id: item.productId, 'variants._id': item.variantId }
+        : item.variantName
         ? { _id: item.productId, 'variants.name': item.variantName }
         : item.size !== undefined
         ? { _id: item.productId, 'sizesStock.size': item.size }
         : { _id: item.productId };
 
-      const updateOp = item.variantName
+      const updateOp = (item.variantId || item.variantName)
         ? { $inc: { 'variants.$.stock': -item.qty } }
         : item.size !== undefined
         ? { $inc: { 'sizesStock.$.stock': -item.qty } }
@@ -185,6 +199,7 @@ export async function POST(req: NextRequest) {
       }
       decrementedItems.push({
         productId: item.productId,
+        variantId: item.variantId,
         size: item.size,
         variantName: item.variantName,
         qty: item.qty,
@@ -264,7 +279,12 @@ export async function POST(req: NextRequest) {
     } else if (decrementedItems.length > 0) {
       // Manual rollback in non-replica set environment
       for (const item of decrementedItems) {
-        if (item.variantName) {
+        if (item.variantId) {
+          await Product.updateOne(
+            { _id: item.productId, 'variants._id': item.variantId },
+            { $inc: { 'variants.$.stock': item.qty } }
+          ).catch(() => {});
+        } else if (item.variantName) {
           await Product.updateOne(
             { _id: item.productId, 'variants.name': item.variantName },
             { $inc: { 'variants.$.stock': item.qty } }

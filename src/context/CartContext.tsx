@@ -7,18 +7,35 @@ const WHOLESALE_THRESHOLD = 5;
 
 export interface CartItem {
   productId: string;
+  variantId?: string;
+  sku?: string;
   name: string;
   retailPrice: number;
   wholesalePrice: number;
+  variantLabel?: string;
   variantName?: string;
   /** @deprecated Legacy shoe size */
   size?: number;
   qty: number;
   image: string;
   maxStock: number;
+  wholesaleMinUnits?: number;
 }
 
-export type VariantParam = { variantName?: string; size?: number } | number | string | undefined;
+export type VariantParam =
+  | {
+      variantId?: string;
+      variantLabel?: string;
+      variantName?: string;
+      sku?: string;
+      retailPrice?: number;
+      wholesalePrice?: number;
+      size?: number;
+      maxStock?: number;
+    }
+  | number
+  | string
+  | undefined;
 
 interface CartContextType {
   items: CartItem[];
@@ -44,21 +61,24 @@ const LOCAL_STORAGE_KEY = 'fp_zapatillas_cart_v2';
 
 function matchVariant(item: CartItem, variant?: VariantParam): boolean {
   if (variant === undefined || variant === null) {
-    return !item.variantName && !item.size;
+    return !item.variantId && !item.variantName && !item.size;
   }
   if (typeof variant === 'number') {
     return item.size === variant;
   }
   if (typeof variant === 'string') {
-    return item.variantName === variant || String(item.size) === variant;
+    return item.variantId === variant || item.variantName === variant || String(item.size) === variant;
   }
-  if (variant.variantName) {
+  if (variant.variantId && item.variantId) {
+    return item.variantId === variant.variantId;
+  }
+  if (variant.variantName && item.variantName) {
     return item.variantName === variant.variantName;
   }
-  if (variant.size !== undefined) {
+  if (variant.size !== undefined && item.size !== undefined) {
     return item.size === variant.size;
   }
-  return true;
+  return !item.variantId && !item.variantName && !item.size;
 }
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -90,29 +110,57 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [items, isLoaded]);
 
-  // Wholesale threshold computation (total units)
+  // Wholesale threshold computation (total units and per-product units)
   const totalUnits = useMemo(
     () => items.reduce((acc, curr) => acc + curr.qty, 0),
     [items]
   );
   const totalPairs = totalUnits;
-  const isWholesale = totalUnits >= WHOLESALE_THRESHOLD;
 
-  /** Returns the effective price for an item based on the current wholesale threshold */
+  const unitsByProduct = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of items) {
+      map.set(item.productId, (map.get(item.productId) || 0) + item.qty);
+    }
+    return map;
+  }, [items]);
+
+  const isWholesale = useMemo(() => {
+    if (totalUnits >= WHOLESALE_THRESHOLD) return true;
+    return items.some((item) => {
+      const pUnits = unitsByProduct.get(item.productId) || 0;
+      const minU = item.wholesaleMinUnits ?? WHOLESALE_THRESHOLD;
+      return pUnits >= minU && item.wholesalePrice > 0 && item.wholesalePrice < item.retailPrice;
+    });
+  }, [items, totalUnits, unitsByProduct]);
+
+  /** Returns the effective price for an item based on wholesale threshold */
   const getEffectivePrice = (item: CartItem): number => {
-    return isWholesale ? item.wholesalePrice : item.retailPrice;
+    const pUnits = unitsByProduct.get(item.productId) || 0;
+    const minU = item.wholesaleMinUnits ?? WHOLESALE_THRESHOLD;
+    const itemQualified =
+      (pUnits >= minU || totalUnits >= WHOLESALE_THRESHOLD) &&
+      item.wholesalePrice > 0 &&
+      item.wholesalePrice < item.retailPrice;
+
+    return itemQualified ? item.wholesalePrice : item.retailPrice;
   };
 
   const totalItems = totalUnits;
   const subtotal = useMemo(
     () => items.reduce((acc, curr) => acc + getEffectivePrice(curr) * curr.qty, 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [items, isWholesale]
+    [items, totalUnits, unitsByProduct]
   );
 
   const addToCart = (product: FormattedProduct, variant: VariantParam, qty: number) => {
+    let resolvedVariantId: string | undefined;
+    let resolvedVariantLabel: string | undefined;
     let resolvedVariantName: string | undefined;
+    let resolvedSku: string | undefined;
     let resolvedSize: number | undefined;
+    let resolvedRetailPrice = product.retailPrice || product.price || 0;
+    let resolvedWholesalePrice = product.wholesalePrice || resolvedRetailPrice;
     let maxStock = product.totalStock || 0;
 
     if (typeof variant === 'number') {
@@ -121,12 +169,29 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (sizeStockObj) maxStock = sizeStockObj.stock;
     } else if (typeof variant === 'string') {
       resolvedVariantName = variant;
-      const variantObj = product.variants?.find((v) => v.name === variant);
-      if (variantObj) maxStock = variantObj.stock;
+      const variantObj = product.variants?.find((v) => v.name === variant || v._id === variant);
+      if (variantObj) {
+        resolvedVariantId = variantObj._id;
+        resolvedSku = variantObj.sku;
+        if (variantObj.retailPrice) resolvedRetailPrice = variantObj.retailPrice;
+        if (variantObj.wholesalePrice) resolvedWholesalePrice = variantObj.wholesalePrice;
+        maxStock = variantObj.stock;
+      }
     } else if (variant && typeof variant === 'object') {
+      resolvedVariantId = variant.variantId;
+      resolvedVariantLabel = variant.variantLabel;
       resolvedVariantName = variant.variantName;
+      resolvedSku = variant.sku;
       resolvedSize = variant.size;
-      if (resolvedVariantName && product.variants) {
+
+      if (variant.retailPrice !== undefined) resolvedRetailPrice = variant.retailPrice;
+      if (variant.wholesalePrice !== undefined) resolvedWholesalePrice = variant.wholesalePrice;
+      if (variant.maxStock !== undefined) {
+        maxStock = variant.maxStock;
+      } else if (resolvedVariantId && product.variants) {
+        const variantObj = product.variants.find((v) => v._id === resolvedVariantId || v.sku === resolvedSku);
+        if (variantObj) maxStock = variantObj.stock;
+      } else if (resolvedVariantName && product.variants) {
         const variantObj = product.variants.find((v) => v.name === resolvedVariantName);
         if (variantObj) maxStock = variantObj.stock;
       } else if (resolvedSize !== undefined && product.sizesStock) {
@@ -160,14 +225,18 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...prevItems,
         {
           productId: product._id,
+          variantId: resolvedVariantId,
+          sku: resolvedSku,
           name: product.name,
-          retailPrice: product.retailPrice,
-          wholesalePrice: product.wholesalePrice,
+          retailPrice: resolvedRetailPrice,
+          wholesalePrice: resolvedWholesalePrice,
+          variantLabel: resolvedVariantLabel,
           variantName: resolvedVariantName,
           size: resolvedSize,
           qty: Math.min(qty, maxStock > 0 ? maxStock : qty),
           image: imageUrl,
           maxStock: maxStock > 0 ? maxStock : 9999,
+          wholesaleMinUnits: product.wholesale?.minUnits ?? WHOLESALE_THRESHOLD,
         },
       ];
     });

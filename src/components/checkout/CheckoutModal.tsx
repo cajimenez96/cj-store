@@ -46,7 +46,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose })
       notes,
       items: items.map((item) => ({
         productId: item.productId,
+        variantId: item.variantId,
+        variantLabel: item.variantLabel,
         variantName: item.variantName,
+        sku: item.sku,
         size: item.size,
         qty: item.qty,
       })),
@@ -86,7 +89,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose })
     const effectivePrice = getEffectivePrice(item);
     return {
       name: item.name,
-      variantName: item.variantName,
+      variantName: item.variantLabel || item.variantName,
       size: item.size,
       qty: item.qty,
       price: effectivePrice,

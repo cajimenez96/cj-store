@@ -3,6 +3,8 @@ import { connectToDatabase } from '@/lib/db';
 import Product from '@/models/Product';
 import Brand from '@/models/Brand';
 import FootwearType from '@/models/FootwearType';
+import Category from '@/models/Category';
+import { calculateDerivedProductFields } from '@/lib/derived';
 
 // Force dynamic server route
 export const dynamic = 'force-dynamic';
@@ -14,10 +16,12 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const brandId = searchParams.get('brandId');
     const typeId = searchParams.get('typeId');
+    const categoryId = searchParams.get('categoryId');
     const size = searchParams.get('size');
     const gender = searchParams.get('gender');
     const search = searchParams.get('search');
     const clearance = searchParams.get('clearance') || searchParams.get('isClearance');
+    const wholesale = searchParams.get('wholesale');
     const sort = searchParams.get('sort');
     const pageParam = searchParams.get('page');
     const limitParam = searchParams.get('limit');
@@ -31,6 +35,17 @@ export async function GET(req: NextRequest) {
 
     if (clearance === 'true') {
       query.isClearance = true;
+    }
+
+    if (wholesale === 'true') {
+      query['wholesale.enabled'] = true;
+    }
+
+    if (categoryId) {
+      const categories = categoryId.split(',').filter(Boolean);
+      if (categories.length > 0) {
+        query.categoryId = { $in: categories };
+      }
     }
 
     if (brandId) {
@@ -69,6 +84,8 @@ export async function GET(req: NextRequest) {
     Brand;
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     FootwearType;
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    Category;
 
     // _id as tiebreaker keeps skip/limit pagination stable across pages
     // when many products share the same sort value.
@@ -83,6 +100,7 @@ export async function GET(req: NextRequest) {
     let productQuery = Product.find(query)
       .populate('brandId', 'name')
       .populate('typeId', 'name')
+      .populate('categoryId', 'name slug variantAxes imageAxis')
       .sort(sortQuery);
 
     if (hasPagination) {
@@ -96,19 +114,39 @@ export async function GET(req: NextRequest) {
     // Map products to include totalStock and isOutOfStock flags
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const formattedProducts = products.map((prod: any) => {
-      let totalStock = 0;
+      let derived: { priceRange: { min: number; max: number }; totalStock: number; hasWholesale: boolean };
+
       if (Array.isArray(prod.variants) && prod.variants.length > 0) {
-        totalStock = prod.variants.reduce((acc: number, curr: any) => acc + (curr.stock || 0), 0);
-      } else if (typeof prod.stock === 'number') {
-        totalStock = prod.stock;
-      } else if (Array.isArray(prod.sizesStock) && prod.sizesStock.length > 0) {
-        totalStock = prod.sizesStock.reduce((acc: number, curr: any) => acc + (curr.stock || 0), 0);
+        derived = calculateDerivedProductFields(
+          prod.variants,
+          Boolean(prod.wholesale?.enabled)
+        );
+      } else {
+        const fallbackRetail = Number(prod.retailPrice ?? prod.price ?? 0);
+        const fallbackStock =
+          typeof prod.stock === 'number'
+            ? prod.stock
+            : Array.isArray(prod.sizesStock)
+            ? prod.sizesStock.reduce((acc: number, curr: any) => acc + (curr.stock || 0), 0)
+            : 0;
+        const fallbackWholesale =
+          Boolean(prod.wholesale?.enabled) &&
+          prod.wholesalePrice != null &&
+          prod.wholesalePrice < fallbackRetail;
+
+        derived = {
+          priceRange: { min: fallbackRetail, max: fallbackRetail },
+          totalStock: fallbackStock,
+          hasWholesale: fallbackWholesale,
+        };
       }
 
       return {
         ...prod,
-        totalStock,
-        isOutOfStock: totalStock === 0,
+        priceRange: prod.priceRange || derived.priceRange,
+        totalStock: derived.totalStock,
+        hasWholesale: prod.hasWholesale ?? derived.hasWholesale,
+        isOutOfStock: derived.totalStock === 0,
       };
     });
 

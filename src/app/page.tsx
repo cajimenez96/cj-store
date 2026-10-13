@@ -219,7 +219,19 @@ function HomeContent() {
   };
 
   const handleAddToCart = (payload: CartItemAddPayload) => {
-    addToCart(payload.product, payload.variantName ?? payload.size, payload.qty);
+    addToCart(
+      payload.product,
+      {
+        variantId: payload.variantId,
+        variantLabel: payload.variantLabel,
+        variantName: payload.variantName,
+        sku: payload.sku,
+        retailPrice: payload.retailPrice,
+        wholesalePrice: payload.wholesalePrice,
+        size: payload.size,
+      },
+      payload.qty
+    );
   };
 
   const handleStartCheckout = () => {

@@ -10,6 +10,7 @@ import { formatPrice } from "@/utils/formatCurrency";
 export interface FormattedProduct {
   _id: string;
   name: string;
+  slug?: string;
   description: string;
   /** @deprecated Use retailPrice instead */
   price?: number;
@@ -17,15 +18,26 @@ export interface FormattedProduct {
   wholesalePrice: number;
   gender?: string | null;
   brandId: { _id: string; name: string } | string;
-  typeId: { _id: string; name: string } | string;
+  typeId?: { _id: string; name: string } | string;
+  categoryId?: { _id: string; name: string; slug?: string; variantAxes?: string[]; imageAxis?: string } | string;
   images: IProductImage[];
-  variants?: IVariantStock[];
+  variants?: any[];
   stock?: number;
   /** @deprecated Legacy shoe sizes */
   sizesStock?: ISizeStock[];
   totalStock: number;
   isOutOfStock: boolean;
   isClearance?: boolean;
+  priceRange?: {
+    min: number;
+    max: number;
+  };
+  hasWholesale?: boolean;
+  wholesale?: {
+    enabled: boolean;
+    minUnits?: number;
+  };
+  specs?: Array<{ key: string; value: any }>;
 }
 
 interface ProductCardProps {
@@ -42,15 +54,24 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       ? product.brandId.name
       : "Producto";
 
-  const typeName =
-    typeof product.typeId === "object" && product.typeId !== null
+  const categoryName =
+    typeof product.categoryId === "object" && product.categoryId !== null
+      ? product.categoryId.name
+      : typeof product.typeId === "object" && product.typeId !== null
       ? product.typeId.name
       : "";
 
-  // Resolve prices with legacy fallback
-  const retailPrice = product.retailPrice ?? product.price ?? 0;
+  // Resolve prices with legacy fallback and priceRange
+  const hasRange =
+    Boolean(product.priceRange) &&
+    product.priceRange!.min > 0 &&
+    product.priceRange!.min !== product.priceRange!.max;
+
+  const minRetail = product.priceRange?.min || product.retailPrice || product.price || 0;
+  const retailPrice = product.retailPrice ?? product.price ?? minRetail;
   const wholesalePrice = product.wholesalePrice ?? retailPrice;
-  const hasWholesaleDiscount = wholesalePrice < retailPrice;
+  const minWholesaleUnits = product.wholesale?.minUnits ?? 5;
+  const hasWholesale = Boolean(product.hasWholesale || product.wholesale?.enabled || wholesalePrice < retailPrice);
 
   // Get primary image or first available
   const primaryImage =
@@ -58,11 +79,31 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     product.images[0]?.url ||
     "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=800&q=80";
 
-  const availableOptions = (product.variants && product.variants.length > 0)
-    ? product.variants.filter((v) => v.stock > 0).map((v) => v.name)
-    : (product.sizesStock && product.sizesStock.length > 0)
-    ? product.sizesStock.filter((s) => s.stock > 0).map((s) => String(s.size))
-    : [];
+  // Extract option labels for quick preview
+  const availableOptions: string[] = [];
+  if (Array.isArray(product.variants) && product.variants.length > 0) {
+    const activeVars = product.variants.filter((v) => (v.stock ?? 0) > 0 && v.active !== false);
+    const seen = new Set<string>();
+    for (const v of activeVars) {
+      if (Array.isArray(v.options) && v.options.length > 0) {
+        for (const opt of v.options) {
+          if (opt.value && !seen.has(opt.value)) {
+            seen.add(opt.value);
+            availableOptions.push(opt.value);
+          }
+        }
+      } else if (v.name && !seen.has(v.name)) {
+        seen.add(v.name);
+        availableOptions.push(v.name);
+      }
+    }
+  } else if (Array.isArray(product.sizesStock) && product.sizesStock.length > 0) {
+    availableOptions.push(
+      ...product.sizesStock
+        .filter((s) => s.stock > 0)
+        .map((s) => String(s.size))
+    );
+  }
 
   return (
     <div
@@ -93,9 +134,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               <AlertCircle className="w-3 h-3 text-[#d30005]" /> SIN STOCK
             </span>
           ) : (
-            product.gender === "Niño" && (
-              <span className="bg-white/90 text-[#111111] text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full backdrop-blur-sm border border-[#e5e5e5] shadow-xs">
-                {product.gender}
+            hasWholesale && (
+              <span className="bg-[#007d48] text-white text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full shadow-xs">
+                MAYORISTA
               </span>
             )
           )}
@@ -113,7 +154,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       <div className="pt-3 pb-2 flex flex-col gap-1">
         <div className="flex justify-between items-center text-xs text-[#707072] font-semibold uppercase tracking-wider">
           <span>{brandName}</span>
-          <span className="hidden md:block">{typeName || ""}</span>
+          <span className="hidden md:block">{categoryName || ""}</span>
         </div>
 
         <h3 className="font-bold text-base text-[#111111] group-hover:underline line-clamp-1 leading-snug">
@@ -157,17 +198,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <>
             <div className="flex items-baseline gap-2 mt-1 flex-wrap">
               <span className="font-extrabold text-lg text-[#111111]">
-                {formatPrice(retailPrice)}
+                {hasRange ? `Desde ${formatPrice(minRetail)}` : formatPrice(retailPrice)}
               </span>
-              {hasWholesaleDiscount && (
+              {hasWholesale && (
                 <span className="text-xs font-bold text-[#007d48] bg-[#007d48]/10 px-2 py-0.5 rounded-full">
                   Mayorista: {formatPrice(wholesalePrice)}
                 </span>
               )}
             </div>
-            {hasWholesaleDiscount && (
+            {hasWholesale && (
               <p className="text-[10px] text-[#707072] font-medium mt-0.5">
-                ✦ Precio mayorista 5 pares o más
+                ✦ Precio mayorista {minWholesaleUnits} unidades o más
               </p>
             )}
           </>

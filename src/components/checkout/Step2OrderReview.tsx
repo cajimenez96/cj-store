@@ -89,7 +89,9 @@ export const Step2OrderReview: React.FC<Step2OrderReviewProps> = ({
                   {item.name}
                 </h4>
                 <p className="text-[11px] text-[#707072]">
-                  {item.variantName ? (
+                  {item.variantLabel ? (
+                    <>Variante: <strong className="text-[#111111]">{item.variantLabel}</strong> • </>
+                  ) : item.variantName ? (
                     <>Variante: <strong className="text-[#111111]">{item.variantName}</strong> • </>
                   ) : item.size !== undefined ? (
                     <>Talle: <strong className="text-[#111111]">{item.size}</strong> • </>

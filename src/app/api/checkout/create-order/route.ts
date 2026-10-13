@@ -45,16 +45,19 @@ export async function POST(req: NextRequest) {
 
     const productMap = new Map(dbProducts.map((p) => [p._id.toString(), p]));
 
-    // 3. Server-side wholesale threshold evaluation
-    const totalPairs = items.reduce((sum: number, item: { qty: number }) => {
-      return sum + (Math.max(1, parseInt(String(item.qty), 10) || 1));
-    }, 0);
-    const isWholesale = totalPairs >= WHOLESALE_THRESHOLD;
-    const appliedPriceType: 'wholesale' | 'retail' = isWholesale ? 'wholesale' : 'retail';
+    // 3. Calculate unit counts per product for wholesale evaluation
+    const productUnitsMap = new Map<string, number>();
+    for (const item of items) {
+      const pId = String(item.productId);
+      const qty = Math.max(1, parseInt(String(item.qty), 10) || 1);
+      productUnitsMap.set(pId, (productUnitsMap.get(pId) || 0) + qty);
+    }
+    const totalOrderUnits = Array.from(productUnitsMap.values()).reduce((a, b) => a + b, 0);
 
     let calculatedSubtotal = 0;
     const validatedItems = [];
 
+    // 4. Verify stock and calculate server-side pricing for each item
     for (const item of items) {
       const dbProd = productMap.get(item.productId);
       if (!dbProd) {
@@ -69,44 +72,97 @@ export async function POST(req: NextRequest) {
       }
 
       const itemQty = Math.max(1, parseInt(String(item.qty), 10) || 1);
+      const parsedSize = item.size ? parseInt(String(item.size), 10) : undefined;
 
-      // Server-side price selection: use wholesalePrice when threshold reached,
-      // fall back to retailPrice, then legacy price field for older documents
-      const itemPrice = isWholesale
-        ? (dbProd.wholesalePrice ?? dbProd.retailPrice ?? dbProd.price ?? 0)
-        : (dbProd.retailPrice ?? dbProd.price ?? 0);
+      // Locate variant if present
+      let matchedVariant: any = null;
+      let availableStock = 0;
+      let variantLabel = item.variantLabel || item.variantName;
 
-      const itemSubtotal = itemPrice * itemQty;
+      if (item.variantId && Array.isArray(dbProd.variants) && dbProd.variants.length > 0) {
+        matchedVariant = dbProd.variants.find((v: any) => v._id?.toString() === item.variantId);
+      } else if (item.sku && Array.isArray(dbProd.variants) && dbProd.variants.length > 0) {
+        matchedVariant = dbProd.variants.find((v: any) => v.sku?.toLowerCase() === item.sku.toLowerCase());
+      } else if (item.variantName && Array.isArray(dbProd.variants) && dbProd.variants.length > 0) {
+        matchedVariant = dbProd.variants.find((v: any) => v.name?.toLowerCase() === item.variantName.toLowerCase());
+      }
+
+      if (matchedVariant) {
+        availableStock = matchedVariant.stock ?? 0;
+        if (!variantLabel && Array.isArray(matchedVariant.options)) {
+          variantLabel = matchedVariant.options.map((o: any) => o.value).join(' / ');
+        }
+      } else if (parsedSize !== undefined && Array.isArray(dbProd.sizesStock) && dbProd.sizesStock.length > 0) {
+        const sizeEntry = dbProd.sizesStock.find((s: any) => s.size === parsedSize);
+        availableStock = sizeEntry?.stock ?? 0;
+        variantLabel = variantLabel || `Talle ${parsedSize}`;
+      } else {
+        availableStock = dbProd.stock ?? dbProd.totalStock ?? 0;
+      }
+
+      // Requirement 1: No soft reserves. Return 409 Conflict if stock is insufficient
+      if (availableStock < itemQty) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: 'INSUFFICIENT_STOCK',
+            message: `Stock insuficiente para "${dbProd.name}" (${variantLabel || 'Sin variante'}). Disponible: ${availableStock}, solicitado: ${itemQty}.`,
+            details: {
+              productId: dbProd._id.toString(),
+              variantId: matchedVariant?._id?.toString(),
+              availableStock,
+              requestedQty: itemQty,
+            },
+          },
+          { status: 409 }
+        );
+      }
+
+      // Price calculation
+      const pUnits = productUnitsMap.get(dbProd._id.toString()) || itemQty;
+      const wholesaleMinUnits = dbProd.wholesale?.minQty ?? (dbProd.wholesale as any)?.minUnits ?? WHOLESALE_THRESHOLD;
+      const vRetail = Number(matchedVariant?.retailPrice ?? dbProd.retailPrice ?? dbProd.price ?? 0);
+      const vWholesale = matchedVariant?.wholesalePrice != null && Number(matchedVariant.wholesalePrice) > 0
+        ? Number(matchedVariant.wholesalePrice)
+        : (dbProd.wholesalePrice != null && Number(dbProd.wholesalePrice) > 0 ? Number(dbProd.wholesalePrice) : vRetail);
+
+      const isWholesaleItem =
+        (Boolean(dbProd.wholesale?.enabled) && pUnits >= wholesaleMinUnits && vWholesale < vRetail) ||
+        (totalOrderUnits >= WHOLESALE_THRESHOLD && vWholesale < vRetail);
+
+      const unitPrice = isWholesaleItem ? vWholesale : vRetail;
+      const itemSubtotal = unitPrice * itemQty;
       calculatedSubtotal += itemSubtotal;
 
       const principalImage =
-        dbProd.images?.find((img) => img.isPrincipal)?.url || dbProd.images?.[0]?.url || '';
-
-      const parsedSize = item.size ? parseInt(String(item.size), 10) : undefined;
-      const variantName = item.variantName || (parsedSize !== undefined && isNaN(parsedSize) ? String(item.size) : undefined);
+        dbProd.images?.find((img: any) => img.isPrincipal)?.url || dbProd.images?.[0]?.url || '';
 
       validatedItems.push({
         productId: dbProd._id,
+        variantId: matchedVariant?._id,
+        sku: matchedVariant?.sku || item.sku,
         name: dbProd.name,
         image: principalImage,
-        variantName: variantName || (item.variantName ? String(item.variantName) : undefined),
+        variantLabel: variantLabel || (item.variantName ? String(item.variantName) : undefined),
+        variantName: item.variantName || (parsedSize !== undefined ? String(parsedSize) : undefined),
         size: !isNaN(Number(parsedSize)) ? parsedSize : undefined,
         qty: itemQty,
-        appliedPriceType: appliedPriceType as 'retail' | 'wholesale',
-        unitPrice: itemPrice,
+        appliedPriceType: (isWholesaleItem ? 'wholesale' : 'retail') as 'retail' | 'wholesale',
+        unitPrice,
         subtotal: itemSubtotal,
       });
     }
 
-    // 4. Generate Sequential Order Number (PED-YYYY-XXXXX)
+    // 5. Generate Sequential Order Number (PED-YYYY-XXXXX)
     const currentYear = new Date().getFullYear();
     const countToday = await Order.countDocuments();
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const orderNumber = `PED-${currentYear}-${(countToday + 1).toString().padStart(4, '0')}${randomSuffix.toString().slice(-2)}`;
 
     const total = calculatedSubtotal;
+    const hasAnyWholesale = validatedItems.some((i) => i.appliedPriceType === 'wholesale');
 
-    // 5. Create and Save Pending Order
+    // 6. Create and Save Pending Order
     const newOrder = await Order.create({
       orderNumber,
       origin: 'web',
@@ -131,8 +187,8 @@ export async function POST(req: NextRequest) {
         ok: true,
         orderId: newOrder._id.toString(),
         orderNumber: newOrder.orderNumber,
-        appliedPriceType,
-        isWholesale,
+        appliedPriceType: hasAnyWholesale ? 'wholesale' : 'retail',
+        isWholesale: hasAnyWholesale,
         subtotal: newOrder.subtotal,
         discount: newOrder.discount,
         total: newOrder.total,

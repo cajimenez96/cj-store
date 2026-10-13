@@ -40,7 +40,7 @@ export async function POST(
     }
   }
 
-  const decrementedItems: Array<{ productId: any; size?: number; variantName?: string; qty: number }> = [];
+  const decrementedItems: Array<{ productId: any; variantId?: any; size?: number; variantName?: string; qty: number }> = [];
 
   try {
     const { id } = await params;
@@ -113,7 +113,11 @@ export async function POST(
 
       let availableStock = 0;
       let label = '';
-      if (item.variantName && product.variants && product.variants.length > 0) {
+      if (item.variantId && product.variants && product.variants.length > 0) {
+        const variantEntry = product.variants.find((v: any) => v._id?.toString() === item.variantId?.toString());
+        availableStock = variantEntry?.stock ?? 0;
+        label = item.variantLabel || `Variante ${item.variantId}`;
+      } else if (item.variantName && product.variants && product.variants.length > 0) {
         const variantEntry = product.variants.find((v) => v.name === item.variantName);
         availableStock = variantEntry?.stock ?? 0;
         label = `Variante ${item.variantName}`;
@@ -144,13 +148,15 @@ export async function POST(
 
     // 2. Decrement stock atomically for each item
     for (const item of order.items) {
-      const updateFilter = item.variantName
+      const updateFilter = item.variantId
+        ? { _id: item.productId, 'variants._id': item.variantId }
+        : item.variantName
         ? { _id: item.productId, 'variants.name': item.variantName }
         : item.size !== undefined
         ? { _id: item.productId, 'sizesStock.size': item.size }
         : { _id: item.productId };
 
-      const updateOp = item.variantName
+      const updateOp = (item.variantId || item.variantName)
         ? { $inc: { 'variants.$.stock': -item.qty } }
         : item.size !== undefined
         ? { $inc: { 'sizesStock.$.stock': -item.qty } }
@@ -163,6 +169,7 @@ export async function POST(
       }
       decrementedItems.push({
         productId: item.productId,
+        variantId: item.variantId,
         size: item.size,
         variantName: item.variantName,
         qty: item.qty,
@@ -212,7 +219,12 @@ export async function POST(
     } else if (decrementedItems.length > 0) {
       // Manual rollback in non-replica set environment
       for (const item of decrementedItems) {
-        if (item.variantName) {
+        if (item.variantId) {
+          await Product.updateOne(
+            { _id: item.productId, 'variants._id': item.variantId },
+            { $inc: { 'variants.$.stock': item.qty } }
+          ).catch(() => {});
+        } else if (item.variantName) {
           await Product.updateOne(
             { _id: item.productId, 'variants.name': item.variantName },
             { $inc: { 'variants.$.stock': item.qty } }

@@ -24,9 +24,14 @@ const WHOLESALE_THRESHOLD = 5;
 
 interface SelectedProduct {
   productId: string;
+  variantId?: string;
+  sku?: string;
+  variantLabel?: string;
+  variantName?: string;
+  size?: number;
   name: string;
-  size: number;
   qty: number;
+  maxStock: number;
   retailPrice: number;
   wholesalePrice: number;
   unitPrice: number;
@@ -40,7 +45,8 @@ interface ProductSearchResult {
   retailPrice: number;
   wholesalePrice: number;
   price?: number;
-  sizesStock: { size: number; stock: number }[];
+  variants?: any[];
+  sizesStock?: { size: number; stock: number }[];
   images?: { url: string; isPrincipal?: boolean }[];
   brandId?: { name: string } | string;
   gender?: string;
@@ -100,8 +106,51 @@ export default function AdminPOSPage() {
     }
   };
 
+  const addVariantItem = (product: ProductSearchResult, variant: any) => {
+    if (!variant || (variant.stock ?? 0) <= 0) return;
+
+    const vRetail = Number(variant.retailPrice ?? product.retailPrice ?? product.price ?? 0);
+    const vWholesale = Number(variant.wholesalePrice ?? product.wholesalePrice ?? vRetail);
+    const vLabel = Array.isArray(variant.options) && variant.options.length > 0
+      ? variant.options.map((o: any) => o.value).join(' / ')
+      : variant.name || variant.sku;
+
+    const existingIdx = items.findIndex(
+      (i) => i.productId === product._id && (i.variantId === variant._id || (i.sku && i.sku === variant.sku))
+    );
+
+    if (existingIdx > -1) {
+      setItems((prev) => prev.map((item, i) => {
+        if (i !== existingIdx) return item;
+        const newQty = Math.min(item.qty + 1, variant.stock);
+        return { ...item, qty: newQty, subtotal: item.unitPrice * newQty };
+      }));
+      return;
+    }
+
+    setItems((prev) => [
+      ...prev,
+      {
+        productId: product._id,
+        variantId: variant._id,
+        sku: variant.sku,
+        variantLabel: vLabel,
+        name: product.name,
+        qty: 1,
+        maxStock: variant.stock,
+        retailPrice: vRetail,
+        wholesalePrice: vWholesale,
+        unitPrice: vRetail,
+        appliedPriceType: 'retail',
+        subtotal: vRetail,
+      },
+    ]);
+    setSearchResults([]);
+    setSearchQuery('');
+  };
+
   const addItem = (product: ProductSearchResult, size: number) => {
-    const sizeEntry = product.sizesStock.find((s) => s.size === size);
+    const sizeEntry = product.sizesStock?.find((s) => s.size === size);
     if (!sizeEntry || sizeEntry.stock === 0) return;
 
     const retailPrice = product.retailPrice ?? product.price ?? 0;
@@ -125,6 +174,7 @@ export default function AdminPOSPage() {
         name: product.name,
         size,
         qty: 1,
+        maxStock: sizeEntry.stock,
         retailPrice,
         wholesalePrice,
         unitPrice,
@@ -141,7 +191,7 @@ export default function AdminPOSPage() {
       prev
         .map((item, i) => {
           if (i !== idx) return item;
-          const newQty = Math.max(0, item.qty + delta);
+          const newQty = Math.max(0, Math.min(item.maxStock ? item.maxStock : 9999, item.qty + delta));
           return { ...item, qty: newQty };
         })
         .filter((item) => item.qty > 0)
@@ -186,6 +236,10 @@ export default function AdminPOSPage() {
           guest: { name: guestName.trim(), lastName: guestLastName.trim(), phone: guestPhone.trim() },
           items: computedItems.map((i) => ({
             productId: i.productId,
+            variantId: i.variantId,
+            sku: i.sku,
+            variantLabel: i.variantLabel,
+            variantName: i.variantName,
             name: i.name,
             size: i.size,
             qty: i.qty,
@@ -350,22 +404,46 @@ export default function AdminPOSPage() {
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-1.5 pl-0 sm:pl-[68px]">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#707072] mr-1">Talles:</span>
-                          {prod.sizesStock
-                            .filter((s) => s.stock > 0)
-                            .map((s) => (
-                              <button
-                                key={s.size}
-                                type="button"
-                                onClick={() => addItem(prod, s.size)}
-                                className="px-2.5 py-1 bg-[#f5f5f5] text-[#111111] text-xs font-bold border border-[#e5e5e5] hover:bg-[#111111] hover:text-white transition-all cursor-pointer flex items-center gap-1"
-                              >
-                                <span>{s.size}</span>
-                                <span className="text-[10px] opacity-70">({s.stock})</span>
-                              </button>
-                            ))}
-                        </div>
+                        {Array.isArray(prod.variants) && prod.variants.length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-1.5 pl-0 sm:pl-[68px]">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#707072] mr-1">Variantes:</span>
+                            {prod.variants
+                              .filter((v: any) => (v.stock ?? 0) > 0 && v.active !== false)
+                              .map((v: any) => {
+                                const vLabel = Array.isArray(v.options) && v.options.length > 0
+                                  ? v.options.map((o: any) => o.value).join(' / ')
+                                  : v.name || v.sku;
+                                return (
+                                  <button
+                                    key={v._id || v.sku}
+                                    type="button"
+                                    onClick={() => addVariantItem(prod, v)}
+                                    className="px-2.5 py-1 bg-[#f5f5f5] text-[#111111] text-xs font-bold border border-[#e5e5e5] hover:bg-[#111111] hover:text-white transition-all cursor-pointer flex items-center gap-1"
+                                  >
+                                    <span>{vLabel}</span>
+                                    <span className="text-[10px] opacity-70">({v.stock})</span>
+                                  </button>
+                                );
+                              })}
+                          </div>
+                        ) : Array.isArray(prod.sizesStock) && prod.sizesStock.length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-1.5 pl-0 sm:pl-[68px]">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#707072] mr-1">Talles:</span>
+                            {prod.sizesStock
+                              .filter((s) => s.stock > 0)
+                              .map((s) => (
+                                <button
+                                  key={s.size}
+                                  type="button"
+                                  onClick={() => addItem(prod, s.size)}
+                                  className="px-2.5 py-1 bg-[#f5f5f5] text-[#111111] text-xs font-bold border border-[#e5e5e5] hover:bg-[#111111] hover:text-white transition-all cursor-pointer flex items-center gap-1"
+                                >
+                                  <span>{s.size}</span>
+                                  <span className="text-[10px] opacity-70">({s.stock})</span>
+                                </button>
+                              ))}
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}
@@ -380,10 +458,10 @@ export default function AdminPOSPage() {
                       <Tag className="w-3.5 h-3.5" />
                       {isWholesale
                         ? '¡Precio mayorista activo en todos los ítems!'
-                        : `Faltan ${WHOLESALE_THRESHOLD - totalPairs} pares para precio mayorista`
+                        : `Faltan ${WHOLESALE_THRESHOLD - totalPairs} unidades para precio mayorista`
                       }
                     </span>
-                    <span className="text-[#707072] font-semibold">{totalPairs}/{WHOLESALE_THRESHOLD} pares</span>
+                    <span className="text-[#707072] font-semibold">{totalPairs}/{WHOLESALE_THRESHOLD} unidades</span>
                   </div>
                   <div className="w-full bg-[#e5e5e5] rounded-full h-1.5">
                     <div
@@ -409,7 +487,7 @@ export default function AdminPOSPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-[#111111] truncate">{item.name}</p>
                         <p className="text-xs text-[#707072]">
-                          Talle {item.size}
+                          {item.variantLabel || (item.size !== undefined ? `Talle ${item.size}` : 'Sin variante')}
                           {item.appliedPriceType === 'wholesale' && (
                             <span className="ml-2 text-[#007d48] font-bold">[Mayorista]</span>
                           )}

@@ -16,7 +16,12 @@ import { formatPrice } from "@/utils/formatCurrency";
 
 export interface CartItemAddPayload {
   product: FormattedProduct;
+  variantId?: string;
+  variantLabel?: string;
   variantName?: string;
+  sku?: string;
+  retailPrice?: number;
+  wholesalePrice?: number;
   size?: number;
   qty: number;
 }
@@ -33,6 +38,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   onAddToCart,
 }) => {
   const [selectedImage, setSelectedImage] = useState<string>("");
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<number | null>(null);
   const [quantity, setQuantity] = useState<number>(1);
@@ -44,6 +50,59 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const hasVariants = Boolean(product?.variants && product.variants.length > 0);
   const hasSizes = Boolean(product?.sizesStock && product.sizesStock.length > 0);
 
+  // Extract distinct option axes across variants
+  const axes = React.useMemo(() => {
+    if (!product?.variants || product.variants.length === 0) return [];
+    const keys = new Set<string>();
+    for (const v of product.variants) {
+      if (Array.isArray(v.options)) {
+        for (const opt of v.options) {
+          if (opt.key) keys.add(opt.key);
+        }
+      }
+    }
+    return Array.from(keys);
+  }, [product]);
+
+  // Options available for each axis
+  const optionsByAxis = React.useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const axis of axes) {
+      const valSet = new Set<string>();
+      for (const v of product?.variants || []) {
+        if (Array.isArray(v.options)) {
+          const match = v.options.find((o: any) => o.key === axis);
+          if (match?.value) valSet.add(match.value);
+        }
+      }
+      map[axis] = Array.from(valSet);
+    }
+    return map;
+  }, [axes, product]);
+
+  // Find currently matched variant
+  const matchedVariant = React.useMemo(() => {
+    if (!product?.variants || product.variants.length === 0) return null;
+
+    if (axes.length > 0) {
+      const found = product.variants.find((v) => {
+        if (v.active === false) return false;
+        if (!Array.isArray(v.options)) return false;
+        return axes.every((axis) => {
+          const opt = v.options.find((o: any) => o.key === axis);
+          return opt && opt.value === selectedOptions[axis];
+        });
+      });
+      return found || product.variants[0];
+    }
+
+    if (selectedVariant) {
+      return product.variants.find((v) => v.name === selectedVariant) || product.variants[0];
+    }
+
+    return product.variants[0];
+  }, [product, axes, selectedOptions, selectedVariant]);
+
   useEffect(() => {
     if (product) {
       const primaryUrl =
@@ -53,14 +112,29 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       setSelectedImage(primaryUrl);
 
       if (product.variants && product.variants.length > 0) {
-        const firstAvailable = product.variants.find((v) => v.stock > 0) || product.variants[0];
-        setSelectedVariant(firstAvailable ? firstAvailable.name : null);
+        const firstAvailable =
+          product.variants.find((v) => (v.stock ?? 0) > 0 && v.active !== false) ||
+          product.variants[0];
+
+        if (Array.isArray(firstAvailable.options) && firstAvailable.options.length > 0) {
+          const initialOpts: Record<string, string> = {};
+          for (const opt of firstAvailable.options) {
+            initialOpts[opt.key] = opt.value;
+          }
+          setSelectedOptions(initialOpts);
+          setSelectedVariant(null);
+        } else {
+          setSelectedOptions({});
+          setSelectedVariant(firstAvailable ? firstAvailable.name : null);
+        }
         setSelectedSize(null);
       } else if (product.sizesStock && product.sizesStock.length > 0) {
         const firstAvailable = product.sizesStock.find((s) => s.stock > 0);
         setSelectedSize(firstAvailable ? firstAvailable.size : null);
+        setSelectedOptions({});
         setSelectedVariant(null);
       } else {
+        setSelectedOptions({});
         setSelectedVariant(null);
         setSelectedSize(null);
       }
@@ -76,25 +150,31 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       ? product.brandId.name
       : "Producto";
 
-  const typeName =
-    typeof product.typeId === "object" && product.typeId !== null
+  const categoryName =
+    typeof product.categoryId === "object" && product.categoryId !== null
+      ? product.categoryId.name
+      : typeof product.typeId === "object" && product.typeId !== null
       ? product.typeId.name
       : "";
 
-  // Resolve prices with legacy fallback
-  const retailPrice = product.retailPrice ?? product.price ?? 0;
-  const wholesalePrice = product.wholesalePrice ?? retailPrice;
-  const hasWholesaleDiscount = wholesalePrice < retailPrice;
+  // Resolve prices for active variant
+  const retailPrice =
+    matchedVariant?.retailPrice ?? product.retailPrice ?? product.price ?? 0;
+  const wholesalePrice =
+    matchedVariant?.wholesalePrice ?? product.wholesalePrice ?? retailPrice;
+  const minWholesaleUnits = product.wholesale?.minUnits ?? 5;
+  const hasWholesaleDiscount =
+    Boolean(product.hasWholesale || product.wholesale?.enabled) &&
+    wholesalePrice < retailPrice;
 
   // Effective price based on current cart state
   const effectivePrice = isWholesale ? wholesalePrice : retailPrice;
-  const unitsToWholesale = Math.max(0, 5 - totalUnits);
+  const unitsToWholesale = Math.max(0, minWholesaleUnits - totalUnits);
 
   // Get max stock
   let maxStock = 0;
-  if (hasVariants) {
-    const currentVar = product.variants?.find((v) => v.name === selectedVariant);
-    maxStock = currentVar ? currentVar.stock : 0;
+  if (matchedVariant) {
+    maxStock = matchedVariant.stock ?? 0;
   } else if (hasSizes) {
     const currentSizeObj = product.sizesStock?.find((s) => s.size === selectedSize);
     maxStock = currentSizeObj ? currentSizeObj.stock : 0;
@@ -104,14 +184,46 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
   const canAddToCart =
     maxStock > 0 &&
-    (!hasVariants || !!selectedVariant) &&
+    (!hasVariants || !!matchedVariant) &&
     (!hasSizes || selectedSize !== null);
+
+  const formattedVariantLabel = matchedVariant
+    ? Array.isArray(matchedVariant.options) && matchedVariant.options.length > 0
+      ? matchedVariant.options.map((o: any) => `${o.value}`).join(" / ")
+      : matchedVariant.name
+    : undefined;
+
+  const handleOptionSelect = (axis: string, val: string) => {
+    const nextOpts = { ...selectedOptions, [axis]: val };
+    setSelectedOptions(nextOpts);
+    setQuantity(1);
+
+    // If category has imageAxis matching this axis, switch image
+    const imageAxis =
+      typeof product.categoryId === "object" && product.categoryId !== null
+        ? product.categoryId.imageAxis
+        : undefined;
+
+    if (imageAxis && imageAxis.toLowerCase() === axis.toLowerCase()) {
+      const matchingImg = product.images.find(
+        (img) => img.axisValue && img.axisValue.toLowerCase() === val.toLowerCase()
+      );
+      if (matchingImg) {
+        setSelectedImage(matchingImg.url);
+      }
+    }
+  };
 
   const handleAddToCart = () => {
     if (!canAddToCart) return;
     onAddToCart({
       product,
-      variantName: selectedVariant ?? undefined,
+      variantId: matchedVariant?._id?.toString(),
+      variantLabel: formattedVariantLabel,
+      variantName: matchedVariant?.name,
+      sku: matchedVariant?.sku,
+      retailPrice,
+      wholesalePrice,
       size: selectedSize ?? undefined,
       qty: quantity,
     });
@@ -191,7 +303,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-xs font-bold text-[#707072] uppercase tracking-wider">
                   <span>{brandName}</span>
-                  {typeName && <span>• {typeName}</span>}
+                  {categoryName && <span>• {categoryName}</span>}
                   {product.gender && <span>• {product.gender}</span>}
                 </div>
 
@@ -270,8 +382,61 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               </div>
 
               {/* Options / Variant / Size Selector */}
-              <div>
-                {hasVariants ? (
+              <div className="space-y-4">
+                {axes.length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-extrabold text-[#111111] uppercase tracking-wider">
+                        Opciones del Producto
+                      </span>
+                      <span className="text-xs text-[#707072]">
+                        {maxStock > 0 ? (
+                          <>Stock: <strong className="text-[#111111]">{maxStock} u.</strong></>
+                        ) : (
+                          <strong className="text-[#d30005]">Sin stock</strong>
+                        )}
+                        {matchedVariant?.sku && (
+                          <span className="ml-2 font-mono text-[10px] text-[#707072]">
+                            SKU: {matchedVariant.sku}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+
+                    {axes.map((axis) => {
+                      const vals = optionsByAxis[axis] || [];
+                      const currentVal = selectedOptions[axis];
+
+                      return (
+                        <div key={axis} className="space-y-1.5">
+                          <label className="text-[11px] font-bold text-[#707072] uppercase tracking-wider capitalize">
+                            {axis}:
+                          </label>
+                          <div className="flex flex-wrap gap-2">
+                            {vals.map((val) => {
+                              const isSelected = currentVal === val;
+
+                              return (
+                                <button
+                                  key={val}
+                                  type="button"
+                                  onClick={() => handleOptionSelect(axis, val)}
+                                  className={`px-3 py-1.5 font-bold text-xs rounded-none border transition-all ${
+                                    isSelected
+                                      ? "bg-[#111111] text-white border-[#111111] shadow-xs cursor-pointer"
+                                      : "bg-white text-[#111111] border-[#e5e5e5] hover:border-[#111111] cursor-pointer"
+                                  }`}
+                                >
+                                  {val}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : hasVariants ? (
                   <div>
                     <div className="flex justify-between items-center mb-2">
                       <label className="text-xs font-extrabold text-[#111111] uppercase tracking-wider">
@@ -286,12 +451,12 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
                     <div className="flex flex-wrap gap-2">
                       {product.variants!.map((v) => {
-                        const hasStock = v.stock > 0;
+                        const hasStock = (v.stock ?? 0) > 0;
                         const isSelected = selectedVariant === v.name;
 
                         return (
                           <button
-                            key={v.name}
+                            key={v.name || v.sku}
                             disabled={!hasStock}
                             onClick={() => {
                               setSelectedVariant(v.name);
@@ -375,11 +540,37 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 )}
               </div>
 
+              {/* Description */}
               <div className="border-t border-b border-[#f5f5f5] py-3">
                 <p className="text-xs text-[#707072] leading-relaxed">
                   {product.description}
                 </p>
               </div>
+
+              {/* Specifications Block */}
+              {product.specs && product.specs.length > 0 && (
+                <div className="border-b border-[#f5f5f5] pb-3 space-y-2">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-[#111111]">
+                    Ficha Técnica
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {product.specs.map((spec) => (
+                      <div key={spec.key} className="bg-[#f5f5f5] p-2 border border-[#e5e5e5]">
+                        <span className="text-[#707072] font-semibold capitalize block text-[10px]">
+                          {spec.key}
+                        </span>
+                        <span className="font-bold text-[#111111]">
+                          {typeof spec.value === 'boolean'
+                            ? spec.value
+                              ? 'Sí'
+                              : 'No'
+                            : String(spec.value)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Quantity Selector */}
               {canAddToCart && (
