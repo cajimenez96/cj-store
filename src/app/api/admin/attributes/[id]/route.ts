@@ -75,14 +75,26 @@ export async function PUT(
       const removedValues = Array.from(currentValues).filter((v) => !newValues.has(v));
 
       if (removedValues.length > 0) {
-        // Query if any variant in products uses these removed options
+        // Query if any product uses these removed options, as a variant axis or as a spec
         const inUseProducts = await Product.find({
-          'variants.options': {
-            $elemMatch: {
-              key: attribute.key,
-              value: { $in: removedValues },
+          $or: [
+            {
+              'variants.options': {
+                $elemMatch: {
+                  key: attribute.key,
+                  value: { $in: removedValues },
+                },
+              },
             },
-          },
+            {
+              specs: {
+                $elemMatch: {
+                  key: attribute.key,
+                  value: { $in: removedValues },
+                },
+              },
+            },
+          ],
         })
           .select('name')
           .limit(5)

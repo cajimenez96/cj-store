@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { AdminNav } from "@/components/admin/AdminNav";
+import { GENDER_ATTRIBUTE_KEY } from "@/lib/attributeKeys";
 import {
   Sliders,
   Plus,
@@ -405,22 +407,32 @@ export default function AdminAttributesPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => openEditModal(attr)}
-                          className="p-1.5 text-[#707072] hover:text-[#111111] hover:bg-[#f5f5f5] transition-colors cursor-pointer"
-                          title="Editar atributo"
+                      {attr.key === GENDER_ATTRIBUTE_KEY ? (
+                        <Link
+                          href="/admin/settings"
+                          className="text-[11px] font-bold text-[#007d48] hover:underline whitespace-nowrap"
+                          title="Las opciones y las categorías de Género se administran en Ajustes"
                         >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(attr)}
-                          className="p-1.5 text-[#707072] hover:text-[#d30005] hover:bg-[#f5f5f5] transition-colors cursor-pointer"
-                          title="Eliminar atributo"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                          Se gestiona en Ajustes →
+                        </Link>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => openEditModal(attr)}
+                            className="p-1.5 text-[#707072] hover:text-[#111111] hover:bg-[#f5f5f5] transition-colors cursor-pointer"
+                            title="Editar atributo"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(attr)}
+                            className="p-1.5 text-[#707072] hover:text-[#d30005] hover:bg-[#f5f5f5] transition-colors cursor-pointer"
+                            title="Eliminar atributo"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Options Preview for Select */}

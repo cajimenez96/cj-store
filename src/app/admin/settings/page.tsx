@@ -24,6 +24,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
+import { GenderOptionsManager } from "@/components/admin/GenderOptionsManager";
 
 export default function AdminSettingsPage() {
   // Identity & Contact
@@ -567,7 +568,7 @@ export default function AdminSettingsPage() {
                       Visibilidad y Clasificación por Género
                     </h2>
                     <p className="text-xs text-[#707072]">
-                      Controlá si la tienda utiliza filtros y navegación por género (Hombre, Mujer, Unisex, etc.).
+                      Definí los géneros de tu catálogo y controlá si la tienda los usa como filtro.
                     </p>
                   </div>
                 </div>
@@ -579,7 +580,7 @@ export default function AdminSettingsPage() {
                     Habilitar el filtro por género en la tienda
                   </h3>
                   <p className="text-xs text-[#707072]">
-                    Si se desactiva, se oculta el filtro de género en el catálogo (el menú y el pie se arman con las categorías). Ideal para tiendas de fragancias o productos donde no se discrimina por género. Las opciones de género se administran en Atributos.
+                    Si se desactiva, se oculta el filtro de género en el catálogo (el menú y el pie se arman con las categorías). Ideal para tiendas de fragancias o productos donde no se discrimina por género. El filtro solo aparece si hay opciones de género activas.
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -592,6 +593,8 @@ export default function AdminSettingsPage() {
                   <div className="w-11 h-6 bg-[#e5e5e5] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#111111]"></div>
                 </label>
               </div>
+
+              <GenderOptionsManager />
             </div>
 
             {/* Submit Button */}

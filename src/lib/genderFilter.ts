@@ -1,6 +1,7 @@
 import Attribute, { IAttribute } from '@/models/Attribute';
+import { GENDER_ATTRIBUTE_KEY } from '@/lib/attributeKeys';
 
-export const GENDER_ATTRIBUTE_KEY = 'genero';
+export { GENDER_ATTRIBUTE_KEY };
 
 async function findGenderAttribute() {
   return Attribute.findOne({ key: GENDER_ATTRIBUTE_KEY }).lean<IAttribute | null>();
