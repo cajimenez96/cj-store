@@ -45,9 +45,12 @@ const DEFAULT_SETTINGS: StoreSettings = {
   facebookUrl: "",
 
   metaTitle: "The Point | Perfumes Importados & Fragancias Exclusivas",
-  metaDescription: "Catálogo exclusivo de perfumes importados y fragancias de autor en The Point. Comprá online con atención personalizada por WhatsApp y envíos a todo el país.",
-  metaKeywords: "perfumes, fragancias, perfumes importados, the point, decants, hombre, mujer, unisex",
-  footerDescription: "Perfumería de lujo y fragancias de autor. Seleccioná tus aromas favoritos y completá tu pedido de forma fácil y directa vía WhatsApp.",
+  metaDescription:
+    "Catálogo exclusivo de perfumes importados y fragancias de autor en The Point. Comprá online con atención personalizada por WhatsApp y envíos a todo el país.",
+  metaKeywords:
+    "perfumes, fragancias, perfumes importados, the point, decants, hombre, mujer, unisex",
+  footerDescription:
+    "Perfumería de lujo y fragancias de autor. Seleccioná tus aromas favoritos y completá tu pedido de forma fácil y directa vía WhatsApp.",
 
   bankAlias: "THE.POINT",
   bankCbu: "",
