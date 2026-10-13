@@ -15,7 +15,7 @@ export default function NewProductPage() {
             Crear Nuevo Producto
           </h1>
           <p className="text-xs text-[#707072] mt-1">
-            Completá los datos del calzado, imágenes CDN y cargá el stock inicial por talle.
+            Completá los datos del producto, las imágenes y cargá el stock inicial por variante.
           </p>
         </div>
 

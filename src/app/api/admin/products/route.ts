@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
-import { Product, Brand, FootwearType, Category } from '@/models';
+import { Product, Brand, Category } from '@/models';
 import { calculateDerivedProductFields } from '@/lib/derived';
+import { buildGenderCondition } from '@/lib/genderFilter';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +25,6 @@ export async function GET(req: NextRequest) {
 
     const brandId = searchParams.get('brandId');
     const categoryId = searchParams.get('categoryId');
-    const typeId = searchParams.get('typeId');
     const gender = searchParams.get('gender');
     const active = searchParams.get('active');
     const isClearance = searchParams.get('isClearance') || searchParams.get('clearance');
@@ -40,8 +40,7 @@ export async function GET(req: NextRequest) {
 
     if (brandId) query.brandId = brandId;
     if (categoryId) query.categoryId = categoryId;
-    if (typeId) query.typeId = typeId;
-    if (gender) query.gender = gender;
+    if (gender) query.$and = [...(query.$and ?? []), await buildGenderCondition(gender)];
     if (active !== null && active !== undefined && active !== '') {
       query.active = active === 'true';
     }
@@ -54,13 +53,11 @@ export async function GET(req: NextRequest) {
 
     // Ensure models are registered
     Brand;
-    FootwearType;
     Category;
 
     const total = await Product.countDocuments(query);
     let productQuery = Product.find(query)
       .populate('brandId', 'name')
-      .populate('typeId', 'name')
       .populate('categoryId', 'name slug variantAxes')
       .sort({ createdAt: -1, _id: -1 });
 
@@ -83,11 +80,6 @@ export async function GET(req: NextRequest) {
         );
       } else if (typeof prod.stock === 'number') {
         totalStock = prod.stock;
-      } else if (Array.isArray(prod.sizesStock) && prod.sizesStock.length > 0) {
-        totalStock = prod.sizesStock.reduce(
-          (acc: number, curr: { stock: number }) => acc + (Number(curr.stock) || 0),
-          0
-        );
       }
 
       return {
@@ -128,8 +120,6 @@ export async function POST(req: NextRequest) {
       wholesalePrice,
       brandId,
       categoryId,
-      typeId,
-      gender,
       active,
       isClearance,
       images,
@@ -137,8 +127,6 @@ export async function POST(req: NextRequest) {
       specs,
       wholesale,
       stock,
-      sizesStock,
-      displayedSizes,
     } = body;
 
     // Validations
@@ -177,7 +165,6 @@ export async function POST(req: NextRequest) {
 
     // Prepare variants
     const hasVariants = Array.isArray(variants) && variants.length > 0;
-    const hasSizes = Array.isArray(sizesStock) && sizesStock.length > 0;
     const hasDirectStock = stock !== undefined && stock !== null;
 
     let processedVariants: any[] = [];
@@ -189,15 +176,6 @@ export async function POST(req: NextRequest) {
         wholesalePrice: v.wholesalePrice !== undefined && v.wholesalePrice !== null ? Number(v.wholesalePrice) : undefined,
         stock: Math.max(0, Number(v.stock) || 0),
         active: v.active !== undefined ? Boolean(v.active) : true,
-      }));
-    } else if (hasSizes) {
-      processedVariants = sizesStock.map((s: any) => ({
-        sku: `${productSlug.toUpperCase()}-T${String(s.size).replace('.', '_')}`,
-        options: [{ key: 'talle_calzado', value: String(s.size) }],
-        retailPrice: Number(retailPrice) || 0,
-        wholesalePrice: wholesalePrice ? Number(wholesalePrice) : undefined,
-        stock: Math.max(0, Number(s.stock) || 0),
-        active: true,
       }));
     } else {
       // Single default variant
@@ -224,8 +202,6 @@ export async function POST(req: NextRequest) {
       brandId: brandId || undefined,
       categoryId: finalCategoryId || undefined,
       categoryAncestors,
-      typeId: typeId || undefined,
-      gender: gender ? gender : null,
       active: active !== undefined ? Boolean(active) : true,
       isClearance: isClearance !== undefined ? Boolean(isClearance) : false,
       images,
@@ -243,8 +219,6 @@ export async function POST(req: NextRequest) {
       retailPrice: Number(retailPrice) || derived.priceRange.min,
       wholesalePrice: wholesalePrice ? Number(wholesalePrice) : undefined,
       stock: hasDirectStock ? Number(stock) : derived.totalStock,
-      sizesStock: hasSizes ? sizesStock : [],
-      displayedSizes: displayedSizes || [],
     });
 
     return NextResponse.json({ ok: true, data: newProduct }, { status: 201 });
@@ -291,25 +265,18 @@ export async function PUT(req: NextRequest) {
       specs,
       wholesale,
       stock,
-      sizesStock,
       brandId,
       categoryId,
-      typeId,
-      gender,
-      displayedSizes,
     } = body;
 
     if (name !== undefined) product.name = name.trim();
     if (description !== undefined) product.description = description.trim();
     if (slug !== undefined && slug.trim()) product.slug = slugify(slug);
     if (brandId !== undefined) product.brandId = brandId || undefined;
-    if (typeId !== undefined) product.typeId = typeId || undefined;
-    if (gender !== undefined) product.gender = gender ? gender : null;
     if (active !== undefined) product.active = Boolean(active);
     if (isClearance !== undefined) product.isClearance = Boolean(isClearance);
     if (images !== undefined) product.images = images;
     if (specs !== undefined) product.specs = specs;
-    if (displayedSizes !== undefined) product.displayedSizes = displayedSizes;
 
     // Category update
     if (categoryId !== undefined) {
@@ -332,14 +299,25 @@ export async function PUT(req: NextRequest) {
 
     // Variants update
     if (variants !== undefined && Array.isArray(variants)) {
-      product.variants = variants.map((v: any, idx: number) => ({
-        sku: v.sku || `${(product.slug || 'PROD').toUpperCase()}-${idx + 1}`,
-        options: Array.isArray(v.options) ? v.options : [],
-        retailPrice: Number(v.retailPrice) || 0,
-        wholesalePrice: v.wholesalePrice !== undefined && v.wholesalePrice !== null ? Number(v.wholesalePrice) : undefined,
-        stock: Math.max(0, Number(v.stock) || 0),
-        active: v.active !== undefined ? Boolean(v.active) : true,
-      }));
+      const existingVariants = new Map(
+        (product.variants ?? []).map((existing) => [existing._id?.toString(), existing])
+      );
+
+      product.variants = variants.map((v: any, idx: number) => {
+        const existing = v._id ? existingVariants.get(String(v._id)) : undefined;
+
+        return {
+          // Keep the id of a variant that already exists: carts and pending orders reference it
+          ...(existing ? { _id: existing._id } : {}),
+          sku: v.sku || `${(product.slug || 'PROD').toUpperCase()}-${idx + 1}`,
+          name: v.name ?? existing?.name,
+          options: Array.isArray(v.options) ? v.options : [],
+          retailPrice: Number(v.retailPrice) || 0,
+          wholesalePrice: v.wholesalePrice !== undefined && v.wholesalePrice !== null ? Number(v.wholesalePrice) : undefined,
+          stock: Math.max(0, Number(v.stock) || 0),
+          active: v.active !== undefined ? Boolean(v.active) : true,
+        };
+      });
 
       const derived = calculateDerivedProductFields(
         product.variants,
@@ -354,7 +332,6 @@ export async function PUT(req: NextRequest) {
     if (retailPrice !== undefined) product.retailPrice = Number(retailPrice);
     if (wholesalePrice !== undefined) product.wholesalePrice = wholesalePrice ? Number(wholesalePrice) : undefined;
     if (stock !== undefined) product.stock = Number(stock);
-    if (sizesStock !== undefined) product.sizesStock = sizesStock;
 
     await product.save();
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
-import { Product, Brand, FootwearType, Category } from '@/models';
+import { Product, Brand, Category } from '@/models';
 
 export async function GET(
   _req: NextRequest,
@@ -12,12 +12,10 @@ export async function GET(
 
     // Ensure models registered
     Brand;
-    FootwearType;
     Category;
 
     const product = await Product.findById(id)
       .populate('brandId', 'name')
-      .populate('typeId', 'name')
       .populate('categoryId', 'name slug variantAxes imageAxis specAttributes ancestors')
       .lean();
 

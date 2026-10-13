@@ -9,13 +9,11 @@ import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import {
   Brand,
-  FootwearType,
   Product,
   Promotion,
   Order,
   SalesRecord,
   Expense,
-  GenderSize,
   Settings,
   User,
 } from "../src/models";
@@ -45,8 +43,6 @@ async function runSeed() {
       Product.deleteMany({}),
       Promotion.deleteMany({}),
       Brand.deleteMany({}),
-      FootwearType.deleteMany({}),
-      GenderSize.deleteMany({}),
       Settings.deleteMany({}),
     ]);
     console.log(

@@ -3,7 +3,7 @@
 import React from "react";
 import Image from "next/image";
 import { Eye, AlertCircle, Tag } from "lucide-react";
-import type { IProductImage, ISizeStock, IVariantStock } from "@/models/Product";
+import type { IProductImage } from "@/models/Product";
 
 import { formatPrice } from "@/utils/formatCurrency";
 
@@ -16,15 +16,11 @@ export interface FormattedProduct {
   price?: number;
   retailPrice: number;
   wholesalePrice: number;
-  gender?: string | null;
   brandId: { _id: string; name: string } | string;
-  typeId?: { _id: string; name: string } | string;
   categoryId?: { _id: string; name: string; slug?: string; variantAxes?: string[]; imageAxis?: string } | string;
   images: IProductImage[];
   variants?: any[];
   stock?: number;
-  /** @deprecated Legacy shoe sizes */
-  sizesStock?: ISizeStock[];
   totalStock: number;
   isOutOfStock: boolean;
   isClearance?: boolean;
@@ -57,8 +53,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const categoryName =
     typeof product.categoryId === "object" && product.categoryId !== null
       ? product.categoryId.name
-      : typeof product.typeId === "object" && product.typeId !== null
-      ? product.typeId.name
       : "";
 
   // Resolve prices with legacy fallback and priceRange
@@ -97,12 +91,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         availableOptions.push(v.name);
       }
     }
-  } else if (Array.isArray(product.sizesStock) && product.sizesStock.length > 0) {
-    availableOptions.push(
-      ...product.sizesStock
-        .filter((s) => s.stock > 0)
-        .map((s) => String(s.size))
-    );
   }
 
   return (
