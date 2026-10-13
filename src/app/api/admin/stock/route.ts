@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Types } from 'mongoose';
 import { connectToDatabase } from '@/lib/db';
 import Product from '@/models/Product';
 import Brand from '@/models/Brand';
-import FootwearType from '@/models/FootwearType';
+import Category from '@/models/Category';
 import Settings from '@/models/Settings';
+import { calculateDerivedProductFields } from '@/lib/derived';
+import { GENDER_ATTRIBUTE_KEY } from '@/lib/genderFilter';
+import { buildStockEntries, sumActiveStock } from '@/lib/stock';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,55 +29,52 @@ export async function GET(req: NextRequest) {
       query.name = { $regex: search, $options: 'i' };
     }
 
-    // Ensure models are registered
+    // Ensure models are registered for populate
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     Brand;
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-    FootwearType;
+    Category;
 
     const products = await Product.find(query)
       .populate('brandId', 'name')
-      .populate('typeId', 'name')
+      .populate('categoryId', 'name')
       .sort({ name: 1 })
       .lean();
 
-    let totalPairsInStock = 0;
+    let totalUnitsInStock = 0;
     let outOfStockProductsCount = 0;
     let lowStockProductsCount = 0;
 
-    // Process products with detailed stock metrics based on TOTAL PAIRS per product
+    // Totals come from the live variants, not from the stored derived `totalStock`,
+    // which order flows do not recalculate after decrementing a variant.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const stockItems = products.map((prod: any) => {
-      const sizesStock = prod.sizesStock || [];
-      const totalStock = sizesStock.reduce(
-        (acc: number, curr: { stock: number }) => acc + curr.stock,
-        0
-      );
+      const entries = buildStockEntries(prod);
+      const totalStock = sumActiveStock(entries);
 
-      totalPairsInStock += totalStock;
+      totalUnitsInStock += totalStock;
       if (totalStock === 0) {
         outOfStockProductsCount++;
       } else if (totalStock <= minStockAlert) {
         lowStockProductsCount++;
       }
 
-      // Evaluated strictly on the TOTAL amount of pairs for this product
-      const hasLowStock = totalStock <= minStockAlert;
+      const genderSpec = Array.isArray(prod.specs)
+        ? prod.specs.find((s: { key: string }) => s.key === GENDER_ATTRIBUTE_KEY)?.value
+        : undefined;
 
       return {
         _id: prod._id,
         name: prod.name,
         brandName: typeof prod.brandId === 'object' && prod.brandId ? prod.brandId.name : '-',
-        typeName: typeof prod.typeId === 'object' && prod.typeId ? prod.typeId.name : '-',
-        gender: prod.gender,
-        price: prod.retailPrice ?? prod.price ?? 0,
-        retailPrice: prod.retailPrice ?? prod.price ?? 0,
-        wholesalePrice: prod.wholesalePrice ?? prod.price ?? 0,
+        categoryName:
+          typeof prod.categoryId === 'object' && prod.categoryId ? prod.categoryId.name : '-',
+        gender: typeof genderSpec === 'string' ? genderSpec : '',
         active: prod.active,
         image: prod.images?.[0]?.url || '',
         totalStock,
-        sizesStock,
-        hasLowStock,
+        entries,
+        hasLowStock: totalStock <= minStockAlert,
       };
     });
 
@@ -84,7 +85,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       data: {
-        totalPairsInStock,
+        totalUnitsInStock,
         totalProductsCount: products.length,
         outOfStockProductsCount,
         lowStockProductsCount,
@@ -104,39 +105,48 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     await connectToDatabase();
-    const { productId, size, newStock } = await req.json();
+    const { productId, variantId, newStock } = await req.json();
 
-    if (!productId || size === undefined || newStock === undefined || newStock < 0) {
+    const stockNum = Number(newStock);
+
+    if (
+      !productId ||
+      !variantId ||
+      newStock === undefined ||
+      !Number.isFinite(stockNum) ||
+      stockNum < 0
+    ) {
       return NextResponse.json(
-        { ok: false, error: 'BAD_REQUEST', message: 'productId, talle y stock válido son obligatorios' },
+        { ok: false, error: 'BAD_REQUEST', message: 'productId, variante y stock válido son obligatorios' },
         { status: 400 }
       );
     }
 
-    const product = await Product.findById(productId);
-
-    if (!product) {
+    if (!Types.ObjectId.isValid(productId) || !Types.ObjectId.isValid(variantId)) {
       return NextResponse.json(
-        { ok: false, error: 'NOT_FOUND', message: 'Producto no encontrado' },
+        { ok: false, error: 'BAD_REQUEST', message: 'Identificador de producto o variante inválido' },
+        { status: 400 }
+      );
+    }
+
+    // Atomic positional update, then refresh the stored derived total
+    const updated = await Product.findOneAndUpdate(
+      { _id: productId, 'variants._id': variantId },
+      { $set: { 'variants.$.stock': Math.floor(stockNum) } },
+      { returnDocument: 'after' }
+    );
+
+    if (!updated) {
+      return NextResponse.json(
+        { ok: false, error: 'NOT_FOUND', message: 'Producto o variante no encontrada' },
         { status: 404 }
       );
     }
 
-    const sizeNum = Number(size);
-    const stockNum = Number(newStock);
+    const derived = calculateDerivedProductFields(updated.variants ?? [], updated.wholesale?.enabled);
+    await Product.updateOne({ _id: productId }, { $set: { totalStock: derived.totalStock } });
 
-    const currentSizes = product.sizesStock || [];
-    const sizeMap = new Map(currentSizes.map((s) => [s.size, s.stock]));
-    sizeMap.set(sizeNum, stockNum);
-
-    product.sizesStock = Array.from(sizeMap.entries()).map(([sz, st]) => ({
-      size: sz,
-      stock: st,
-    }));
-
-    await product.save();
-
-    return NextResponse.json({ ok: true, data: product });
+    return NextResponse.json({ ok: true, data: { productId, totalStock: derived.totalStock } });
   } catch (error) {
     console.error('Error al actualizar stock rápido:', error);
     return NextResponse.json(
