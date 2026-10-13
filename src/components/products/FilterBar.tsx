@@ -9,6 +9,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { SearchBar } from "@/components/common/SearchBar";
+import { BrandFilter } from "@/components/products/BrandFilter";
 import { useSettings } from "@/context/SettingsContext";
 
 interface FilterOption {
@@ -49,8 +50,9 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [availableGenders, setAvailableGenders] = useState<string[]>([]);
 
-  const genders =
-    availableGenders.length > 0 ? availableGenders : ["Hombre", "Mujer", "Unisex"];
+  // Only genders configured as options of the "genero" attribute are offered; there is no built-in list
+  const genders = availableGenders;
+  const showGenderFilter = settings.enableGenders !== false && genders.length > 0;
 
   // Genders are configured through the "genero" attribute, so they do not depend on other filters
   useEffect(() => {
@@ -73,7 +75,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   const activeFiltersCount =
     selectedBrandIds.length +
     selectedCategoryIds.length +
-    (settings.enableGenders !== false && selectedGender !== null ? 1 : 0);
+    (selectedGender !== null ? 1 : 0);
 
   const hasActiveFilters = activeFiltersCount > 0;
 
@@ -189,32 +191,12 @@ export const FilterBar: React.FC<FilterBarProps> = ({
 
             {/* Drawer Content */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* 1. Marcas Filter Chips */}
-              {brands.length > 0 && (
-                <div>
-                  <h4 className="text-xs font-bold text-[#707072] uppercase tracking-wider mb-2.5">
-                    Marca
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {brands.map((brand) => {
-                      const isActive = selectedBrandIds.includes(brand._id);
-                      return (
-                        <button
-                          key={brand._id}
-                          onClick={() => onToggleBrand(brand._id)}
-                          className={`transition-all cursor-pointer ${
-                            isActive
-                              ? "bg-[#111111] text-white font-bold rounded-full px-3.5 py-1.5 text-xs shadow-xs"
-                              : "bg-white text-[#111111] font-semibold border border-[#e5e5e5] hover:border-[#111111] rounded-full px-3.5 py-1.5 text-xs"
-                          }`}
-                        >
-                          {brand.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              {/* 1. Marcas: buscador + lista alfabética de selección múltiple */}
+              <BrandFilter
+                brands={brands}
+                selectedBrandIds={selectedBrandIds}
+                onToggleBrand={onToggleBrand}
+              />
 
               {/* 2. Categorías Filter Chips */}
               {categories.length > 0 && (
@@ -244,7 +226,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               )}
 
               {/* 3. Género Filter */}
-              {settings.enableGenders !== false && (
+              {showGenderFilter && (
                 <div>
                   <h4 className="text-xs font-bold text-[#707072] uppercase tracking-wider mb-2.5">
                     Género

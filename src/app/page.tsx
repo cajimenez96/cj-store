@@ -16,6 +16,7 @@ import { CheckoutModal } from "@/components/checkout";
 import { useCart } from "@/context/CartContext";
 import { IPromotion } from "@/models/Promotion";
 import { apiClient } from "@/lib/api-client";
+import { buildCategoryTree, flattenCategoryLabels } from "@/lib/categoryTree";
 
 function HomeContent() {
   const searchParams = useSearchParams();
@@ -98,17 +99,9 @@ function HomeContent() {
 
         if (brandsRes.data.ok) setBrands(brandsRes.data.data);
         if (categoriesRes.data.ok) {
-          const list: { _id: string; name: string; ancestors?: string[] }[] =
-            categoriesRes.data.data;
-          const nameById = new Map(list.map((c) => [c._id, c.name]));
-          // Child categories read "Parent › Child" so the flat chip list keeps its hierarchy
+          // "Parent › Child" labels, each rubro followed by its own categories
           setCategories(
-            list.map((c) => ({
-              _id: c._id,
-              name: [...(c.ancestors ?? []).map((id) => nameById.get(id)), c.name]
-                .filter(Boolean)
-                .join(" › "),
-            })),
+            flattenCategoryLabels(buildCategoryTree(categoriesRes.data.data)),
           );
         }
       } catch (err) {
