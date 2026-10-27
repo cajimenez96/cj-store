@@ -47,7 +47,7 @@ La tienda queda en [http://localhost:3000](http://localhost:3000) y el panel en 
 | `pnpm dev` | Servidor de desarrollo. |
 | `pnpm build` · `pnpm start` | Compilación y ejecución en producción. |
 | `pnpm lint` | ESLint. |
-| `pnpm seed` · `pnpm seed:prod` | Vacía las colecciones y crea el `superadmin` inicial (`seed:prod` usa `.env.prod`). **Destructivo.** |
+| `pnpm seed` · `pnpm seed:prod` | Crea el `superadmin` inicial si no existe (`seed:prod` usa `.env.prod`). No borra datos. Acepta `SEED_ADMIN_USERNAME`, `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD`. |
 | `pnpm wipe:data` | Vacía todas las colecciones excepto `users`. **Destructivo.** |
 
 ## Primeros pasos en el panel

@@ -294,7 +294,7 @@ La identidad de la tienda, el WhatsApp y los datos bancarios **no** se configura
 | Script | Acción |
 | --- | --- |
 | `pnpm dev` · `build` · `start` · `lint` | Desarrollo, compilación, ejecución y linter. |
-| `pnpm seed` · `seed:prod` | Vacía las colecciones y crea el `superadmin` inicial (`seed:prod` usa `.env.prod`). **Destructivo.** |
+| `pnpm seed` · `seed:prod` | Crea el `superadmin` inicial si no existe (`seed:prod` usa `.env.prod`). No borra datos. Acepta `SEED_ADMIN_USERNAME`, `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD`. |
 | `pnpm wipe:data` | Vacía todas las colecciones excepto `users`. **Destructivo.** |
 
 ---
@@ -377,7 +377,7 @@ Collections: `brands`, `categories`, `attributes`, `products`, `orders`, `salesr
 
 ## 8. ENVIRONMENT VARIABLES AND SCRIPTS
 
-`MONGODB_URI`, `NEXTAUTH_SECRET` (required in production), `NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT`, `NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY`, `IMAGEKIT_PRIVATE_KEY`; scripts accept `ENV_FILE`. Store identity, WhatsApp and bank data live in the `settings` collection, edited from the admin *Ajustes* page. Scripts: `dev`, `build`, `start`, `lint`, `seed` and `seed:prod` (destructive: empty the collections and create the initial `superadmin`), `wipe:data` (empties everything except `users`).
+`MONGODB_URI`, `NEXTAUTH_SECRET` (required in production), `NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT`, `NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY`, `IMAGEKIT_PRIVATE_KEY`; scripts accept `ENV_FILE`. Store identity, WhatsApp and bank data live in the `settings` collection, edited from the admin *Ajustes* page. Scripts: `dev`, `build`, `start`, `lint`, `seed` and `seed:prod` (non-destructive: create the initial `superadmin` only if it does not exist; credentials via `SEED_ADMIN_*`), `wipe:data` (empties everything except `users`).
 
 ## 9. KNOWN TECHNICAL DEBT
 
