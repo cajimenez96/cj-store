@@ -302,7 +302,7 @@ export default function AdminAccountingPage() {
                   {formatPrice(data.summary.incomeTotal)}
                 </div>
                 <p className="text-[11px] text-[#707072] font-semibold">
-                  {data.summary.totalOrdersCount} ventas ({data.summary.totalPairsSold} pares)
+                  {data.summary.totalOrdersCount} ventas ({data.summary.totalPairsSold} unidades)
                 </p>
               </div>
 

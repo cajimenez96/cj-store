@@ -1,5 +1,9 @@
 # Planificación del Proyecto (Kanban) / Project Planning (Kanban)
 
+> **Documento histórico.** Es el plan de trabajo de la versión original del proyecto (tienda de calzado con tipos, géneros y talles fijos). Parte de lo descrito aquí fue reemplazado por categorías, atributos y variantes. El estado actual del sistema está en [producto.md](producto.md) y [arquitectura.md](arquitectura.md).
+>
+> **Historical document.** This is the work plan of the project's original version (a footwear store with fixed types, genders and sizes). Part of what is described here was replaced by categories, attributes and variants. The current state of the system is in [producto.md](producto.md) and [arquitectura.md](arquitectura.md).
+
 ---
 
 # 🇪🇸 VERSIÓN EN ESPAÑOL
@@ -10,7 +14,7 @@ Como Scrum Master y Senior Architect, este proyecto se estructurará bajo un **T
 
 ### Definición de Hecho (Definition of Done - DoD):
 - [ ] Código implementado sin advertencias ni errores de linter/TypeScript.
-- [ ] Componentes de UI verificados contra los tokens y estética definida en [DESIGN.md](file:///Users/carlosjimenez/Documents/Repositorios/e-commerce/docs/DESIGN.md).
+- [ ] Componentes de UI verificados contra los tokens y estética definida en [DESIGN.md](DESIGN.md).
 - [ ] Schemas y contratos de API validados con Zod.
 - [ ] Pruebas unitarias/funcionales ejecutadas exitosamente.
 - [ ] Documentación de código y APIs al día (producto y arquitectura).
@@ -31,7 +35,7 @@ Como Scrum Master y Senior Architect, este proyecto se estructurará bajo un **T
 ### 📌 EPIC 1: Setup Inicial & Infraestructura Base
 * **[T-01] Inicialización de Proyecto Next.js & Estilos**
   - **Prioridad:** Alta | **Estimación:** 2 pts
-  - **Descripción:** Crear proyecto Next.js (App Router), configurar TypeScript, ESLint, Tailwind CSS y mapear tokens de [DESIGN.md](file:///Users/carlosjimenez/Documents/Repositorios/e-commerce/docs/DESIGN.md) (colores `#111111`, `#f5f5f5`, tipografías y `rounded-full`).
+  - **Descripción:** Crear proyecto Next.js (App Router), configurar TypeScript, ESLint, Tailwind CSS y mapear tokens de [DESIGN.md](DESIGN.md) (colores `#111111`, `#f5f5f5`, tipografías y `rounded-full`).
   - **Criterios de Aceptación:** Proyecto compila sin errores, estilos globales configurados y probados.
 
 * **[T-02] Conexión y Configuración de MongoDB**
@@ -49,7 +53,7 @@ Como Scrum Master y Senior Architect, este proyecto se estructurará bajo un **T
 ### 📌 EPIC 2: Modelos de Datos & Sembrado (Seed)
 * **[T-04] Modelo Mongoose de Producto con Doble Precio (`Product`)**
   - **Prioridad:** Alta | **Estimación:** 3 pts
-  - **Descripción:** Definir esquema Mongoose para `Product` incluyendo campos independientes `retailPrice` y `wholesalePrice`, marcas, tipos y stock por talle según [arquitectura.md](file:///Users/carlosjimenez/Documents/Repositorios/e-commerce/docs/arquitectura.md).
+  - **Descripción:** Definir esquema Mongoose para `Product` incluyendo campos independientes `retailPrice` y `wholesalePrice`, marcas, tipos y stock por talle según [arquitectura.md](arquitectura.md).
   - **Criterios de Aceptación:** Schema compilado con campos `retailPrice` y `wholesalePrice` requeridos, e índices únicos configurados.
 
 * **[T-05] Modelos Mongoose para Órdenes, Histórico & Promociones (`Order`, `SalesRecord`, `Promotion`)**
@@ -67,7 +71,7 @@ Como Scrum Master y Senior Architect, este proyecto se estructurará bajo un **T
 ### 📌 EPIC 3: Catálogo Cliente & Landing Page
 * **[T-07] Layout General (Header, Footer & Navigation)**
   - **Prioridad:** Alta | **Estimación:** 2 pts
-  - **Descripción:** Maquetar Header con logo, barra de búsqueda e ícono de carrito, y Footer informativo siguiendo [DESIGN.md](file:///Users/carlosjimenez/Documents/Repositorios/e-commerce/docs/DESIGN.md).
+  - **Descripción:** Maquetar Header con logo, barra de búsqueda e ícono de carrito, y Footer informativo siguiendo [DESIGN.md](DESIGN.md).
   - **Criterios de Aceptación:** Layout responsive, accesible y pixel-perfect según diseño Nike-editorial.
 
 * **[T-08] Carrusel de Promociones (Banners con Info Mayorista)**

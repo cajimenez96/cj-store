@@ -9,6 +9,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { SearchBar } from "@/components/common/SearchBar";
+import { BrandFilter } from "@/components/products/BrandFilter";
 import { useSettings } from "@/context/SettingsContext";
 
 interface FilterOption {
@@ -20,126 +21,47 @@ export type ProductSort = "price_asc" | "price_desc" | null;
 
 interface FilterBarProps {
   brands: FilterOption[];
-  types: FilterOption[];
+  categories: FilterOption[];
   selectedBrandIds: string[];
-  selectedTypeIds: string[];
-  selectedSize: number | null;
+  selectedCategoryIds: string[];
   selectedGender: string | null;
   selectedSort: ProductSort;
   onToggleBrand: (brandId: string) => void;
-  onToggleType: (typeId: string) => void;
-  onSelectSize: (size: number | null) => void;
+  onToggleCategory: (categoryId: string) => void;
   onSelectGender: (gender: string | null) => void;
   onSelectSort: (sort: ProductSort) => void;
   onClearFilters: () => void;
 }
 
-interface TallesFilterProps {
-  availableSizes: number[];
-  selectedSize: number | null;
-  onSelectSize: (size: number | null) => void;
-  className?: string;
-  title?: string;
-}
-
-export const TallesFilter: React.FC<TallesFilterProps> = ({
-  availableSizes,
-  selectedSize,
-  onSelectSize,
-  className = "",
-  title = "Talles Disponibles",
-}) => {
-  if (availableSizes.length === 0) return null;
-
-  return (
-    <div className={className}>
-      {title && (
-        <h4 className="text-xs font-bold text-[#707072] uppercase tracking-wider mb-2.5">
-          {title}
-        </h4>
-      )}
-      <div className="flex flex-wrap gap-1.5">
-        {availableSizes.map((size) => {
-          const isActive = selectedSize === size;
-          return (
-            <button
-              key={size}
-              onClick={() => onSelectSize(isActive ? null : size)}
-              className={`w-10 h-10 text-xs font-bold rounded-full transition-all flex items-center justify-center cursor-pointer ${
-                isActive
-                  ? "bg-[#111111] text-white shadow-xs"
-                  : "bg-white text-[#111111] border border-[#e5e5e5] hover:border-[#111111]"
-              }`}
-            >
-              {size}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
 export const FilterBar: React.FC<FilterBarProps> = ({
   brands,
-  types,
+  categories,
   selectedBrandIds,
-  selectedTypeIds,
-  selectedSize,
+  selectedCategoryIds,
   selectedGender,
   selectedSort,
   onToggleBrand,
-  onToggleType,
-  onSelectSize,
+  onToggleCategory,
   onSelectGender,
   onSelectSort,
   onClearFilters,
 }) => {
   const { settings } = useSettings();
   const [isOpen, setIsOpen] = useState(false);
-  const [availableSizes, setAvailableSizes] = useState<number[]>([]);
   const [availableGenders, setAvailableGenders] = useState<string[]>([]);
-  const [configuredGenders, setConfiguredGenders] = useState<string[]>([]);
 
-  // Fetch configured genders from DB
-  useEffect(() => {
-    fetch("/api/sizes")
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.ok && json.data) {
-          setConfiguredGenders(Object.keys(json.data).sort());
-        }
-      })
-      .catch((err) => console.error("Error fetching genders:", err));
-  }, []);
+  // Only genders configured as options of the "genero" attribute are offered; there is no built-in list
+  const genders = availableGenders;
+  const showGenderFilter = settings.enableGenders !== false && genders.length > 0;
 
-  const genders =
-    configuredGenders.length > 0
-      ? configuredGenders
-      : availableGenders.length > 0
-      ? availableGenders
-      : ["Hombre", "Mujer", "Unisex"];
-
-  // Fetch available filters dynamically based on selected filters
+  // Genders are configured through the "genero" attribute, so they do not depend on other filters
   useEffect(() => {
     const fetchAvailableFilters = async () => {
       try {
-        const params = new URLSearchParams();
-        if (selectedBrandIds.length > 0) {
-          params.append("brandId", selectedBrandIds.join(","));
-        }
-        if (selectedTypeIds.length > 0) {
-          params.append("typeId", selectedTypeIds.join(","));
-        }
-        if (selectedGender) {
-          params.append("gender", selectedGender);
-        }
-
-        const res = await fetch(`/api/catalog/available-filters?${params}`);
+        const res = await fetch("/api/catalog/available-filters");
         const json = await res.json();
 
         if (json.ok && json.data) {
-          setAvailableSizes(json.data.sizes || []);
           setAvailableGenders(json.data.genders || []);
         }
       } catch (err) {
@@ -148,13 +70,12 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     };
 
     fetchAvailableFilters();
-  }, [selectedBrandIds, selectedTypeIds, selectedGender]);
+  }, []);
 
   const activeFiltersCount =
     selectedBrandIds.length +
-    selectedTypeIds.length +
-    (selectedSize !== null ? 1 : 0) +
-    (settings.enableGenders !== false && selectedGender !== null ? 1 : 0);
+    selectedCategoryIds.length +
+    (selectedGender !== null ? 1 : 0);
 
   const hasActiveFilters = activeFiltersCount > 0;
 
@@ -169,14 +90,6 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             inputClassName="bg-white border border-[#e5e5e5]"
           />
         </div>
-
-        {/* Talles only mobile */}
-        <TallesFilter
-          availableSizes={availableSizes}
-          selectedSize={selectedSize}
-          onSelectSize={onSelectSize}
-          className="block sm:hidden mb-3"
-        />
 
         {/* Header Row */}
         <div className="flex justify-between items-center gap-2">
@@ -278,53 +191,33 @@ export const FilterBar: React.FC<FilterBarProps> = ({
 
             {/* Drawer Content */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* 1. Marcas Filter Chips */}
-              {brands.length > 0 && (
-                <div>
-                  <h4 className="text-xs font-bold text-[#707072] uppercase tracking-wider mb-2.5">
-                    Marca
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {brands.map((brand) => {
-                      const isActive = selectedBrandIds.includes(brand._id);
-                      return (
-                        <button
-                          key={brand._id}
-                          onClick={() => onToggleBrand(brand._id)}
-                          className={`transition-all cursor-pointer ${
-                            isActive
-                              ? "bg-[#111111] text-white font-bold rounded-full px-3.5 py-1.5 text-xs shadow-xs"
-                              : "bg-white text-[#111111] font-semibold border border-[#e5e5e5] hover:border-[#111111] rounded-full px-3.5 py-1.5 text-xs"
-                          }`}
-                        >
-                          {brand.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              {/* 1. Marcas: buscador + lista alfabética de selección múltiple */}
+              <BrandFilter
+                brands={brands}
+                selectedBrandIds={selectedBrandIds}
+                onToggleBrand={onToggleBrand}
+              />
 
-              {/* 2. Tipos de Calzado Filter Chips */}
-              {types.length > 0 && (
+              {/* 2. Categorías Filter Chips */}
+              {categories.length > 0 && (
                 <div>
                   <h4 className="text-xs font-bold text-[#707072] uppercase tracking-wider mb-2.5">
-                    Tipo de Calzado
+                    Categoría
                   </h4>
                   <div className="flex flex-wrap gap-2">
-                    {types.map((type) => {
-                      const isActive = selectedTypeIds.includes(type._id);
+                    {categories.map((category) => {
+                      const isActive = selectedCategoryIds.includes(category._id);
                       return (
                         <button
-                          key={type._id}
-                          onClick={() => onToggleType(type._id)}
+                          key={category._id}
+                          onClick={() => onToggleCategory(category._id)}
                           className={`transition-all cursor-pointer ${
                             isActive
                               ? "bg-[#111111] text-white font-bold rounded-full px-3.5 py-1.5 text-xs shadow-xs"
                               : "bg-white text-[#111111] font-semibold border border-[#e5e5e5] hover:border-[#111111] rounded-full px-3.5 py-1.5 text-xs"
                           }`}
                         >
-                          {type.name}
+                          {category.name}
                         </button>
                       );
                     })}
@@ -333,7 +226,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               )}
 
               {/* 3. Género Filter */}
-              {settings.enableGenders !== false && (
+              {showGenderFilter && (
                 <div>
                   <h4 className="text-xs font-bold text-[#707072] uppercase tracking-wider mb-2.5">
                     Género
@@ -358,14 +251,6 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                   </div>
                 </div>
               )}
-
-              {/* 4. Talles Grid Selector */}
-              <TallesFilter
-                availableSizes={availableSizes}
-                selectedSize={selectedSize}
-                onSelectSize={onSelectSize}
-                className="hidden md:block"
-              />
             </div>
 
             {/* Drawer Footer Actions */}

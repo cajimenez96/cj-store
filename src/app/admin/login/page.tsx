@@ -128,12 +128,12 @@ function LoginFormContent() {
 
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="w-full space-y-4">
-          {/* Usuario o correo */}
+          {/* Usuario*/}
           <div className="relative">
             <User className="w-5 h-5 text-[#C5A880] absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
-              placeholder="Usuario o correo"
+              placeholder="Usuario"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="w-full bg-[#141417]/90 border border-[#2b2b31] text-white placeholder-[#717178] text-sm rounded-2xl py-3.5 pl-12 pr-4 focus:outline-none focus:border-[#C5A880] focus:ring-1 focus:ring-[#C5A880]/50 transition-all [color-scheme:dark] [&:-webkit-autofill]:shadow-[0_0_0_1000px_#141417_inset] [&:-webkit-autofill]:[-webkit-text-fill-color:#fff]"

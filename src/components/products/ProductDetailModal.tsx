@@ -22,7 +22,6 @@ export interface CartItemAddPayload {
   sku?: string;
   retailPrice?: number;
   wholesalePrice?: number;
-  size?: number;
   qty: number;
 }
 
@@ -40,7 +39,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const [selectedImage, setSelectedImage] = useState<string>("");
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
-  const [selectedSize, setSelectedSize] = useState<number | null>(null);
   const [quantity, setQuantity] = useState<number>(1);
   const [addedSuccess, setAddedSuccess] = useState(false);
 
@@ -48,7 +46,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const { isWholesale, totalUnits } = useCart();
 
   const hasVariants = Boolean(product?.variants && product.variants.length > 0);
-  const hasSizes = Boolean(product?.sizesStock && product.sizesStock.length > 0);
 
   // Extract distinct option axes across variants
   const axes = React.useMemo(() => {
@@ -127,16 +124,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           setSelectedOptions({});
           setSelectedVariant(firstAvailable ? firstAvailable.name : null);
         }
-        setSelectedSize(null);
-      } else if (product.sizesStock && product.sizesStock.length > 0) {
-        const firstAvailable = product.sizesStock.find((s) => s.stock > 0);
-        setSelectedSize(firstAvailable ? firstAvailable.size : null);
-        setSelectedOptions({});
-        setSelectedVariant(null);
       } else {
         setSelectedOptions({});
         setSelectedVariant(null);
-        setSelectedSize(null);
       }
       setQuantity(1);
       setAddedSuccess(false);
@@ -153,8 +143,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const categoryName =
     typeof product.categoryId === "object" && product.categoryId !== null
       ? product.categoryId.name
-      : typeof product.typeId === "object" && product.typeId !== null
-      ? product.typeId.name
       : "";
 
   // Resolve prices for active variant
@@ -175,17 +163,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   let maxStock = 0;
   if (matchedVariant) {
     maxStock = matchedVariant.stock ?? 0;
-  } else if (hasSizes) {
-    const currentSizeObj = product.sizesStock?.find((s) => s.size === selectedSize);
-    maxStock = currentSizeObj ? currentSizeObj.stock : 0;
   } else {
     maxStock = product.stock ?? product.totalStock ?? 0;
   }
 
-  const canAddToCart =
-    maxStock > 0 &&
-    (!hasVariants || !!matchedVariant) &&
-    (!hasSizes || selectedSize !== null);
+  const canAddToCart = maxStock > 0 && (!hasVariants || !!matchedVariant);
 
   const formattedVariantLabel = matchedVariant
     ? Array.isArray(matchedVariant.options) && matchedVariant.options.length > 0
@@ -224,7 +206,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       sku: matchedVariant?.sku,
       retailPrice,
       wholesalePrice,
-      size: selectedSize ?? undefined,
       qty: quantity,
     });
     setAddedSuccess(true);
@@ -304,7 +285,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 <div className="flex items-center gap-2 text-xs font-bold text-[#707072] uppercase tracking-wider">
                   <span>{brandName}</span>
                   {categoryName && <span>• {categoryName}</span>}
-                  {product.gender && <span>• {product.gender}</span>}
                 </div>
 
                 {product.isClearance && (
@@ -474,58 +454,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                           </button>
                         );
                       })}
-                    </div>
-                  </div>
-                ) : hasSizes ? (
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <label className="text-xs font-extrabold text-[#111111] uppercase tracking-wider">
-                        Seleccionar Talle
-                      </label>
-                      {selectedSize !== null && (
-                        <span className="text-xs text-[#707072]">
-                          Stock disponible:{" "}
-                          <strong className="text-[#111111]">
-                            {maxStock} unidades
-                          </strong>
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-5 gap-2">
-                      {product.sizesStock!
-                        .filter((s) => {
-                          const displayedSizes =
-                            (product as any).displayedSizes || [];
-                          return (
-                            displayedSizes.length === 0 ||
-                            displayedSizes.includes(s.size)
-                          );
-                        })
-                        .map((s) => {
-                          const hasStock = s.stock > 0;
-                          const isSelected = selectedSize === s.size;
-
-                          return (
-                            <button
-                              key={s.size}
-                              disabled={!hasStock}
-                              onClick={() => {
-                                setSelectedSize(s.size);
-                                setQuantity(1);
-                              }}
-                              className={`h-11 font-bold text-xs rounded-none border transition-all ${
-                                isSelected
-                                  ? "bg-[#111111] text-white border-[#111111] shadow-xs cursor-pointer"
-                                  : hasStock
-                                    ? "bg-white text-[#111111] border-[#e5e5e5] hover:border-[#111111] cursor-pointer"
-                                    : "bg-[#f5f5f5] text-[#cacacb] border-transparent cursor-not-allowed line-through"
-                              }`}
-                            >
-                              {s.size}
-                            </button>
-                          );
-                        })}
                     </div>
                   </div>
                 ) : (

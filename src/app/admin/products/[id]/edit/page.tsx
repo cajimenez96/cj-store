@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { AdminNav } from '@/components/admin/AdminNav';
 import { ProductForm } from '@/components/admin/ProductForm';
 import { Loader2 } from 'lucide-react';
-import { GenderType, IProductImage, ISizeStock } from '@/models/Product';
+import { IProductImage } from '@/models/Product';
 
 interface FullProduct {
   _id: string;
@@ -13,12 +13,8 @@ interface FullProduct {
   description: string;
   price: number;
   brandId: { _id: string; name: string } | string;
-  typeId: { _id: string; name: string } | string;
-  gender: GenderType;
   active: boolean;
   images: IProductImage[];
-  sizesStock: ISizeStock[];
-  displayedSizes?: number[];
 }
 
 export default function EditProductPage() {

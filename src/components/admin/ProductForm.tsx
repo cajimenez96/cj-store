@@ -125,14 +125,19 @@ export const ProductForm: React.FC<ProductFormProps> = ({
   const [selectedAxisValues, setSelectedAxisValues] = useState<Record<string, string[]>>({});
 
   // Simple Product Fields (when category has 0 axes)
+  // The stored variant is the source of truth: sales and the Stock page change it, while the
+  // product-level `stock` and `retailPrice` fields are only written when the form is saved.
   const [simplePrice, setSimplePrice] = useState<number | ''>(
-    initialData?.retailPrice ?? initialData?.priceRange?.min ?? ''
+    initialData?.variants?.[0]?.retailPrice ??
+      initialData?.retailPrice ??
+      initialData?.priceRange?.min ??
+      ''
   );
   const [simpleWholesalePrice, setSimpleWholesalePrice] = useState<number | ''>(
-    initialData?.wholesalePrice ?? ''
+    initialData?.variants?.[0]?.wholesalePrice ?? initialData?.wholesalePrice ?? ''
   );
   const [simpleStock, setSimpleStock] = useState<number | ''>(
-    initialData?.stock ?? initialData?.totalStock ?? 0
+    initialData?.variants?.[0]?.stock ?? initialData?.stock ?? initialData?.totalStock ?? 0
   );
   const [simpleSku, setSimpleSku] = useState<string>(initialData?.variants?.[0]?.sku || '');
 
@@ -178,8 +183,6 @@ export const ProductForm: React.FC<ProductFormProps> = ({
           m[s.key] = s.value;
         });
         setSpecsMap(m);
-      } else if (initialData.gender) {
-        setSpecsMap({ genero: initialData.gender });
       }
 
       // Variants
@@ -209,20 +212,6 @@ export const ProductForm: React.FC<ProductFormProps> = ({
           finalSelected[k] = Array.from(s);
         });
         setSelectedAxisValues(finalSelected);
-      } else if (Array.isArray(initialData.sizesStock) && initialData.sizesStock.length > 0) {
-        // Fallback from legacy shoe sizes
-        const mapped: FormVariant[] = initialData.sizesStock.map((s: any) => ({
-          sku: `${(initialData.slug || 'PROD').toUpperCase()}-T${String(s.size).replace('.', '_')}`,
-          options: [{ key: 'talle_calzado', value: String(s.size) }],
-          retailPrice: initialData.retailPrice || 0,
-          wholesalePrice: initialData.wholesalePrice,
-          stock: s.stock || 0,
-          active: true,
-        }));
-        setVariants(mapped);
-        setSelectedAxisValues({
-          talle_calzado: initialData.sizesStock.map((s: any) => String(s.size)),
-        });
       }
     }
   }, [initialData]);
@@ -437,6 +426,8 @@ export const ProductForm: React.FC<ProductFormProps> = ({
 
       finalVariants = [
         {
+          // Reuse the stored variant id when editing so references to it stay valid
+          _id: variants[0]?._id,
           sku: simpleSku.trim() || generateSku(slug || name, []),
           options: [],
           retailPrice: finalRetailPrice,

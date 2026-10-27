@@ -7,85 +7,50 @@ dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-import {
-  Brand,
-  FootwearType,
-  Product,
-  Promotion,
-  Order,
-  SalesRecord,
-  Expense,
-  GenderSize,
-  Settings,
-  User,
-} from "../src/models";
+import { User } from "../src/models";
 
 const MONGODB_URI =
   process.env.MONGODB_URI || "mongodb://localhost:27017/cj-store";
 
+const ADMIN_USERNAME = process.env.SEED_ADMIN_USERNAME || "superadmin";
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL || "admin@cjstore.com";
+const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || "AdminPassword123!";
+
 async function runSeed() {
   try {
-    console.log("====================================================");
-    console.log(`🚀 INICIANDO RESET & SEED (${envFile})`);
-    console.log("====================================================");
+    console.log(`🚀 Seed (${envFile})`);
     console.log(
       "🔄 Conectando a MongoDB en:",
       MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, "//$1:****@"),
     );
     await mongoose.connect(MONGODB_URI);
-    console.log("✅ Conexión establecida con éxito.\n");
+    console.log("✅ Conexión establecida.");
 
-    // 1. Limpieza total de todas las colecciones
-    console.log("🧹 [1/4] Vaciando colecciones...");
-    await Promise.all([
-      User.deleteMany({}),
-      Order.deleteMany({}),
-      SalesRecord.deleteMany({}),
-      Expense.deleteMany({}),
-      Product.deleteMany({}),
-      Promotion.deleteMany({}),
-      Brand.deleteMany({}),
-      FootwearType.deleteMany({}),
-      GenderSize.deleteMany({}),
-      Settings.deleteMany({}),
-    ]);
-    console.log(
-      "   ✓ Usuarios y Transaccionales (Users, Orders, Sales, Expenses) -> 0",
-    );
-    console.log(
-      "   ✓ Catálogo y Marketing (Products, Promotions)      -> 0 registros",
-    );
-    console.log(
-      "   ✓ Maestras y Ajustes (Brands, Types, Sizes, Settings) -> Limpias\n",
-    );
+    const existing = await User.findOne({ username: ADMIN_USERNAME });
+    if (existing) {
+      console.log(`ℹ️  El usuario "${ADMIN_USERNAME}" ya existe. No se modificó nada.`);
+      return;
+    }
 
-    // 6. Crear Usuario Superadmin Inicial
-    console.log("\n👤 Creando usuario Superadmin inicial...");
-    const superadminPassword = "AdminPassword123!";
-    const passwordHash = await bcrypt.hash(superadminPassword, 10);
+    const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
     await User.create({
-      username: "superadmin",
+      username: ADMIN_USERNAME,
       name: "Super Administrador",
-      email: "admin@cjstore.com",
+      email: ADMIN_EMAIL,
       passwordHash,
       role: "superadmin",
       active: true,
     });
-    console.log("   ✓ Superadmin creado con éxito");
-    console.log("     ➜ Usuario:    superadmin");
-    console.log("     ➜ Contraseña: AdminPassword123!");
+    console.log(`👤 Superadmin creado: ${ADMIN_USERNAME}`);
 
-    console.log("\n====================================================");
-    console.log("🎉 BASE DE DATOS RESETEADA Y LISTA");
-    console.log("====================================================");
-    console.log("📊 Resumen del estado actual:");
-    console.log("   - Superadmin:       1 (superadmin / AdminPassword123!)");
-    console.log("   - Productos:        0 (listo para carga admin)");
-    console.log("   - Pedidos:          0");
-    console.log("====================================================\n");
+    if (!process.env.SEED_ADMIN_PASSWORD) {
+      console.warn(
+        "⚠️  Se usó la contraseña por defecto. Definí SEED_ADMIN_PASSWORD o cambiala tras el primer login.",
+      );
+    }
   } catch (error) {
     console.error("❌ Error durante la ejecución del seed:", error);
-    process.exit(1);
+    process.exitCode = 1;
   } finally {
     await mongoose.connection.close();
     console.log("🔌 Conexión cerrada.");

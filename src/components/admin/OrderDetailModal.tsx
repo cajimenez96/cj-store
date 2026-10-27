@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { X, MessageSquare, Check, Ban, Clock, Loader2, ShieldCheck, Edit3, ShoppingBag, ZoomIn } from 'lucide-react';
 import type { OrderStatus } from '@/models/Order';
 import { formatPrice } from '@/utils/formatCurrency';
+import { useSettings } from '@/context/SettingsContext';
 
 export interface AdminOrderItem {
   _id: string;
@@ -26,7 +27,10 @@ export interface AdminOrderItem {
     productId: string;
     name: string;
     image?: string;
-    size: number;
+    variantId?: string;
+    sku?: string;
+    variantLabel?: string;
+    variantName?: string;
     qty: number;
     appliedPriceType?: 'retail' | 'wholesale' | 'custom';
     unitPrice: number;
@@ -67,19 +71,21 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 }) => {
   const [updating, setUpdating] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('efectivo');
+  const { settings } = useSettings();
   const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
 
   if (!order) return null;
 
   const whatsappPhone = order.guest.phone.replace(/[^0-9]/g, '');
   const itemsList = order.items
-    .map(
-      (item) =>
-        `• ${item.qty}x ${item.name}\n   - Talle: ${item.size}\n   - Subtotal: ${formatPrice(item.subtotal)}`
-    )
+    .map((item) => {
+      const variantDescription = item.variantLabel || item.variantName;
+      const variantText = variantDescription ? `\n   - Variante: ${variantDescription}` : '';
+      return `• ${item.qty}x ${item.name}${variantText}\n   - Subtotal: ${formatPrice(item.subtotal)}`;
+    })
     .join('\n\n');
 
-  const whatsappMessage = `¡Hola ${order.guest.name}! Te escribimos de FP Zapatillas respecto a tu solicitud #${order.orderNumber} 👟
+  const whatsappMessage = `¡Hola ${order.guest.name}! Te escribimos de ${settings.storeName} respecto a tu solicitud #${order.orderNumber} ✨
 
 📦 *DETALLE DE TU PEDIDO:*
 ${itemsList}
@@ -174,7 +180,7 @@ ${itemsList}
         {/* Order Items Table */}
         <div className="space-y-2">
           <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#111111]">
-            Desglose de Calzado Solicitado ({order.items.length} líneas)
+            Detalle de Productos Solicitados ({order.items.length} líneas)
           </h3>
           <div className="border border-[#e5e5e5] bg-[#f5f5f5] divide-y divide-[#e5e5e5]">
             {order.items.map((item, idx) => (
@@ -214,8 +220,12 @@ ${itemsList}
                   <div className="min-w-0">
                     <h5 className="font-bold text-[#111111] truncate">{item.name}</h5>
                     <p className="text-[#707072] mt-0.5">
-                      Talle: <strong className="text-[#111111]">{item.size}</strong> • Cantidad:{' '}
-                      <strong className="text-[#111111]">{item.qty}</strong>
+                      {(item.variantLabel || item.variantName) && (
+                        <>
+                          Variante: <strong className="text-[#111111]">{item.variantLabel || item.variantName}</strong> •{' '}
+                        </>
+                      )}
+                      Cantidad: <strong className="text-[#111111]">{item.qty}</strong>
                       {item.appliedPriceType && (
                         <span
                           className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold ${

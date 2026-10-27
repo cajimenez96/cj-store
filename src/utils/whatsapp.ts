@@ -10,7 +10,7 @@ export interface WhatsAppMessagePayload {
   items: Array<{
     name: string;
     variantName?: string;
-    size?: number;
+    variantLabel?: string;
     qty: number;
     price: number;
     subtotal: number;
@@ -27,11 +27,8 @@ export function buildWhatsAppShareUrl(payload: WhatsAppMessagePayload): string {
 
   const itemsList = payload.items
     .map((item) => {
-      const variantText = item.variantName
-        ? `\n   - Variante: ${item.variantName}`
-        : item.size !== undefined
-          ? `\n   - Talle: ${item.size}`
-          : "";
+      const variantDescription = item.variantLabel || item.variantName;
+      const variantText = variantDescription ? `\n   - Variante: ${variantDescription}` : "";
       return `• ${item.qty}x ${item.name}${variantText}\n   - Subtotal: ${formatPrice(item.subtotal)}`;
     })
     .join("\n\n");

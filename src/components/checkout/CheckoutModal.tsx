@@ -50,7 +50,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose })
         variantLabel: item.variantLabel,
         variantName: item.variantName,
         sku: item.sku,
-        size: item.size,
         qty: item.qty,
       })),
     };
@@ -90,7 +89,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose })
     return {
       name: item.name,
       variantName: item.variantLabel || item.variantName,
-      size: item.size,
       qty: item.qty,
       price: effectivePrice,
       subtotal: effectivePrice * item.qty,

@@ -5,26 +5,24 @@ import Image from 'next/image';
 import { AdminNav } from '@/components/admin/AdminNav';
 import { Boxes, Search, AlertTriangle, Plus, Minus, RefreshCw } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
+import { StockEntry, sumActiveStock } from '@/lib/stock';
 
 interface StockProductItem {
   _id: string;
   name: string;
   brandName: string;
-  typeName: string;
+  categoryName: string;
   gender: string;
-  price: number;
-  retailPrice: number;
-  wholesalePrice: number;
   active: boolean;
   image: string;
   totalStock: number;
-  sizesStock: Array<{ size: number; stock: number }>;
+  entries: StockEntry[];
   hasLowStock: boolean;
 }
 
 export default function AdminStockPage() {
   const [items, setItems] = useState<StockProductItem[]>([]);
-  const [totalPairs, setTotalPairs] = useState(0);
+  const [totalUnits, setTotalUnits] = useState(0);
   const [totalProducts, setTotalProducts] = useState(0);
   const [outOfStockCount, setOutOfStockCount] = useState(0);
   const [lowStockCount, setLowStockCount] = useState(0);
@@ -46,7 +44,7 @@ export default function AdminStockPage() {
       const json = await res.json();
       if (json.ok && json.data) {
         setItems(json.data.items);
-        setTotalPairs(json.data.totalPairsInStock);
+        setTotalUnits(json.data.totalUnitsInStock);
         setTotalProducts(json.data.totalProductsCount);
         setOutOfStockCount(json.data.outOfStockProductsCount);
         setLowStockCount(json.data.lowStockProductsCount || 0);
@@ -68,37 +66,40 @@ export default function AdminStockPage() {
 
   const handleUpdateSingleStock = async (
     productId: string,
-    size: number,
-    currentStock: number,
+    entry: StockEntry,
     delta: number
   ) => {
-    const newStock = Math.max(0, currentStock + delta);
-    setUpdatingId(`${productId}-${size}`);
+    const newStock = Math.max(0, entry.stock + delta);
+    setUpdatingId(`${productId}-${entry.key}`);
 
     try {
       const res = await fetch('/api/admin/stock', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId, size, newStock }),
+        body: JSON.stringify({
+          productId,
+          variantId: entry.variantId,
+          newStock,
+        }),
       });
 
       const json = await res.json();
 
       if (!json.ok) {
-        throw new Error(json.message || 'Error al actualizar el talle');
+        throw new Error(json.message || 'Error al actualizar la variante');
       }
 
       // Optimistic update
       setItems((prev) =>
         prev.map((prod) => {
           if (prod._id === productId) {
-            const updatedSizes = prod.sizesStock.map((s) =>
-              s.size === size ? { ...s, stock: newStock } : s
+            const updatedEntries = prod.entries.map((e) =>
+              e.key === entry.key ? { ...e, stock: newStock } : e
             );
-            const newTotal = updatedSizes.reduce((acc, curr) => acc + curr.stock, 0);
+            const newTotal = sumActiveStock(updatedEntries);
             return {
               ...prod,
-              sizesStock: updatedSizes,
+              entries: updatedEntries,
               totalStock: newTotal,
               hasLowStock: newTotal <= minStockAlert,
             };
@@ -106,7 +107,8 @@ export default function AdminStockPage() {
           return prod;
         })
       );
-      toast.success(`Talle ${size} actualizado a ${newStock} pares`);
+      setTotalUnits((prev) => (entry.active ? prev + (newStock - entry.stock) : prev));
+      toast.success(`${entry.label} actualizado a ${newStock} unidades`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al actualizar stock');
     } finally {
@@ -126,7 +128,7 @@ export default function AdminStockPage() {
               <Boxes className="w-7 h-7" /> Control de Stock e Inventario
             </h1>
             <p className="text-xs text-[#707072] mt-1">
-              Monitoreá el stock total por modelo, alertas de reposición (total ≤ {minStockAlert} pares) y modificá cantidades en tiempo real.
+              Monitoreá el stock total por producto, alertas de reposición (total ≤ {minStockAlert} unidades) y modificá cantidades por variante en tiempo real.
             </p>
           </div>
 
@@ -145,23 +147,23 @@ export default function AdminStockPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white p-5 border border-[#e5e5e5] space-y-1 shadow-sm">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#707072] block">
-              TOTAL DE PARES EN INVENTARIO
+              TOTAL DE UNIDADES EN INVENTARIO
             </span>
-            <span className="text-2xl font-extrabold text-[#111111]">{totalPairs} pares</span>
+            <span className="text-2xl font-extrabold text-[#111111]">{totalUnits} unidades</span>
             <span className="text-xs text-[#707072] block font-semibold">
-              Distribuídos en {totalProducts} modelos
+              Distribuidas en {totalProducts} productos
             </span>
           </div>
 
           <div className="bg-white p-5 border border-[#e5e5e5] space-y-1 shadow-sm">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#707072] block">
-              MODELOS CON STOCK BAJO / CRÍTICO
+              PRODUCTOS CON STOCK BAJO / CRÍTICO
             </span>
             <span className="text-2xl font-extrabold text-[#f59e0b]">
-              {lowStockCount + outOfStockCount} modelos
+              {lowStockCount + outOfStockCount} productos
             </span>
             <span className="text-xs text-[#707072] block font-semibold">
-              Total de pares ≤ {minStockAlert} ({outOfStockCount} agotados)
+              Total de unidades ≤ {minStockAlert} ({outOfStockCount} agotados)
             </span>
           </div>
 
@@ -181,7 +183,7 @@ export default function AdminStockPage() {
           <div className="relative w-full sm:w-80">
             <input
               type="text"
-              placeholder="Buscar por modelo de calzado..."
+              placeholder="Buscar por nombre de producto..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-medium py-2.5 pl-9 pr-4 rounded-none border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
@@ -198,7 +200,7 @@ export default function AdminStockPage() {
                 className="w-4 h-4 accent-[#111111] cursor-pointer"
               />
               <span className="flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5 text-[#f59e0b]" /> Ver sólo modelos con stock crítico (Total ≤ {minStockAlert} pares)
+                <AlertTriangle className="w-3.5 h-3.5 text-[#f59e0b]" /> Ver sólo productos con stock crítico (Total ≤ {minStockAlert} unidades)
               </span>
             </label>
           </div>
@@ -242,7 +244,9 @@ export default function AdminStockPage() {
                           {prod.name}
                         </h3>
                         <p className="text-[11px] text-[#707072] font-semibold">
-                          {prod.brandName} • {prod.typeName} • {prod.gender}
+                          {[prod.brandName, prod.categoryName, prod.gender]
+                            .filter((part) => part && part !== '-')
+                            .join(' • ')}
                         </p>
                       </div>
                     </div>
@@ -257,65 +261,71 @@ export default function AdminStockPage() {
                             : 'bg-[#f5f5f5] text-[#111111] border-[#e5e5e5]'
                         }`}
                       >
-                        {prod.totalStock === 0
-                          ? 'AGOTADO (0 pares)'
+                        {prod.entries.length === 0
+                          ? 'SIN VARIANTES'
+                          : prod.totalStock === 0
+                          ? 'AGOTADO (0 unidades)'
                           : prod.totalStock <= minStockAlert
-                          ? `STOCK BAJO (Total: ${prod.totalStock} pares)`
-                          : `Total: ${prod.totalStock} pares`}
+                          ? `STOCK BAJO (Total: ${prod.totalStock} unidades)`
+                          : `Total: ${prod.totalStock} unidades`}
                       </span>
                     </div>
                   </div>
 
-                  {/* Stock Grid per Size for this Product */}
-                  <div className="grid grid-cols-2 sm:grid-cols-5 md:grid-cols-8 gap-2 bg-[#f5f5f5] p-3 border border-[#e5e5e5]">
-                    {prod.sizesStock.map((sizeItem) => {
-                      const isSavingThis = updatingId === `${prod._id}-${sizeItem.size}`;
-                      const isZero = sizeItem.stock === 0;
+                  {/* Stock Grid per Variant for this Product */}
+                  {prod.entries.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 bg-[#f5f5f5] p-3 border border-[#e5e5e5]">
+                      {prod.entries.map((entry) => {
+                        const isSavingThis = updatingId === `${prod._id}-${entry.key}`;
+                        const isZero = entry.stock === 0;
 
-                      return (
-                        <div
-                          key={sizeItem.size}
-                          className={`p-2 bg-white border space-y-1 text-center transition-all ${
-                            isZero
-                              ? 'border-[#d30005]/40 bg-[#d30005]/5'
-                              : 'border-[#e5e5e5]'
-                          }`}
-                        >
-                          <span className="block text-[11px] font-extrabold text-[#111111]">
-                            Talle {sizeItem.size}
-                          </span>
-
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleUpdateSingleStock(prod._id, sizeItem.size, sizeItem.stock, -1)
-                              }
-                              disabled={isSavingThis || sizeItem.stock === 0}
-                              className="w-5 h-5 bg-[#f5f5f5] text-[#111111] hover:bg-[#111111] hover:text-white rounded-full flex items-center justify-center cursor-pointer disabled:opacity-30"
-                            >
-                              <Minus className="w-3 h-3" />
-                            </button>
-
-                            <span className="font-extrabold text-xs text-[#111111] min-w-[20px]">
-                              {sizeItem.stock}
+                        return (
+                          <div
+                            key={entry.key}
+                            title={entry.sku ? `SKU: ${entry.sku}` : undefined}
+                            className={`p-2 bg-white border space-y-1 text-center transition-all ${
+                              isZero
+                                ? 'border-[#d30005]/40 bg-[#d30005]/5'
+                                : 'border-[#e5e5e5]'
+                            } ${entry.active ? '' : 'opacity-50'}`}
+                          >
+                            <span className="block text-[11px] font-extrabold text-[#111111] truncate">
+                              {entry.label}
                             </span>
+                            {!entry.active && (
+                              <span className="block text-[9px] font-bold uppercase text-[#707072]">
+                                Inactiva
+                              </span>
+                            )}
 
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleUpdateSingleStock(prod._id, sizeItem.size, sizeItem.stock, 1)
-                              }
-                              disabled={isSavingThis}
-                              className="w-5 h-5 bg-[#f5f5f5] text-[#111111] hover:bg-[#111111] hover:text-white rounded-full flex items-center justify-center cursor-pointer disabled:opacity-30"
-                            >
-                              <Plus className="w-3 h-3" />
-                            </button>
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateSingleStock(prod._id, entry, -1)}
+                                disabled={isSavingThis || entry.stock === 0}
+                                className="w-5 h-5 bg-[#f5f5f5] text-[#111111] hover:bg-[#111111] hover:text-white rounded-full flex items-center justify-center cursor-pointer disabled:opacity-30"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+
+                              <span className="font-extrabold text-xs text-[#111111] min-w-[20px]">
+                                {entry.stock}
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateSingleStock(prod._id, entry, 1)}
+                                disabled={isSavingThis}
+                                className="w-5 h-5 bg-[#f5f5f5] text-[#111111] hover:bg-[#111111] hover:text-white rounded-full flex items-center justify-center cursor-pointer disabled:opacity-30"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

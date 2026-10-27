@@ -9,7 +9,6 @@ import {
   Edit2,
   Package,
   Search,
-  Upload,
   Eye,
   EyeOff,
   Trash2,
@@ -26,10 +25,10 @@ interface AdminProductItem {
   price?: number;
   retailPrice?: number;
   wholesalePrice?: number;
-  gender: string;
   active: boolean;
   brandId: { _id: string; name: string } | string;
-  typeId: { _id: string; name: string } | string;
+  categoryId?: { _id: string; name: string } | string;
+  specs?: Array<{ key: string; value: string | number | boolean }>;
   images: Array<{ url: string; isPrincipal: boolean }>;
   totalStock: number;
   isClearance?: boolean;
@@ -46,6 +45,7 @@ export default function AdminProductsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGender, setSelectedGender] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [genderOptions, setGenderOptions] = useState<{ value: string; label: string }[]>([]);
 
   // Delete modal state
   const [productToDelete, setProductToDelete] = useState<AdminProductItem | null>(null);
@@ -63,6 +63,21 @@ export default function AdminProductsPage() {
     params.append('limit', PAGE_SIZE.toString());
     return params;
   }, [searchTerm, selectedGender, selectedStatus]);
+
+  // Gender filter options come from the "genero" attribute
+  useEffect(() => {
+    fetch('/api/admin/attributes')
+      .then((res) => res.json())
+      .then((json) => {
+        const genderAttr = json.ok
+          ? json.data.find((a: { key: string }) => a.key === 'genero')
+          : null;
+        setGenderOptions(
+          (genderAttr?.options ?? []).filter((o: { active: boolean }) => o.active)
+        );
+      })
+      .catch((err) => console.error('Error cargando opciones de género:', err));
+  }, []);
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -200,18 +215,11 @@ export default function AdminProductsPage() {
               <Package className="w-7 h-7" /> Catálogo de Productos
             </h1>
             <p className="text-xs text-[#707072] mt-1">
-              Administrá los modelos, precios, imágenes y stock por talle.
+              Administrá los productos, precios, imágenes y stock por variante.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Link
-              href="/admin/products/import-csv"
-              className="py-2.5 px-4 bg-white border border-[#e5e5e5] hover:border-[#111111] text-[#111111] font-bold text-xs uppercase tracking-wider rounded-full flex items-center gap-2 transition-all shadow-xs"
-            >
-              <Upload className="w-4 h-4" /> Importar CSV
-            </Link>
-
             <Link
               href="/admin/products/new"
               className="py-2.5 px-5 bg-[#111111] hover:bg-black text-white font-bold text-xs uppercase tracking-wider rounded-full flex items-center gap-2 transition-all shadow-md active:scale-95"
@@ -235,17 +243,20 @@ export default function AdminProductsPage() {
           </div>
 
           <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-            <select
-              value={selectedGender}
-              onChange={(e) => setSelectedGender(e.target.value)}
-              className="bg-[#f5f5f5] text-[#111111] text-xs font-bold py-2.5 px-3 rounded-none border border-[#e5e5e5]"
-            >
-              <option value="">-- Todos los Géneros --</option>
-              <option value="Hombre">Hombre</option>
-              <option value="Mujer">Mujer</option>
-              <option value="Niño">Niño</option>
-              <option value="Unisex">Unisex</option>
-            </select>
+            {genderOptions.length > 0 && (
+              <select
+                value={selectedGender}
+                onChange={(e) => setSelectedGender(e.target.value)}
+                className="bg-[#f5f5f5] text-[#111111] text-xs font-bold py-2.5 px-3 rounded-none border border-[#e5e5e5]"
+              >
+                <option value="">-- Todos los Géneros --</option>
+                {genderOptions.map((option) => (
+                  <option key={option.value} value={option.label}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            )}
 
             <select
               value={selectedStatus}
@@ -275,7 +286,7 @@ export default function AdminProductsPage() {
                 <thead className="bg-[#f5f5f5] text-[#111111] uppercase font-extrabold border-b border-[#e5e5e5]">
                   <tr>
                     <th className="py-3 px-4">Producto</th>
-                    <th className="py-3 px-4">Marca / Tipo</th>
+                    <th className="py-3 px-4">Marca / Categoría</th>
                     <th className="py-3 px-4 text-center">Género</th>
                     <th className="py-3 px-4 text-right">Precio</th>
                     <th className="py-3 px-4 text-center">Stock Total</th>
@@ -289,10 +300,14 @@ export default function AdminProductsPage() {
                       typeof prod.brandId === 'object' && prod.brandId !== null
                         ? prod.brandId.name
                         : '-';
-                    const typeName =
-                      typeof prod.typeId === 'object' && prod.typeId !== null
-                        ? prod.typeId.name
+                    const categoryName =
+                      typeof prod.categoryId === 'object' && prod.categoryId !== null
+                        ? prod.categoryId.name
                         : '-';
+                    const genderValue = prod.specs?.find((s) => s.key === 'genero')?.value;
+                    const genderLabel =
+                      genderOptions.find((o) => o.value === genderValue)?.label ??
+                      (typeof genderValue === 'string' ? genderValue : '-');
                     const mainImage =
                       prod.images.find((img) => img.isPrincipal)?.url ||
                       prod.images[0]?.url ||
@@ -328,11 +343,11 @@ export default function AdminProductsPage() {
 
                         <td className="py-3 px-4 text-[#707072] font-semibold">
                           <div>{brandName}</div>
-                          <div className="text-[10px] text-[#707072]">{typeName}</div>
+                          <div className="text-[10px] text-[#707072]">{categoryName}</div>
                         </td>
 
                         <td className="py-3 px-4 text-center font-bold text-[#111111]">
-                          {prod.gender}
+                          {genderLabel}
                         </td>
 
                         <td className="py-3 px-4 text-right">
@@ -367,7 +382,7 @@ export default function AdminProductsPage() {
                                 : 'bg-[#d30005]/10 text-[#d30005] border-[#d30005]'
                             }`}
                           >
-                            {prod.totalStock} pares
+                            {prod.totalStock} unidades
                           </span>
                         </td>
 

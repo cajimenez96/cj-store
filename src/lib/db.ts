@@ -38,7 +38,10 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
     };
 
     cached.promise = mongoose.connect(MONGODB_URI as string, opts).then((mongooseInstance) => {
-      console.log('⚡ Base de datos MongoDB conectada exitosamente:', MONGODB_URI);
+      console.log(
+        '⚡ Base de datos MongoDB conectada exitosamente:',
+        (MONGODB_URI as string).replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@')
+      );
       return mongooseInstance;
     });
   }

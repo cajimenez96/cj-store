@@ -88,11 +88,11 @@ export async function GET(req: NextRequest) {
       id: o._id.toString(),
       type: 'ingreso' as const,
       concept: `Venta #${o.orderNumber} - ${o.guest.name} ${o.guest.lastName}`,
-      category: 'Venta de Calzado',
+      category: 'Venta de Productos',
       amount: o.total,
       paymentMethod: o.paymentMethod || 'transferencia',
       date: o.createdAt,
-      details: `${o.items.reduce((s: number, i: any) => s + i.qty, 0)} pares`,
+      details: `${o.items.reduce((s: number, i: any) => s + i.qty, 0)} unidades`,
     }));
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

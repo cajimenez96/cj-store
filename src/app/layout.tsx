@@ -19,6 +19,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Metadata and pages read live data from MongoDB; never prerender them at build time.
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata(): Promise<Metadata> {
   let title = "The Point | Perfumes Importados & Fragancias Exclusivas";
   let description =

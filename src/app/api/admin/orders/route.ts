@@ -117,13 +117,6 @@ export async function PUT(req: NextRequest) {
               }
               return v;
             });
-          } else if (item.size !== undefined && product.sizesStock) {
-            product.sizesStock = product.sizesStock.map((s) => {
-              if (s.size === item.size) {
-                return { ...s, stock: Math.max(0, s.stock - item.qty) };
-              }
-              return s;
-            });
           } else if (product.stock !== undefined) {
             product.stock = Math.max(0, product.stock - item.qty);
           }
@@ -143,13 +136,6 @@ export async function PUT(req: NextRequest) {
                 return { ...v, stock: v.stock + item.qty };
               }
               return v;
-            });
-          } else if (item.size !== undefined && product.sizesStock) {
-            product.sizesStock = product.sizesStock.map((s) => {
-              if (s.size === item.size) {
-                return { ...s, stock: s.stock + item.qty };
-              }
-              return s;
             });
           } else if (product.stock !== undefined) {
             product.stock = product.stock + item.qty;

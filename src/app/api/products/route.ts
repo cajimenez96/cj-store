@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
 import Product from '@/models/Product';
 import Brand from '@/models/Brand';
-import FootwearType from '@/models/FootwearType';
 import Category from '@/models/Category';
 import { calculateDerivedProductFields } from '@/lib/derived';
+import { buildCategoryCondition } from '@/lib/categoryFilter';
+import { buildGenderCondition } from '@/lib/genderFilter';
 
 // Force dynamic server route
 export const dynamic = 'force-dynamic';
@@ -15,9 +16,7 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const brandId = searchParams.get('brandId');
-    const typeId = searchParams.get('typeId');
     const categoryId = searchParams.get('categoryId');
-    const size = searchParams.get('size');
     const gender = searchParams.get('gender');
     const search = searchParams.get('search');
     const clearance = searchParams.get('clearance') || searchParams.get('isClearance');
@@ -44,7 +43,7 @@ export async function GET(req: NextRequest) {
     if (categoryId) {
       const categories = categoryId.split(',').filter(Boolean);
       if (categories.length > 0) {
-        query.categoryId = { $in: categories };
+        query.$and = [...(query.$and ?? []), buildCategoryCondition(categories)];
       }
     }
 
@@ -55,24 +54,8 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    if (typeId) {
-      const types = typeId.split(',').filter(Boolean);
-      if (types.length > 0) {
-        query.typeId = { $in: types };
-      }
-    }
-
     if (gender) {
-      query.gender = gender;
-    }
-
-    if (size) {
-      const sizeNumber = parseInt(size, 10);
-      if (!isNaN(sizeNumber)) {
-        query.sizesStock = {
-          $elemMatch: { size: sizeNumber, stock: { $gt: 0 } },
-        };
-      }
+      query.$and = [...(query.$and ?? []), await buildGenderCondition(gender)];
     }
 
     if (search) {
@@ -82,8 +65,6 @@ export async function GET(req: NextRequest) {
     // Ensure models are registered for populate
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     Brand;
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-    FootwearType;
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     Category;
 
@@ -99,7 +80,6 @@ export async function GET(req: NextRequest) {
     const total = await Product.countDocuments(query);
     let productQuery = Product.find(query)
       .populate('brandId', 'name')
-      .populate('typeId', 'name')
       .populate('categoryId', 'name slug variantAxes imageAxis')
       .sort(sortQuery);
 
@@ -123,12 +103,7 @@ export async function GET(req: NextRequest) {
         );
       } else {
         const fallbackRetail = Number(prod.retailPrice ?? prod.price ?? 0);
-        const fallbackStock =
-          typeof prod.stock === 'number'
-            ? prod.stock
-            : Array.isArray(prod.sizesStock)
-            ? prod.sizesStock.reduce((acc: number, curr: any) => acc + (curr.stock || 0), 0)
-            : 0;
+        const fallbackStock = typeof prod.stock === 'number' ? prod.stock : 0;
         const fallbackWholesale =
           Boolean(prod.wholesale?.enabled) &&
           prod.wholesalePrice != null &&

@@ -98,33 +98,58 @@ export async function PUT(
       }).lean();
       const productMap = new Map(dbProducts.map((p) => [p._id.toString(), p]));
 
-      const validatedItems = items.map((item: {
+      const validatedItems = [];
+
+      for (const item of items as Array<{
         productId: string;
         name: string;
         image?: string;
-        size: number;
+        variantId?: string;
+        variantLabel?: string;
+        variantName?: string;
+        sku?: string;
         qty: number;
         unitPrice: number;
         appliedPriceType?: string;
-      }) => {
+      }>) {
         const dbProd = productMap.get(item.productId);
+
+        // Keep the variant link: stock is decremented per variant when the order is authorized
+        const dbVariant = item.variantId
+          ? dbProd?.variants?.find((v) => v._id?.toString() === item.variantId)
+          : undefined;
+
+        if (item.variantId && !dbVariant) {
+          return NextResponse.json(
+            {
+              ok: false,
+              error: 'VARIANT_NOT_FOUND',
+              message: `La variante de "${item.name}" ya no existe en el producto.`,
+            },
+            { status: 400 }
+          );
+        }
+
         const resolvedImage =
           item.image ||
           dbProd?.images?.find((img) => img.isPrincipal)?.url ||
           dbProd?.images?.[0]?.url ||
           '';
 
-        return {
+        validatedItems.push({
           productId: new Types.ObjectId(item.productId as string),
+          variantId: dbVariant?._id,
+          sku: dbVariant?.sku ?? item.sku,
           name: item.name,
           image: resolvedImage,
-          size: Number(item.size),
+          variantLabel: item.variantLabel,
+          variantName: item.variantName,
           qty: Math.max(1, Number(item.qty)),
           appliedPriceType: (item.appliedPriceType ?? 'custom') as 'retail' | 'wholesale' | 'custom',
           unitPrice: Number(item.unitPrice),
           subtotal: Number(item.unitPrice) * Math.max(1, Number(item.qty)),
-        };
-      });
+        });
+      }
 
       order.items = validatedItems as typeof order.items;
     }
