@@ -21,11 +21,11 @@ import {
   PieChart,
   Tag,
   Receipt,
-  X,
 } from 'lucide-react';
 import { formatPrice } from '@/utils/formatCurrency';
 import { toast } from '@/components/ui/sonner';
 import type { ExpenseCategory } from '@/models/Expense';
+import { ResponsiveModal } from '@/components/ui/responsive-modal';
 
 const MONTH_NAMES = [
   'Enero',
@@ -650,146 +650,143 @@ export default function AdminAccountingPage() {
 
       {/* Modal Registrar Nuevo Egreso */}
       {isExpenseModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200">
-          <div
-            className="relative bg-white w-full max-w-lg shadow-2xl border border-[#e5e5e5] p-6 space-y-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex justify-between items-center border-b border-[#e5e5e5] pb-3">
-              <h2 className="text-base font-extrabold uppercase tracking-tight text-[#111111] flex items-center gap-2">
-                <Plus className="w-5 h-5" /> Registrar Egreso de Caja
-              </h2>
+        <ResponsiveModal
+          open
+          onOpenChange={(open) => !open && setIsExpenseModalOpen(false)}
+          title="Registrar Egreso de Caja"
+          hideTitle
+          className="sm:max-w-lg p-6 gap-6"
+          footer={
+            <div className="flex items-center justify-end gap-3">
               <button
+                type="button"
                 onClick={() => setIsExpenseModalOpen(false)}
-                className="p-1.5 text-[#707072] hover:text-[#111111] rounded-full hover:bg-[#f5f5f5] transition-colors cursor-pointer"
+                className="py-2.5 px-4 bg-[#f5f5f5] text-[#111111] text-xs font-bold uppercase transition-colors hover:bg-[#e5e5e5] cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Cancelar
+              </button>
+
+              <button
+                type="submit"
+                form="accounting-form"
+                disabled={savingExpense}
+                className="py-2.5 px-6 bg-[#111111] hover:bg-black text-white text-xs font-extrabold uppercase tracking-wider transition-all shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {savingExpense ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Guardando...
+                  </>
+                ) : (
+                  'Guardar Egreso'
+                )}
               </button>
             </div>
+          }
+        >
+          {/* Modal Header */}
+          <div className="flex justify-between items-center border-b border-[#e5e5e5] pb-3">
+            <h2 className="text-base font-extrabold uppercase tracking-tight text-[#111111] flex items-center gap-2">
+              <Plus className="w-5 h-5" /> Registrar Egreso de Caja
+            </h2>
+          </div>
 
-            {/* Form */}
-            <form onSubmit={handleCreateExpense} className="space-y-4">
+          {/* Form */}
+          <form id="accounting-form" onSubmit={handleCreateExpense} className="space-y-4">
+            <div>
+              <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
+                Concepto / Descripción del Gasto *
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Ej: Pago a Proveedor Lote Nike, Flete Andreani, Factura de Luz..."
+                value={expenseConcept}
+                onChange={(e) => setExpenseConcept(e.target.value)}
+                className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-semibold py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-1 focus:ring-[#111111]"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
-                  Concepto / Descripción del Gasto *
+                  Monto ($ ARS) *
                 </label>
                 <input
-                  type="text"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
                   required
-                  placeholder="Ej: Pago a Proveedor Lote Nike, Flete Andreani, Factura de Luz..."
-                  value={expenseConcept}
-                  onChange={(e) => setExpenseConcept(e.target.value)}
-                  className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-semibold py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-1 focus:ring-[#111111]"
+                  placeholder="0.00"
+                  value={expenseAmount}
+                  onChange={(e) =>
+                    setExpenseAmount(e.target.value === '' ? '' : Number(e.target.value))
+                  }
+                  className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-extrabold py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-1 focus:ring-[#111111]"
                 />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
-                    Monto ($ ARS) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    required
-                    placeholder="0.00"
-                    value={expenseAmount}
-                    onChange={(e) =>
-                      setExpenseAmount(e.target.value === '' ? '' : Number(e.target.value))
-                    }
-                    className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-extrabold py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-1 focus:ring-[#111111]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
-                    Rubro / Categoría *
-                  </label>
-                  <select
-                    value={expenseCategory}
-                    onChange={(e) => setExpenseCategory(e.target.value as ExpenseCategory)}
-                    className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold py-2.5 px-3 border border-[#e5e5e5]"
-                  >
-                    {(Object.keys(CATEGORY_LABELS) as ExpenseCategory[]).map((cat) => (
-                      <option key={cat} value={cat}>
-                        {CATEGORY_LABELS[cat]}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
-                    Medio de Pago Saliente *
-                  </label>
-                  <select
-                    value={expenseMethod}
-                    onChange={(e) => setExpenseMethod(e.target.value as 'efectivo' | 'transferencia')}
-                    className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold py-2.5 px-3 border border-[#e5e5e5]"
-                  >
-                    <option value="efectivo">Efectivo (Caja Física)</option>
-                    <option value="transferencia">Transferencia Bancaria (CBU/Alias)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
-                    Fecha del Movimiento *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={expenseDate}
-                    onChange={(e) => setExpenseDate(e.target.value)}
-                    className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-semibold py-2.5 px-3 border border-[#e5e5e5]"
-                  />
-                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
-                  Notas / Observaciones (Opcional)
+                  Rubro / Categoría *
                 </label>
-                <textarea
-                  rows={2}
-                  placeholder="Detalles adicionales, número de comprobante o remito..."
-                  value={expenseNotes}
-                  onChange={(e) => setExpenseNotes(e.target.value)}
-                  className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-medium py-2 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-1 focus:ring-[#111111]"
+                <select
+                  value={expenseCategory}
+                  onChange={(e) => setExpenseCategory(e.target.value as ExpenseCategory)}
+                  className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold py-2.5 px-3 border border-[#e5e5e5]"
+                >
+                  {(Object.keys(CATEGORY_LABELS) as ExpenseCategory[]).map((cat) => (
+                    <option key={cat} value={cat}>
+                      {CATEGORY_LABELS[cat]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
+                  Medio de Pago Saliente *
+                </label>
+                <select
+                  value={expenseMethod}
+                  onChange={(e) => setExpenseMethod(e.target.value as 'efectivo' | 'transferencia')}
+                  className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold py-2.5 px-3 border border-[#e5e5e5]"
+                >
+                  <option value="efectivo">Efectivo (Caja Física)</option>
+                  <option value="transferencia">Transferencia Bancaria (CBU/Alias)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
+                  Fecha del Movimiento *
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={expenseDate}
+                  onChange={(e) => setExpenseDate(e.target.value)}
+                  className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-semibold py-2.5 px-3 border border-[#e5e5e5]"
                 />
               </div>
+            </div>
 
-              {/* Modal Buttons */}
-              <div className="pt-2 flex justify-end gap-3 border-t border-[#e5e5e5]">
-                <button
-                  type="button"
-                  onClick={() => setIsExpenseModalOpen(false)}
-                  className="py-2.5 px-4 bg-[#f5f5f5] text-[#111111] text-xs font-bold uppercase transition-colors hover:bg-[#e5e5e5] cursor-pointer"
-                >
-                  Cancelar
-                </button>
+            <div>
+              <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
+                Notas / Observaciones (Opcional)
+              </label>
+              <textarea
+                rows={2}
+                placeholder="Detalles adicionales, número de comprobante o remito..."
+                value={expenseNotes}
+                onChange={(e) => setExpenseNotes(e.target.value)}
+                className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-medium py-2 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-1 focus:ring-[#111111]"
+              />
+            </div>
 
-                <button
-                  type="submit"
-                  disabled={savingExpense}
-                  className="py-2.5 px-6 bg-[#111111] hover:bg-black text-white text-xs font-extrabold uppercase tracking-wider transition-all shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  {savingExpense ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" /> Guardando...
-                    </>
-                  ) : (
-                    'Guardar Egreso'
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          </form>
+        </ResponsiveModal>
       )}
     </div>
   );

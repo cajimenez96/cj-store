@@ -15,8 +15,10 @@ import {
   ChevronLeft,
   Info,
   Search,
+  Check,
 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
+import { ResponsiveModal } from "@/components/ui/responsive-modal";
 
 interface AttributeOption {
   value: string;
@@ -77,6 +79,8 @@ export default function AdminAttributesPage() {
   // New Option input state
   const [newOptLabel, setNewOptLabel] = useState("");
   const [newOptHex, setNewOptHex] = useState("");
+  const [editingOptValue, setEditingOptValue] = useState<string | null>(null);
+  const [editingOptLabel, setEditingOptLabel] = useState("");
 
   const fetchAttributes = async () => {
     try {
@@ -127,6 +131,7 @@ export default function AdminAttributesPage() {
     setUnit("");
     setFilterable(false);
     setOptions([]);
+    handleCancelEditOption();
     setIsModalOpen(true);
   };
 
@@ -138,6 +143,7 @@ export default function AdminAttributesPage() {
     setUnit(attr.unit || "");
     setFilterable(attr.filterable);
     setOptions(attr.options || []);
+    handleCancelEditOption();
     setIsModalOpen(true);
   };
 
@@ -182,6 +188,29 @@ export default function AdminAttributesPage() {
     setOptions(
       options.map((o) => (o.value === val ? { ...o, active: !o.active } : o)),
     );
+  };
+
+  // Only the visible label is editable: the value (slug) identifies the option in products
+  const handleStartEditOption = (opt: AttributeOption) => {
+    setEditingOptValue(opt.value);
+    setEditingOptLabel(opt.label);
+  };
+
+  const handleCancelEditOption = () => {
+    setEditingOptValue(null);
+    setEditingOptLabel("");
+  };
+
+  const handleSaveEditOption = (val: string) => {
+    const labelTrimmed = editingOptLabel.trim();
+    if (!labelTrimmed) {
+      toast.error("La etiqueta no puede estar vacía");
+      return;
+    }
+    setOptions(
+      options.map((o) => (o.value === val ? { ...o, label: labelTrimmed } : o)),
+    );
+    handleCancelEditOption();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -561,252 +590,298 @@ export default function AdminAttributesPage() {
 
         {/* Modal Create / Edit */}
         {isModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-            <div className="bg-white border border-[#e5e5e5] max-w-2xl w-full p-6 sm:p-8 space-y-6 shadow-xl my-8">
-              <div className="flex items-center justify-between border-b border-[#e5e5e5] pb-4">
-                <h3 className="text-base font-extrabold uppercase tracking-wider text-[#111111]">
-                  {editingAttr
-                    ? `Editar Atributo: ${editingAttr.label}`
-                    : "Nuevo Atributo"}
-                </h3>
+          <ResponsiveModal
+            open
+            onOpenChange={(open) => !open && setIsModalOpen(false)}
+            title={editingAttr ? `Editar Atributo: ${editingAttr.label}` : 'Nuevo Atributo'}
+            hideTitle
+            className="sm:max-w-2xl p-6 sm:p-8 gap-6"
+            footer={
+              <div className="flex items-center justify-end gap-3">
                 <button
+                  type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="text-[#707072] hover:text-[#111111] cursor-pointer"
+                  className="py-2.5 px-4 bg-white hover:bg-[#f5f5f5] text-[#111111] text-xs font-bold uppercase border border-[#e5e5e5] cursor-pointer"
                 >
-                  <X className="w-5 h-5" />
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  form="attribute-form"
+                  disabled={saving}
+                  className="py-2.5 px-6 bg-[#111111] hover:bg-black text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {editingAttr ? "Guardar Cambios" : "Crear Atributo"}
                 </button>
               </div>
+            }
+          >
+            <div className="flex items-center justify-between border-b border-[#e5e5e5] pb-4">
+              <h3 className="text-base font-extrabold uppercase tracking-wider text-[#111111]">
+                {editingAttr
+                  ? `Editar Atributo: ${editingAttr.label}`
+                  : "Nuevo Atributo"}
+              </h3>
+            </div>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Label */}
-                  <div>
-                    <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
-                      Nombre Visible *
-                    </label>
+            <form id="attribute-form" onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Label */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
+                    Nombre Visible *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Talle, Color, Volumen"
+                    value={label}
+                    onChange={(e) => handleLabelChange(e.target.value)}
+                    required
+                    className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                  />
+                </div>
+
+                {/* Key */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
+                    Identificador (Key) *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: talle_calzado, color, volumen"
+                    value={key}
+                    onChange={(e) => setKey(slugify(e.target.value))}
+                    disabled={Boolean(editingAttr)}
+                    required
+                    className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-mono p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] disabled:opacity-60"
+                  />
+                  {editingAttr && (
+                    <p className="text-[10px] text-[#707072] mt-0.5">
+                      El key es inmutable para no romper productos.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Type */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
+                    Tipo de Atributo *
+                  </label>
+                  <select
+                    value={type}
+                    onChange={(e) => setType(e.target.value as "select" | "text" | "number" | "boolean")}
+                    disabled={Boolean(editingAttr)}
+                    className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] disabled:opacity-60 cursor-pointer"
+                  >
+                    <option value="select">
+                      Selección (Genera Variantes)
+                    </option>
+                    <option value="text">Texto (Especificación)</option>
+                    <option value="number">Número (Especificación)</option>
+                    <option value="boolean">Sí / No (Especificación)</option>
+                  </select>
+                </div>
+
+                {/* Unit */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
+                    Unidad de Medida
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: ml, cm, gr"
+                    value={unit}
+                    onChange={(e) => setUnit(e.target.value)}
+                    className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-medium p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                  />
+                </div>
+
+                {/* Filterable Checkbox */}
+                <div className="flex items-center gap-2 pt-6">
+                  <input
+                    type="checkbox"
+                    id="filterableCheck"
+                    checked={filterable}
+                    onChange={(e) => setFilterable(e.target.checked)}
+                    className="w-4 h-4 text-[#111111] border-[#e5e5e5] focus:ring-[#111111] cursor-pointer"
+                  />
+                  <label
+                    htmlFor="filterableCheck"
+                    className="text-xs font-bold uppercase text-[#111111] cursor-pointer"
+                  >
+                    Filtro en Tienda
+                  </label>
+                </div>
+              </div>
+
+              {/* Options Manager (Only for select type) */}
+              {type === "select" && (
+                <div className="border border-[#e5e5e5] bg-[#fafafa] p-4 space-y-3">
+                  <h4 className="text-xs font-extrabold uppercase text-[#111111] flex items-center justify-between">
+                    <span>Opciones del Atributo</span>
+                    <span className="text-[11px] font-semibold text-[#707072]">
+                      Total: {options.length} opciones
+                    </span>
+                  </h4>
+
+                  {/* Add option bar */}
+                  <div className="flex flex-wrap items-center gap-2">
                     <input
                       type="text"
-                      placeholder="Ej: Talle, Color, Volumen"
-                      value={label}
-                      onChange={(e) => handleLabelChange(e.target.value)}
-                      required
-                      className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                      placeholder="Nombre opción (ej: Negro, 42, 100ml)"
+                      value={newOptLabel}
+                      onChange={(e) => setNewOptLabel(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddOption();
+                        }
+                      }}
+                      className="flex-1 min-w-[160px] bg-white text-[#111111] text-xs font-semibold p-2.5 border border-[#e5e5e5] focus:outline-none focus:ring-1 focus:ring-[#111111]"
                     />
+
+                    {/* Hex input */}
+                    <div className="flex items-center gap-1.5 bg-white border border-[#e5e5e5] px-2 py-1">
+                      <input
+                        type="color"
+                        value={newOptHex || "#000000"}
+                        onChange={(e) => setNewOptHex(e.target.value)}
+                        className="w-6 h-6 border-0 p-0 cursor-pointer"
+                        title="Elegir color (opcional)"
+                      />
+                      <input
+                        type="text"
+                        placeholder="#000000"
+                        value={newOptHex}
+                        onChange={(e) => setNewOptHex(e.target.value)}
+                        className="w-20 text-[11px] font-mono uppercase bg-transparent border-0 focus:outline-none"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleAddOption}
+                      className="py-2.5 px-4 bg-[#111111] hover:bg-black text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Agregar
+                    </button>
                   </div>
 
-                  {/* Key */}
-                  <div>
-                    <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
-                      Identificador (Key) *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ej: talle_calzado, color, volumen"
-                      value={key}
-                      onChange={(e) => setKey(slugify(e.target.value))}
-                      disabled={Boolean(editingAttr)}
-                      required
-                      className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-mono p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] disabled:opacity-60"
-                    />
-                    {editingAttr && (
-                      <p className="text-[10px] text-[#707072] mt-0.5">
-                        El key es inmutable para no romper productos.
+                  {/* Options list */}
+                  <div className="space-y-1.5 max-h-56 overflow-y-auto pt-2">
+                    {options.length === 0 ? (
+                      <p className="text-xs text-[#9e9ea0] italic py-2 text-center">
+                        Añadí opciones para este atributo (ej: talles
+                        numéricos, letras o colores).
                       </p>
+                    ) : (
+                      options.map((opt) => (
+                        <div
+                          key={opt.value}
+                          className={`flex items-center justify-between p-2 border ${
+                            opt.active
+                              ? "bg-white border-[#e5e5e5]"
+                              : "bg-[#f5f5f5] border-[#e5e5e5]"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            {opt.hex && (
+                              <span
+                                className="w-3.5 h-3.5 rounded-full border border-black/20"
+                                style={{ backgroundColor: opt.hex }}
+                              />
+                            )}
+                            {editingOptValue === opt.value ? (
+                              <input
+                                autoFocus
+                                value={editingOptLabel}
+                                onChange={(e) => setEditingOptLabel(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    handleSaveEditOption(opt.value);
+                                  }
+                                }}
+                                className="text-xs font-bold px-2 py-1 border border-[#e5e5e5] bg-[#f5f5f5] focus:outline-none focus:ring-1 focus:ring-[#111111]"
+                              />
+                            ) : (
+                              <>
+                                <span
+                                  className={`text-xs font-bold ${!opt.active ? "line-through text-[#707072]" : "text-[#111111]"}`}
+                                >
+                                  {opt.label}
+                                </span>
+                                <span className="font-mono text-[10px] text-[#707072]">
+                                  ({opt.value})
+                                </span>
+                              </>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {editingOptValue === opt.value ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveEditOption(opt.value)}
+                                  className="text-[#007d48] hover:bg-emerald-50 p-1 cursor-pointer"
+                                  title="Guardar etiqueta"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCancelEditOption}
+                                  className="text-[#9e9ea0] hover:text-[#111111] p-1 cursor-pointer"
+                                  title="Cancelar edición"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditOption(opt)}
+                                className="text-[#9e9ea0] hover:text-[#111111] p-1 cursor-pointer"
+                                title="Editar etiqueta"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleToggleOptionActive(opt.value)
+                              }
+                              className={`text-[10px] font-bold uppercase px-2 py-0.5 border cursor-pointer ${
+                                opt.active
+                                  ? "bg-emerald-50 text-[#007d48] border-emerald-200"
+                                  : "bg-[#f5f5f5] text-[#707072] border-[#e5e5e5]"
+                              }`}
+                            >
+                              {opt.active ? "Activa" : "Inactiva"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveOption(opt.value)}
+                              className="text-[#9e9ea0] hover:text-[#d30005] p-1 cursor-pointer"
+                              title="Eliminar opción"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
                     )}
                   </div>
                 </div>
+              )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {/* Type */}
-                  <div>
-                    <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
-                      Tipo de Atributo *
-                    </label>
-                    <select
-                      value={type}
-                      onChange={(e) => setType(e.target.value as "select" | "text" | "number" | "boolean")}
-                      disabled={Boolean(editingAttr)}
-                      className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] disabled:opacity-60 cursor-pointer"
-                    >
-                      <option value="select">
-                        Selección (Genera Variantes)
-                      </option>
-                      <option value="text">Texto (Especificación)</option>
-                      <option value="number">Número (Especificación)</option>
-                      <option value="boolean">Sí / No (Especificación)</option>
-                    </select>
-                  </div>
-
-                  {/* Unit */}
-                  <div>
-                    <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
-                      Unidad de Medida
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ej: ml, cm, gr"
-                      value={unit}
-                      onChange={(e) => setUnit(e.target.value)}
-                      className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-medium p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
-                    />
-                  </div>
-
-                  {/* Filterable Checkbox */}
-                  <div className="flex items-center gap-2 pt-6">
-                    <input
-                      type="checkbox"
-                      id="filterableCheck"
-                      checked={filterable}
-                      onChange={(e) => setFilterable(e.target.checked)}
-                      className="w-4 h-4 text-[#111111] border-[#e5e5e5] focus:ring-[#111111] cursor-pointer"
-                    />
-                    <label
-                      htmlFor="filterableCheck"
-                      className="text-xs font-bold uppercase text-[#111111] cursor-pointer"
-                    >
-                      Filtro en Tienda
-                    </label>
-                  </div>
-                </div>
-
-                {/* Options Manager (Only for select type) */}
-                {type === "select" && (
-                  <div className="border border-[#e5e5e5] bg-[#fafafa] p-4 space-y-3">
-                    <h4 className="text-xs font-extrabold uppercase text-[#111111] flex items-center justify-between">
-                      <span>Opciones del Atributo</span>
-                      <span className="text-[11px] font-semibold text-[#707072]">
-                        Total: {options.length} opciones
-                      </span>
-                    </h4>
-
-                    {/* Add option bar */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        type="text"
-                        placeholder="Nombre opción (ej: Negro, 42, 100ml)"
-                        value={newOptLabel}
-                        onChange={(e) => setNewOptLabel(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleAddOption();
-                          }
-                        }}
-                        className="flex-1 min-w-[160px] bg-white text-[#111111] text-xs font-semibold p-2.5 border border-[#e5e5e5] focus:outline-none focus:ring-1 focus:ring-[#111111]"
-                      />
-
-                      {/* Hex input */}
-                      <div className="flex items-center gap-1.5 bg-white border border-[#e5e5e5] px-2 py-1">
-                        <input
-                          type="color"
-                          value={newOptHex || "#000000"}
-                          onChange={(e) => setNewOptHex(e.target.value)}
-                          className="w-6 h-6 border-0 p-0 cursor-pointer"
-                          title="Elegir color (opcional)"
-                        />
-                        <input
-                          type="text"
-                          placeholder="#000000"
-                          value={newOptHex}
-                          onChange={(e) => setNewOptHex(e.target.value)}
-                          className="w-20 text-[11px] font-mono uppercase bg-transparent border-0 focus:outline-none"
-                        />
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={handleAddOption}
-                        className="py-2.5 px-4 bg-[#111111] hover:bg-black text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1 transition-colors cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Agregar
-                      </button>
-                    </div>
-
-                    {/* Options list */}
-                    <div className="space-y-1.5 max-h-56 overflow-y-auto pt-2">
-                      {options.length === 0 ? (
-                        <p className="text-xs text-[#9e9ea0] italic py-2 text-center">
-                          Añadí opciones para este atributo (ej: talles
-                          numéricos, letras o colores).
-                        </p>
-                      ) : (
-                        options.map((opt) => (
-                          <div
-                            key={opt.value}
-                            className={`flex items-center justify-between p-2 border ${
-                              opt.active
-                                ? "bg-white border-[#e5e5e5]"
-                                : "bg-[#f5f5f5] border-[#e5e5e5]"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              {opt.hex && (
-                                <span
-                                  className="w-3.5 h-3.5 rounded-full border border-black/20"
-                                  style={{ backgroundColor: opt.hex }}
-                                />
-                              )}
-                              <span
-                                className={`text-xs font-bold ${!opt.active ? "line-through text-[#707072]" : "text-[#111111]"}`}
-                              >
-                                {opt.label}
-                              </span>
-                              <span className="font-mono text-[10px] text-[#707072]">
-                                ({opt.value})
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleToggleOptionActive(opt.value)
-                                }
-                                className={`text-[10px] font-bold uppercase px-2 py-0.5 border cursor-pointer ${
-                                  opt.active
-                                    ? "bg-emerald-50 text-[#007d48] border-emerald-200"
-                                    : "bg-[#f5f5f5] text-[#707072] border-[#e5e5e5]"
-                                }`}
-                              >
-                                {opt.active ? "Activa" : "Inactiva"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveOption(opt.value)}
-                                className="text-[#9e9ea0] hover:text-[#d30005] p-1 cursor-pointer"
-                                title="Eliminar opción"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#e5e5e5]">
-                  <button
-                    type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    className="py-2.5 px-4 bg-white hover:bg-[#f5f5f5] text-[#111111] text-xs font-bold uppercase border border-[#e5e5e5] cursor-pointer"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="py-2.5 px-6 bg-[#111111] hover:bg-black text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {editingAttr ? "Guardar Cambios" : "Crear Atributo"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
+            </form>
+          </ResponsiveModal>
         )}
       </main>
     </div>

@@ -18,6 +18,7 @@ import {
 
 import { formatPrice } from '@/utils/formatCurrency';
 import { toast } from '@/components/ui/sonner';
+import { ResponsiveModal } from '@/components/ui/responsive-modal';
 
 interface AdminProductItem {
   _id: string;
@@ -459,49 +460,53 @@ export default function AdminProductsPage() {
 
       {/* Confirmation Modal for Product Deletion */}
       {productToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white border border-[#e5e5e5] p-6 max-w-md w-full shadow-2xl space-y-4">
-            <div className="flex items-center gap-3 text-[#d30005]">
-              <div className="p-2 bg-[#d30005]/10 rounded-full">
-                <AlertTriangle className="w-6 h-6 text-[#d30005]" />
-              </div>
-              <h3 className="text-base font-extrabold uppercase tracking-tight text-[#111111]">
-                ¿Eliminar Producto?
-              </h3>
+        <ResponsiveModal
+          open
+          onOpenChange={(open) => !open && setProductToDelete(null)}
+          title="Eliminar producto"
+          hideTitle
+          className="sm:max-w-md p-6 gap-4"
+        >
+          <div className="flex items-center gap-3 text-[#d30005]">
+            <div className="p-2 bg-[#d30005]/10 rounded-full">
+              <AlertTriangle className="w-6 h-6 text-[#d30005]" />
             </div>
-
-            <div className="space-y-2 text-xs text-[#707072]">
-              <p>
-                Estás a punto de eliminar{' '}
-                <strong className="text-[#111111] font-bold">{productToDelete.name}</strong>.
-              </p>
-              <p>
-                Si este producto no tiene ventas registradas, se eliminará permanentemente de la base de datos.
-                Si ya cuenta con historial de pedidos, se desactivará automáticamente para preservar los reportes.
-              </p>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setProductToDelete(null)}
-                disabled={isDeleting}
-                className="px-4 py-2 text-xs font-bold text-[#111111] bg-[#f5f5f5] hover:bg-[#e5e5e5] transition-colors cursor-pointer disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteProduct}
-                disabled={isDeleting}
-                className="px-4 py-2 text-xs font-bold text-white bg-[#d30005] hover:bg-[#b00004] transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {isDeleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {isDeleting ? 'Eliminando...' : 'Sí, Eliminar'}
-              </button>
-            </div>
+            <h3 className="text-base font-extrabold uppercase tracking-tight text-[#111111]">
+              ¿Eliminar Producto?
+            </h3>
           </div>
-        </div>
+
+          <div className="space-y-2 text-xs text-[#707072]">
+            <p>
+              Estás a punto de eliminar{' '}
+              <strong className="text-[#111111] font-bold">{productToDelete.name}</strong>.
+            </p>
+            <p>
+              Si este producto no tiene ventas registradas, se eliminará permanentemente de la base de datos.
+              Si ya cuenta con historial de pedidos, se desactivará automáticamente para preservar los reportes.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setProductToDelete(null)}
+              disabled={isDeleting}
+              className="px-4 py-2 text-xs font-bold text-[#111111] bg-[#f5f5f5] hover:bg-[#e5e5e5] transition-colors cursor-pointer disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleDeleteProduct}
+              disabled={isDeleting}
+              className="px-4 py-2 text-xs font-bold text-white bg-[#d30005] hover:bg-[#b00004] transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {isDeleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {isDeleting ? 'Eliminando...' : 'Sí, Eliminar'}
+            </button>
+          </div>
+        </ResponsiveModal>
       )}
     </div>
   );

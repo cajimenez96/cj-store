@@ -6,6 +6,7 @@ import Category from '@/models/Category';
 import { calculateDerivedProductFields } from '@/lib/derived';
 import { buildCategoryCondition } from '@/lib/categoryFilter';
 import { buildGenderCondition } from '@/lib/genderFilter';
+import { attachOptionDisplay } from '@/lib/attributeDisplay';
 
 // Force dynamic server route
 export const dynamic = 'force-dynamic';
@@ -90,6 +91,7 @@ export async function GET(req: NextRequest) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const products: any[] = await productQuery.lean();
+    await attachOptionDisplay(products);
 
     // Map products to include totalStock and isOutOfStock flags
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

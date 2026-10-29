@@ -22,7 +22,7 @@ import {
 import type { IProductImage } from '@/models/Product';
 import { ImageUploader } from './ImageUploader';
 import { toast } from '@/components/ui/sonner';
-import { generateVariantCombinations, generateSku, formatVariantLabel } from '@/lib/variants';
+import { generateVariantCombinations, generateSku, formatVariantLabel, formatOptionLabel } from '@/lib/variants';
 
 interface OptionItem {
   _id: string;
@@ -236,8 +236,8 @@ export const ProductForm: React.FC<ProductFormProps> = ({
     const map: Record<string, string> = {};
     attributes.forEach((attr) => {
       (attr.options || []).forEach((opt) => {
-        map[`${attr.key}:${opt.value}`] = opt.label;
-        map[opt.value] = opt.label;
+        map[`${attr.key}:${opt.value}`] = formatOptionLabel(opt.label, attr.unit);
+        map[opt.value] = formatOptionLabel(opt.label, attr.unit);
       });
     });
     return map;
@@ -664,7 +664,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                               <option value="">Seleccionar...</option>
                               {attr.options.map((opt) => (
                                 <option key={opt.value} value={opt.value}>
-                                  {opt.label}
+                                  {formatOptionLabel(opt.label, attr.unit)}
                                 </option>
                               ))}
                             </select>
@@ -832,7 +832,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                                     style={{ backgroundColor: opt.hex }}
                                   />
                                 )}
-                                <span>{opt.label}</span>
+                                <span>{formatOptionLabel(opt.label, attributes.find((a) => a.key === axis.key)?.unit)}</span>
                               </button>
                             );
                           })}
@@ -1089,7 +1089,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                             : 'bg-white text-[#111111] border-[#e5e5e5]'
                         }`}
                       >
-                        {opt?.label || val} ({count})
+                        {formatOptionLabel(opt?.label || val, imageAxisAttr.unit)} ({count})
                       </button>
                     );
                   })}

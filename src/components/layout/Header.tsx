@@ -141,10 +141,11 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange }) => {
           {/* Cart Button */}
           <button
             onClick={openCart}
-            className="relative p-2.5 rounded-full bg-[#f5f5f5] text-[#111111] hover:bg-white/90 transition-transform active:scale-95 flex items-center justify-center shadow-sm cursor-pointer"
+            className="relative flex items-center gap-2 bg-white px-3.5 py-2 rounded-full border border-[#e5e5e5] hover:border-[#111111] text-xs font-bold text-[#111111] transition-all active:scale-95 shadow-xs cursor-pointer"
             aria-label="Ver Carrito"
           >
-            <ShoppingBag className="w-5 h-5" />
+            <ShoppingBag className="w-3.5 h-3.5 text-[#111111]" />
+            Carrito
             {totalItems > 0 && (
               <span className="absolute -top-1 -right-1 bg-[#d30005] text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-white animate-pulse">
                 {totalItems}

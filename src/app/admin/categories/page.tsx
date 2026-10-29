@@ -14,10 +14,10 @@ import {
   Sparkles,
   Info,
   CheckCircle2,
-  X,
   Package,
 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
+import { ResponsiveModal } from '@/components/ui/responsive-modal';
 
 interface AttributeSummary {
   _id: string;
@@ -438,244 +438,244 @@ export default function AdminCategoriesPage() {
 
         {/* Modal Create / Edit */}
         {isModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-            <div className="bg-white border border-[#e5e5e5] max-w-2xl w-full p-6 sm:p-8 space-y-6 shadow-xl my-8 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between border-b border-[#e5e5e5] pb-4">
-                <h3 className="text-base font-extrabold uppercase tracking-wider text-[#111111]">
-                  {editingCategory ? `Editar Categoría: ${editingCategory.name}` : 'Nueva Categoría'}
-                </h3>
+          <ResponsiveModal
+            open
+            onOpenChange={(open) => !open && setIsModalOpen(false)}
+            title={editingCategory ? `Editar Categoría: ${editingCategory.name}` : 'Nueva Categoría'}
+            hideTitle
+            className="sm:max-w-2xl p-6 sm:p-8 gap-6"
+            footer={
+              <div className="flex items-center justify-end gap-3">
                 <button
+                  type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="text-[#707072] hover:text-[#111111] cursor-pointer"
+                  className="py-2.5 px-4 bg-white hover:bg-[#f5f5f5] text-[#111111] text-xs font-bold uppercase border border-[#e5e5e5] cursor-pointer"
                 >
-                  <X className="w-5 h-5" />
+                  Cancelar
                 </button>
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Name */}
-                  <div>
-                    <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
-                      Nombre de la Categoría *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ej: Zapatillas Urbanas, Fragancias Hombre, Remeras"
-                      value={name}
-                      onChange={(e) => handleNameChange(e.target.value)}
-                      required
-                      className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
-                    />
-                  </div>
-
-                  {/* Slug */}
-                  <div>
-                    <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
-                      Slug de URL *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ej: zapatillas-urbanas, fragancias-hombre"
-                      value={slug}
-                      onChange={(e) => setSlug(slugify(e.target.value))}
-                      required
-                      className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-mono p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
-                    />
-                  </div>
+                <button
+                  type="submit"
+                  form="categories-form"
+                  disabled={saving}
+                  className="py-2.5 px-6 bg-[#111111] hover:bg-black text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {editingCategory ? 'Guardar Cambios' : 'Crear Categoría'}
+                </button>
                 </div>
+            }
+          >
+            <div className="flex items-center justify-between border-b border-[#e5e5e5] pb-4">
+              <h3 className="text-base font-extrabold uppercase tracking-wider text-[#111111]">
+                {editingCategory ? `Editar Categoría: ${editingCategory.name}` : 'Nueva Categoría'}
+              </h3>
+            </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Parent Category */}
-                  <div>
-                    <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
-                      Categoría Padre (Opcional)
-                    </label>
-                    <select
-                      value={parentId}
-                      onChange={(e) => setParentId(e.target.value)}
-                      className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] cursor-pointer"
-                    >
-                      <option value="">Ninguna (Categoría Raíz)</option>
-                      {categories
-                        .filter((c) => !editingCategory || c._id !== editingCategory._id)
-                        .map((c) => (
-                          <option key={c._id} value={c._id}>
-                            {c.ancestors.length > 0 ? '— ' : ''}{c.name}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-
-                  {/* Order */}
-                  <div>
-                    <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
-                      Orden de Visualización
-                    </label>
-                    <input
-                      type="number"
-                      value={order}
-                      onChange={(e) => setOrder(parseInt(e.target.value, 10) || 0)}
-                      className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-medium p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
-                    />
-                  </div>
-                </div>
-
-                {/* Variant Axes Checkboxes */}
-                <div className="border border-[#e5e5e5] bg-[#fafafa] p-4 space-y-3">
-                  <div>
-                    <h4 className="text-xs font-extrabold uppercase text-[#111111]">
-                      Ejes de Variantes (Combinaciones vendibles)
-                    </h4>
-                    <p className="text-[11px] text-[#707072]">
-                      Marcá qué atributos generan variantes en los productos de esta categoría (ej: Talle, Color, Volumen). Si no seleccionás ninguno, los productos serán simples.
-                    </p>
-                  </div>
-
-                  {selectAttributes.length === 0 ? (
-                    <p className="text-xs text-[#9e9ea0] italic">
-                      No hay atributos de tipo 'Selección'. Creá atributos primero en la sección de Atributos.
-                    </p>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
-                      {selectAttributes.map((attr) => {
-                        const isChecked = variantAxes.includes(attr.key);
-                        return (
-                          <label
-                            key={attr.key}
-                            className={`p-2.5 border text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors ${
-                              isChecked
-                                ? 'bg-[#111111] text-white border-[#111111]'
-                                : 'bg-white text-[#111111] border-[#e5e5e5] hover:border-[#111111]'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => handleToggleVariantAxis(attr.key)}
-                              className="sr-only"
-                            />
-                            <span>{attr.label}</span>
-                            <span className="text-[10px] opacity-70 ml-auto font-mono">
-                              ({attr.options.length})
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Image Axis Dropdown */}
-                  {variantAxes.length > 0 && (
-                    <div className="pt-3 border-t border-[#e5e5e5]">
-                      <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
-                        Atributo con Fotos Diferenciadas (Opcional)
-                      </label>
-                      <select
-                        value={imageAxis}
-                        onChange={(e) => setImageAxis(e.target.value)}
-                        className="w-full bg-white text-[#111111] text-xs font-bold p-2.5 border border-[#e5e5e5] focus:outline-none focus:ring-1 focus:ring-[#111111] cursor-pointer"
-                      >
-                        <option value="">Ninguno (Una sola galería general para el producto)</option>
-                        {variantAxes.map((axisKey) => {
-                          const attr = selectAttributes.find((a) => a.key === axisKey);
-                          return (
-                            <option key={axisKey} value={axisKey}>
-                              {attr?.label || axisKey} (ej: fotos específicas por {attr?.label || axisKey})
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
-                  )}
-                </div>
-
-                {/* Spec Attributes Checkboxes */}
-                <div className="border border-[#e5e5e5] bg-[#fafafa] p-4 space-y-3">
-                  <div>
-                    <h4 className="text-xs font-extrabold uppercase text-[#111111]">
-                      Especificaciones de Ficha Técnica
-                    </h4>
-                    <p className="text-[11px] text-[#707072]">
-                      Campos descriptivos que aparecerán en la ficha del producto (ej: Género, Material, Tipo de piel).
-                    </p>
-                  </div>
-
-                  <div className="space-y-1.5 max-h-40 overflow-y-auto pt-1">
-                    {availableAttributes.map((attr) => {
-                      const specEntry = specAttributes.find((s) => s.key === attr.key);
-                      const isChecked = Boolean(specEntry);
-
-                      return (
-                        <div
-                          key={attr.key}
-                          className="flex items-center justify-between p-2 bg-white border border-[#e5e5e5]"
-                        >
-                          <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-[#111111]">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => handleToggleSpec(attr.key)}
-                              className="w-4 h-4 text-[#111111] focus:ring-[#111111]"
-                            />
-                            <span>{attr.label}</span>
-                            <span className="font-mono text-[10px] text-[#707072]">
-                              ({attr.type})
-                            </span>
-                          </label>
-
-                          {isChecked && (
-                            <label className="flex items-center gap-1.5 text-[11px] text-[#707072] cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={specEntry?.required || false}
-                                onChange={() => handleToggleSpecRequired(attr.key)}
-                                className="w-3.5 h-3.5"
-                              />
-                              <span>Obligatorio</span>
-                            </label>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Active Toggle */}
-                <div className="flex items-center justify-between p-3 bg-[#fafafa] border border-[#e5e5e5]">
-                  <div>
-                    <h5 className="text-xs font-bold uppercase text-[#111111]">Categoría Activa</h5>
-                    <p className="text-[11px] text-[#707072]">Visible en la tienda pública y filtros de navegación</p>
-                  </div>
+            <form id="categories-form" onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Name */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
+                    Nombre de la Categoría *
+                  </label>
                   <input
-                    type="checkbox"
-                    checked={active}
-                    onChange={(e) => setActive(e.target.checked)}
-                    className="w-4 h-4 text-[#111111] focus:ring-[#111111] cursor-pointer"
+                    type="text"
+                    placeholder="Ej: Zapatillas Urbanas, Fragancias Hombre, Remeras"
+                    value={name}
+                    onChange={(e) => handleNameChange(e.target.value)}
+                    required
+                    className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
                   />
                 </div>
 
-                {/* Actions */}
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#e5e5e5]">
-                  <button
-                    type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    className="py-2.5 px-4 bg-white hover:bg-[#f5f5f5] text-[#111111] text-xs font-bold uppercase border border-[#e5e5e5] cursor-pointer"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="py-2.5 px-6 bg-[#111111] hover:bg-black text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {editingCategory ? 'Guardar Cambios' : 'Crear Categoría'}
-                  </button>
+                {/* Slug */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
+                    Slug de URL *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: zapatillas-urbanas, fragancias-hombre"
+                    value={slug}
+                    onChange={(e) => setSlug(slugify(e.target.value))}
+                    required
+                    className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-mono p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                  />
                 </div>
-              </form>
-            </div>
-          </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Parent Category */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
+                    Categoría Padre (Opcional)
+                  </label>
+                  <select
+                    value={parentId}
+                    onChange={(e) => setParentId(e.target.value)}
+                    className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] cursor-pointer"
+                  >
+                    <option value="">Ninguna (Categoría Raíz)</option>
+                    {categories
+                      .filter((c) => !editingCategory || c._id !== editingCategory._id)
+                      .map((c) => (
+                        <option key={c._id} value={c._id}>
+                          {c.ancestors.length > 0 ? '— ' : ''}{c.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* Order */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
+                    Orden de Visualización
+                  </label>
+                  <input
+                    type="number"
+                    value={order}
+                    onChange={(e) => setOrder(parseInt(e.target.value, 10) || 0)}
+                    className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-medium p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                  />
+                </div>
+              </div>
+
+              {/* Variant Axes Checkboxes */}
+              <div className="border border-[#e5e5e5] bg-[#fafafa] p-4 space-y-3">
+                <div>
+                  <h4 className="text-xs font-extrabold uppercase text-[#111111]">
+                    Ejes de Variantes (Combinaciones vendibles)
+                  </h4>
+                  <p className="text-[11px] text-[#707072]">
+                    Marcá qué atributos generan variantes en los productos de esta categoría (ej: Talle, Color, Volumen). Si no seleccionás ninguno, los productos serán simples.
+                  </p>
+                </div>
+
+                {selectAttributes.length === 0 ? (
+                  <p className="text-xs text-[#9e9ea0] italic">
+                    No hay atributos de tipo 'Selección'. Creá atributos primero en la sección de Atributos.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
+                    {selectAttributes.map((attr) => {
+                      const isChecked = variantAxes.includes(attr.key);
+                      return (
+                        <label
+                          key={attr.key}
+                          className={`p-2.5 border text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors ${
+                            isChecked
+                              ? 'bg-[#111111] text-white border-[#111111]'
+                              : 'bg-white text-[#111111] border-[#e5e5e5] hover:border-[#111111]'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => handleToggleVariantAxis(attr.key)}
+                            className="sr-only"
+                          />
+                          <span>{attr.label}</span>
+                          <span className="text-[10px] opacity-70 ml-auto font-mono">
+                            ({attr.options.length})
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Image Axis Dropdown */}
+                {variantAxes.length > 0 && (
+                  <div className="pt-3 border-t border-[#e5e5e5]">
+                    <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
+                      Atributo con Fotos Diferenciadas (Opcional)
+                    </label>
+                    <select
+                      value={imageAxis}
+                      onChange={(e) => setImageAxis(e.target.value)}
+                      className="w-full bg-white text-[#111111] text-xs font-bold p-2.5 border border-[#e5e5e5] focus:outline-none focus:ring-1 focus:ring-[#111111] cursor-pointer"
+                    >
+                      <option value="">Ninguno (Una sola galería general para el producto)</option>
+                      {variantAxes.map((axisKey) => {
+                        const attr = selectAttributes.find((a) => a.key === axisKey);
+                        return (
+                          <option key={axisKey} value={axisKey}>
+                            {attr?.label || axisKey} (ej: fotos específicas por {attr?.label || axisKey})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Spec Attributes Checkboxes */}
+              <div className="border border-[#e5e5e5] bg-[#fafafa] p-4 space-y-3">
+                <div>
+                  <h4 className="text-xs font-extrabold uppercase text-[#111111]">
+                    Especificaciones de Ficha Técnica
+                  </h4>
+                  <p className="text-[11px] text-[#707072]">
+                    Campos descriptivos que aparecerán en la ficha del producto (ej: Género, Material, Tipo de piel).
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 max-h-40 overflow-y-auto pt-1">
+                  {availableAttributes.map((attr) => {
+                    const specEntry = specAttributes.find((s) => s.key === attr.key);
+                    const isChecked = Boolean(specEntry);
+
+                    return (
+                      <div
+                        key={attr.key}
+                        className="flex items-center justify-between p-2 bg-white border border-[#e5e5e5]"
+                      >
+                        <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-[#111111]">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => handleToggleSpec(attr.key)}
+                            className="w-4 h-4 text-[#111111] focus:ring-[#111111]"
+                          />
+                          <span>{attr.label}</span>
+                          <span className="font-mono text-[10px] text-[#707072]">
+                            ({attr.type})
+                          </span>
+                        </label>
+
+                        {isChecked && (
+                          <label className="flex items-center gap-1.5 text-[11px] text-[#707072] cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={specEntry?.required || false}
+                              onChange={() => handleToggleSpecRequired(attr.key)}
+                              className="w-3.5 h-3.5"
+                            />
+                            <span>Obligatorio</span>
+                          </label>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Active Toggle */}
+              <div className="flex items-center justify-between p-3 bg-[#fafafa] border border-[#e5e5e5]">
+                <div>
+                  <h5 className="text-xs font-bold uppercase text-[#111111]">Categoría Activa</h5>
+                  <p className="text-[11px] text-[#707072]">Visible en la tienda pública y filtros de navegación</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={active}
+                  onChange={(e) => setActive(e.target.checked)}
+                  className="w-4 h-4 text-[#111111] focus:ring-[#111111] cursor-pointer"
+                />
+              </div>
+
+            </form>
+          </ResponsiveModal>
         )}
       </main>
     </div>

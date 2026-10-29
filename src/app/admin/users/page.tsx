@@ -18,6 +18,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
+import { ResponsiveModal } from '@/components/ui/responsive-modal';
 
 interface UserItem {
   _id: string;
@@ -452,153 +453,159 @@ export default function AdminUsersPage() {
 
       {/* Modal Crear / Editar */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-[#e5e5e7] shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-6 border-b border-[#e5e5e7] flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-neutral-100 rounded-xl text-[#111111]">
-                  {editingUser ? <Edit2 className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}
-                </div>
-                <div>
-                  <h3 className="font-bold text-base text-[#111111]">
-                    {editingUser ? `Editar @${editingUser.username}` : 'Nuevo Usuario'}
-                  </h3>
-                  <p className="text-xs text-[#707072]">
-                    {editingUser
-                      ? 'Modifica los datos o actualiza su contraseña'
-                      : 'Crea una cuenta para acceder al panel de administración'}
-                  </p>
-                </div>
+        <ResponsiveModal
+          open
+          onOpenChange={(open) => !open && closeModal()}
+          title={editingUser ? 'Editar Usuario' : 'Crear Usuario'}
+          hideTitle
+          className="sm:max-w-md p-0 gap-0"
+          footer={
+            <div className="flex items-center justify-end gap-3 px-6 pb-6">
+              <button
+                type="button"
+                onClick={closeModal}
+                className="px-4 py-2.5 rounded-xl border border-[#e5e5e7] text-xs font-bold uppercase tracking-wider text-[#707072] hover:text-[#111111] hover:bg-neutral-100 transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                form="users-form"
+                disabled={actionLoading === 'saving'}
+                className="px-5 py-2.5 bg-[#111111] hover:bg-[#222224] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-xs active:scale-95 disabled:opacity-50"
+              >
+                {actionLoading === 'saving' && <Loader2 className="w-4 h-4 animate-spin" />}
+                <span>{editingUser ? 'Guardar Cambios' : 'Crear Usuario'}</span>
+              </button>
+            </div>
+          }
+        >
+          <div className="p-6 border-b border-[#e5e5e7] flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-neutral-100 rounded-xl text-[#111111]">
+                {editingUser ? <Edit2 className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-[#111111]">
+                  {editingUser ? `Editar @${editingUser.username}` : 'Nuevo Usuario'}
+                </h3>
+                <p className="text-xs text-[#707072]">
+                  {editingUser
+                    ? 'Modifica los datos o actualiza su contraseña'
+                    : 'Crea una cuenta para acceder al panel de administración'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <form id="users-form" onSubmit={handleSubmit} className="p-6 space-y-4">
+            {/* Username */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#707072] mb-1.5">
+                Nombre de Usuario *
+              </label>
+              <input
+                type="text"
+                required
+                disabled={Boolean(editingUser)}
+                value={formUsername}
+                onChange={(e) => setFormUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
+                placeholder="ej: analia, juan_admin"
+                className="w-full px-3.5 py-2.5 bg-[#f8f9fa] border border-[#e5e5e7] rounded-xl text-sm font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-black disabled:opacity-60"
+              />
+              {editingUser && (
+                <p className="text-[11px] text-[#707072] mt-1">El nombre de usuario no se puede cambiar.</p>
+              )}
+            </div>
+
+            {/* Nombre completo */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#707072] mb-1.5">
+                Nombre y Apellido *
+              </label>
+              <input
+                type="text"
+                required
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                placeholder="ej: Analía Gómez"
+                className="w-full px-3.5 py-2.5 bg-[#f8f9fa] border border-[#e5e5e7] rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-black"
+              />
+            </div>
+
+            {/* Email */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#707072] mb-1.5">
+                Email (Opcional)
+              </label>
+              <input
+                type="email"
+                value={formEmail}
+                onChange={(e) => setFormEmail(e.target.value)}
+                placeholder="ej: analia@cjstore.com"
+                className="w-full px-3.5 py-2.5 bg-[#f8f9fa] border border-[#e5e5e7] rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-black"
+              />
+            </div>
+
+            {/* Contraseña */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#707072] mb-1.5">
+                {editingUser ? 'Nueva Contraseña (dejar vacío para no cambiar)' : 'Contraseña *'}
+              </label>
+              <div className="relative">
+                <input
+                  type="password"
+                  required={!editingUser}
+                  value={formPassword}
+                  onChange={(e) => setFormPassword(e.target.value)}
+                  placeholder={editingUser ? '••••••••' : 'Mínimo 6 caracteres'}
+                  className="w-full px-3.5 py-2.5 bg-[#f8f9fa] border border-[#e5e5e7] rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-black"
+                />
+                <Key className="w-4 h-4 text-neutral-400 absolute right-3.5 top-3" />
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {/* Username */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#707072] mb-1.5">
-                  Nombre de Usuario *
-                </label>
-                <input
-                  type="text"
-                  required
-                  disabled={Boolean(editingUser)}
-                  value={formUsername}
-                  onChange={(e) => setFormUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
-                  placeholder="ej: analia, juan_admin"
-                  className="w-full px-3.5 py-2.5 bg-[#f8f9fa] border border-[#e5e5e7] rounded-xl text-sm font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-black disabled:opacity-60"
-                />
-                {editingUser && (
-                  <p className="text-[11px] text-[#707072] mt-1">El nombre de usuario no se puede cambiar.</p>
+            {/* Rol */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#707072] mb-1.5">
+                Rol del Usuario
+              </label>
+              <select
+                value={formRole}
+                onChange={(e) => setFormRole(e.target.value as 'superadmin' | 'admin' | 'seller')}
+                className="w-full px-3.5 py-2.5 bg-[#f8f9fa] border border-[#e5e5e7] rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-black cursor-pointer"
+              >
+                <option value="admin">Admin (Gestión completa de tienda)</option>
+                {currentUser?.role === 'superadmin' && (
+                  <option value="superadmin">Superadmin (Acceso total y gestión de usuarios)</option>
                 )}
-              </div>
+                <option value="seller">Vendedor (Solo pedidos y catálogo)</option>
+              </select>
+            </div>
 
-              {/* Nombre completo */}
+            {/* Estado Activo */}
+            <div className="pt-2 flex items-center justify-between">
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#707072] mb-1.5">
-                  Nombre y Apellido *
-                </label>
+                <span className="text-xs font-bold uppercase tracking-wider text-[#111111] block">
+                  Usuario Habilitado
+                </span>
+                <span className="text-[11px] text-[#707072]">
+                  Permite al usuario iniciar sesión en el panel
+                </span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
                 <input
-                  type="text"
-                  required
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="ej: Analía Gómez"
-                  className="w-full px-3.5 py-2.5 bg-[#f8f9fa] border border-[#e5e5e7] rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-black"
+                  type="checkbox"
+                  checked={formActive}
+                  onChange={(e) => setFormActive(e.target.checked)}
+                  className="sr-only peer"
                 />
-              </div>
+                <div className="w-11 h-6 bg-neutral-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+              </label>
+            </div>
 
-              {/* Email */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#707072] mb-1.5">
-                  Email (Opcional)
-                </label>
-                <input
-                  type="email"
-                  value={formEmail}
-                  onChange={(e) => setFormEmail(e.target.value)}
-                  placeholder="ej: analia@cjstore.com"
-                  className="w-full px-3.5 py-2.5 bg-[#f8f9fa] border border-[#e5e5e7] rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-black"
-                />
-              </div>
-
-              {/* Contraseña */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#707072] mb-1.5">
-                  {editingUser ? 'Nueva Contraseña (dejar vacío para no cambiar)' : 'Contraseña *'}
-                </label>
-                <div className="relative">
-                  <input
-                    type="password"
-                    required={!editingUser}
-                    value={formPassword}
-                    onChange={(e) => setFormPassword(e.target.value)}
-                    placeholder={editingUser ? '••••••••' : 'Mínimo 6 caracteres'}
-                    className="w-full px-3.5 py-2.5 bg-[#f8f9fa] border border-[#e5e5e7] rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-black"
-                  />
-                  <Key className="w-4 h-4 text-neutral-400 absolute right-3.5 top-3" />
-                </div>
-              </div>
-
-              {/* Rol */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#707072] mb-1.5">
-                  Rol del Usuario
-                </label>
-                <select
-                  value={formRole}
-                  onChange={(e) => setFormRole(e.target.value as 'superadmin' | 'admin' | 'seller')}
-                  className="w-full px-3.5 py-2.5 bg-[#f8f9fa] border border-[#e5e5e7] rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-black cursor-pointer"
-                >
-                  <option value="admin">Admin (Gestión completa de tienda)</option>
-                  {currentUser?.role === 'superadmin' && (
-                    <option value="superadmin">Superadmin (Acceso total y gestión de usuarios)</option>
-                  )}
-                  <option value="seller">Vendedor (Solo pedidos y catálogo)</option>
-                </select>
-              </div>
-
-              {/* Estado Activo */}
-              <div className="pt-2 flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#111111] block">
-                    Usuario Habilitado
-                  </span>
-                  <span className="text-[11px] text-[#707072]">
-                    Permite al usuario iniciar sesión en el panel
-                  </span>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formActive}
-                    onChange={(e) => setFormActive(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-neutral-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                </label>
-              </div>
-
-              {/* Buttons */}
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-[#e5e5e7]">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="px-4 py-2.5 rounded-xl border border-[#e5e5e7] text-xs font-bold uppercase tracking-wider text-[#707072] hover:text-[#111111] hover:bg-neutral-100 transition-all cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={actionLoading === 'saving'}
-                  className="px-5 py-2.5 bg-[#111111] hover:bg-[#222224] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-xs active:scale-95 disabled:opacity-50"
-                >
-                  {actionLoading === 'saving' && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <span>{editingUser ? 'Guardar Cambios' : 'Crear Usuario'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          </form>
+        </ResponsiveModal>
       )}
     </div>
   );

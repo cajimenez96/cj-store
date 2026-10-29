@@ -6,6 +6,7 @@ import { Eye, AlertCircle, Tag } from "lucide-react";
 import type { IProductImage } from "@/models/Product";
 
 import { formatPrice } from "@/utils/formatCurrency";
+import { formatOptionLabel } from "@/lib/variants";
 
 export interface FormattedProduct {
   _id: string;
@@ -33,7 +34,7 @@ export interface FormattedProduct {
     enabled: boolean;
     minUnits?: number;
   };
-  specs?: Array<{ key: string; value: any }>;
+  specs?: Array<{ key: string; value: any; label?: string; unit?: string }>;
 }
 
 interface ProductCardProps {
@@ -83,13 +84,20 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         for (const opt of v.options) {
           if (opt.value && !seen.has(opt.value)) {
             seen.add(opt.value);
-            availableOptions.push(opt.value);
+            availableOptions.push(formatOptionLabel(opt.label ?? opt.value, opt.unit));
           }
         }
       } else if (v.name && !seen.has(v.name)) {
         seen.add(v.name);
         availableOptions.push(v.name);
       }
+    }
+  }
+
+  // Simple products carry their measure in specs (e.g. volumen: 60 with unit ml)
+  if (availableOptions.length === 0) {
+    for (const spec of product.specs ?? []) {
+      if (spec.unit) availableOptions.push(formatOptionLabel(spec.label ?? String(spec.value), spec.unit));
     }
   }
 
@@ -150,7 +158,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </h3>
 
         {/* Available Options / Sizes Pills Preview */}
-        <div className="hidden md:flex items-center gap-1 my-1 overflow-x-auto no-scrollbar py-0.5">
+        <div className="flex items-center gap-1 my-1 overflow-x-auto no-scrollbar py-0.5">
           {availableOptions.length > 0 ? (
             availableOptions.slice(0, 5).map((opt) => (
               <span

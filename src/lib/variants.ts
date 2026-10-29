@@ -111,3 +111,11 @@ export function formatVariantLabel(
     })
     .join(' / ');
 }
+
+/**
+ * Display label for one option: the visible label followed by the attribute unit, no space.
+ * e.g. ("60", "ml") -> "60ml"
+ */
+export function formatOptionLabel(label: string, unit?: string): string {
+  return unit ? `${label}${unit}` : label;
+}
