@@ -114,6 +114,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   role = null,
 }) => {
   const [updating, setUpdating] = useState(false);
+  // Two-step cancel: the request only fires after the user confirms.
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('efectivo');
   const { settings } = useSettings();
   const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
@@ -176,11 +178,13 @@ ${itemsList}
   };
 
   const handleCancel = async () => {
+    if (updating) return;
     setUpdating(true);
     try {
       await onCancel(order._id);
     } finally {
       setUpdating(false);
+      setConfirmingCancel(false);
     }
   };
 
@@ -422,14 +426,39 @@ ${itemsList}
             </button>
           )}
 
-          <button
-            onClick={handleCancel}
-            disabled={updating}
-            className="py-3 px-5 bg-[#d30005] hover:bg-red-700 text-white font-bold text-xs uppercase tracking-wider rounded-full flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
-          >
-            {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}
-            <span>Cancelar Solicitud</span>
-          </button>
+          {confirmingCancel ? (
+            <div className="w-full p-4 bg-[#d30005]/5 border border-[#d30005]/30 space-y-3" role="alertdialog">
+              <p className="text-xs font-bold text-[#111111]">
+                ¿Cancelar esta solicitud? El stock se devolverá y la acción no se puede deshacer.
+              </p>
+              <div className="flex flex-wrap gap-2 justify-end">
+                <button
+                  onClick={() => setConfirmingCancel(false)}
+                  disabled={updating}
+                  className="py-3 px-5 bg-[#f5f5f5] hover:bg-[#e5e5e5] text-[#111111] font-bold text-xs uppercase tracking-wider rounded-full transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  Volver
+                </button>
+                <button
+                  onClick={handleCancel}
+                  disabled={updating}
+                  className="py-3 px-5 bg-[#d30005] hover:bg-red-700 text-white font-bold text-xs uppercase tracking-wider rounded-full flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}
+                  <span>Sí, cancelar</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmingCancel(true)}
+              disabled={updating}
+              className="py-3 px-5 bg-[#d30005] hover:bg-red-700 text-white font-bold text-xs uppercase tracking-wider rounded-full flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+            >
+              <Ban className="w-4 h-4" />
+              <span>Cancelar Solicitud</span>
+            </button>
+          )}
         </div>
       )}
 
