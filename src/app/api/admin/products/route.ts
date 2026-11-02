@@ -50,16 +50,24 @@ function refPick(ref: unknown, keys: string[]) {
 function sanitizeProductForSeller(prod: any) {
   return {
     ...pick(prod, [
-      '_id', 'name', 'slug', 'active', 'isClearance', 'wholesale', 'priceRange', 'totalStock',
+      '_id', 'name', 'slug', 'active', 'isClearance', 'totalStock',
       'hasWholesale', 'price', 'retailPrice', 'wholesalePrice', 'stock',
     ]),
+    // Nested objects are allowlisted key by key too (no whole-object pass-through).
+    wholesale: prod.wholesale ? pick(prod.wholesale, ['enabled', 'minQty']) : prod.wholesale,
+    priceRange: prod.priceRange ? pick(prod.priceRange, ['min', 'max']) : prod.priceRange,
     brandId: refPick(prod.brandId, ['_id', 'name']),
     categoryId: refPick(prod.categoryId, ['_id', 'name', 'slug', 'variantAxes']),
     images: (prod.images ?? []).map((i: Record<string, unknown>) =>
       pick(i, ['_id', 'url', 'isPrincipal', 'position', 'axisValue'])
     ),
     variants: (prod.variants ?? []).map((v: Record<string, unknown>) =>
-      pick(v, ['_id', 'sku', 'name', 'options', 'retailPrice', 'wholesalePrice', 'stock', 'active'])
+      ({
+        ...pick(v, ['_id', 'sku', 'name', 'retailPrice', 'wholesalePrice', 'stock', 'active']),
+        options: ((v.options as Record<string, unknown>[] | undefined) ?? []).map((o) =>
+          pick(o, ['key', 'value'])
+        ),
+      })
     ),
   };
 }

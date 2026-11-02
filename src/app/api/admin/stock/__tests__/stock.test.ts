@@ -167,7 +167,7 @@ describe('seller read-only stock and restricted product reads', () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.ok).toBe(true);
-      expect(json.data.items).toHaveLength(2);
+      expect(json.data.items).toHaveLength(role === 'seller' ? 1 : 2);
       const keys = collectKeys(json);
       for (const k of COST_KEYS) expect(keys.has(k)).toBe(false);
     });
@@ -278,6 +278,77 @@ describe('seller read-only stock and restricted product reads', () => {
       const json = await res.json();
       expect(json.data.map((p: { name: string }) => p.name)).toEqual(['Zapato Activo']);
       expect(json.pagination.total).toBe(1);
+    });
+  });
+
+  describe('seller sanitizer is strict at every nesting level', () => {
+    it('drops raw extras nested in wholesale, priceRange, options, images, brandId, categoryId', async () => {
+      const Brand = (await import('@/models/Brand')).default;
+      const Category = (await import('@/models/Category')).default;
+      const brandId = new Types.ObjectId();
+      const categoryId = new Types.ObjectId();
+      await Brand.collection.insertOne({ _id: brandId, name: 'Marca', slug: 'marca', cost: 1, supplier: 'S' });
+      await Category.collection.insertOne({
+        _id: categoryId, name: 'Cat', slug: 'cat', variantAxes: ['color'], cost: 1, margin: 2,
+      });
+      await Product.collection.insertOne({
+        name: 'Nested Extras', slug: 'nested-extras', active: true, brandId, categoryId,
+        wholesale: { enabled: true, minQty: 3, cost: 111 },
+        priceRange: { min: 1, max: 2, costMin: 3 },
+        images: [{ _id: new Types.ObjectId(), url: 'u', isPrincipal: true, position: 0, axisValue: 'x', fileId: 'f', cost: 9 }],
+        variants: [{
+          _id: new Types.ObjectId(), sku: 'N-1', name: 'n', retailPrice: 1, wholesalePrice: 1, stock: 1, active: true,
+          options: [{ key: 'color', value: 'rojo', cost: 5 }], costPrice: 7,
+        }],
+        retailPrice: 1, wholesalePrice: 1, totalStock: 1, hasWholesale: true, createdAt: new Date(),
+      });
+      const res = await productsRoute.GET(req('GET', '/api/admin/products?search=Nested', tokens.seller));
+      const json = await res.json();
+      const p = json.data[0];
+      const keys = (o: object) => Object.keys(o).sort();
+      expect(keys(p)).toEqual(
+        ['_id', 'active', 'brandId', 'categoryId', 'hasWholesale', 'images', 'name', 'priceRange',
+          'retailPrice', 'slug', 'totalStock', 'variants', 'wholesale', 'wholesalePrice'].sort()
+      );
+      expect(keys(p.wholesale)).toEqual(['enabled', 'minQty']);
+      expect(keys(p.priceRange)).toEqual(['max', 'min']);
+      expect(keys(p.images[0])).toEqual(['_id', 'axisValue', 'isPrincipal', 'position', 'url']);
+      expect(keys(p.variants[0])).toEqual(
+        ['_id', 'active', 'name', 'options', 'retailPrice', 'sku', 'stock', 'wholesalePrice']
+      );
+      expect(p.variants[0].options).toEqual([{ key: 'color', value: 'rojo' }]);
+      expect(p.brandId).toEqual({ _id: String(brandId), name: 'Marca' });
+      expect(keys(p.categoryId)).toEqual(['_id', 'name', 'slug', 'variantAxes']);
+      const all = collectKeys(json);
+      for (const k of ['cost', 'costMin', 'costPrice', 'supplier', 'margin', 'fileId']) {
+        expect(all.has(k)).toBe(false);
+      }
+    });
+  });
+
+  describe('seller stock view hides inactive products', () => {
+    it('excludes inactive product and its numbers for seller; admin still sees it', async () => {
+      const sellerJson = await (await stockRoute.GET(req('GET', '/api/admin/stock', tokens.seller))).json();
+      expect(sellerJson.data.items.map((i: { name: string }) => i.name)).toEqual(['Zapato Activo']);
+      expect(sellerJson.data.totalProductsCount).toBe(1);
+      expect(sellerJson.data.totalUnitsInStock).toBe(7);
+      const adminJson = await (await stockRoute.GET(req('GET', '/api/admin/stock', tokens.admin))).json();
+      expect(adminJson.data.items.map((i: { name: string }) => i.name).sort()).toEqual(['Zapato Activo', 'Zapato Oculto']);
+      expect(adminJson.data.totalProductsCount).toBe(2);
+      expect(adminJson.data.totalUnitsInStock).toBe(9);
+    });
+  });
+
+  describe('write verbs without session', () => {
+    it('401 and nothing created/changed for POST, PUT, DELETE products', async () => {
+      const post = await productsRoute.POST(req('POST', '/api/admin/products', undefined, {
+        name: 'Nuevo', images: [{ url: 'http://x/y.jpg', isPrincipal: true, position: 0 }],
+      }));
+      const put = await productsRoute.PUT(req('PUT', '/api/admin/products', undefined, { _id: activeId, name: 'Hack' }));
+      const del = await productsRoute.DELETE(req('DELETE', `/api/admin/products?id=${activeId}&permanent=true`));
+      expect([post.status, put.status, del.status]).toEqual([401, 401, 401]);
+      expect(await Product.countDocuments({ name: 'Nuevo' })).toBe(0);
+      expect((await Product.findById(activeId))?.name).toBe('Zapato Activo');
     });
   });
 

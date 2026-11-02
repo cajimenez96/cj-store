@@ -34,7 +34,7 @@ export default function AdminStockPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   // null while loading: no edit controls until we know the role is not a seller.
   const [role, setRole] = useState<string | null>(null);
-  const canEdit = role !== null && role !== 'seller';
+  const canEdit = role === 'admin' || role === 'superadmin';
   const isReadOnly = role === 'seller';
 
   useEffect(() => {

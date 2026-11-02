@@ -32,6 +32,9 @@ export async function GET(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const query: Record<string, any> = {};
 
+    // Sellers never see inactive (draft/discontinued) products, nor totals that include them.
+    if (!isAdminRole(session.role)) query.active = true;
+
     if (search) {
       query.name = { $regex: search, $options: 'i' };
     }
