@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import { MessageSquare, Check, Ban, Clock, Loader2, ShieldCheck, Edit3, ShoppingBag, ZoomIn } from 'lucide-react';
 import type { OrderStatus } from '@/models/Order';
+import type { Role } from '@/lib/permissions';
 import { formatPrice } from '@/utils/formatCurrency';
 import { useSettings } from '@/context/SettingsContext';
 import { ResponsiveModal } from '@/components/ui/responsive-modal';
@@ -34,10 +35,24 @@ export interface AdminOrderItem {
     variantName?: string;
     qty: number;
     appliedPriceType?: 'retail' | 'wholesale' | 'custom';
+    /** Catalog price at order time (audit); absent on older orders. */
+    listPrice?: number;
     unitPrice: number;
     subtotal: number;
   }>;
+  /** Who registered the sale; absent for web orders. */
+  soldBy?: { userId: string; username: string; name: string };
+  history?: Array<{
+    at: string;
+    byUserId?: string;
+    byName: string;
+    action: string;
+    summary: string;
+  }>;
 }
+
+/** Role of the logged-in user; null while loading or when it could not be read. */
+export type ViewerRole = Role | null;
 
 interface OrderDetailModalProps {
   order: AdminOrderItem | null;
@@ -45,6 +60,8 @@ interface OrderDetailModalProps {
   onAuthorize: (id: string, paymentMethod: string) => Promise<void>;
   onCancel: (id: string) => Promise<void>;
   onEdit: (order: AdminOrderItem) => void;
+  /** Controls which actions are offered. null/unknown renders read-only. */
+  role?: ViewerRole;
 }
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
@@ -63,12 +80,37 @@ const PRICE_TYPE_LABELS: Record<string, string> = {
   custom: 'Precio acordado',
 };
 
+/** Catalog vs charged price for one line; nothing to flag when they match. */
+const PriceAudit: React.FC<{ listPrice: number; unitPrice: number }> = ({ listPrice, unitPrice }) => {
+  if (listPrice === unitPrice) {
+    return (
+      <span className="block text-[10px] font-medium text-[#707072]">
+        Precio de lista: {formatPrice(listPrice)}
+      </span>
+    );
+  }
+  const over = unitPrice > listPrice;
+  return (
+    <span className="block text-[10px] font-medium text-[#707072] mt-0.5">
+      Precio de lista: {formatPrice(listPrice)} • Cobrado: {formatPrice(unitPrice)}{' '}
+      <span
+        className={`ml-1 px-1.5 py-0.5 rounded font-bold ${
+          over ? 'bg-[#007d48]/10 text-[#007d48]' : 'bg-[#d30005]/10 text-[#d30005]'
+        }`}
+      >
+        {over ? 'Cobró de más' : 'Cobró de menos'}
+      </span>
+    </span>
+  );
+};
+
 export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   order,
   onClose,
   onAuthorize,
   onCancel,
   onEdit,
+  role = null,
 }) => {
   const [updating, setUpdating] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('efectivo');
@@ -100,6 +142,14 @@ ${itemsList}
   const statusInfo = STATUS_COLORS[order.status] ?? STATUS_COLORS['pendiente'];
   const isPending = order.status === 'pendiente';
   const isFinalized = ['autorizado', 'cancelado', 'completada', 'cancelada'].includes(order.status);
+  const isAdminViewer = role === 'admin' || role === 'superadmin';
+  // Mirrors the server rule: a seller may only edit/cancel an authorized order.
+  const isSellerActionable = role === 'seller' && order.status === 'autorizado';
+  const showAdminActions = isAdminViewer && !isFinalized;
+  const showActions = showAdminActions || isSellerActionable;
+  const history = [...(order.history ?? [])].sort(
+    (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()
+  );
 
   const handleAuthorize = async () => {
     setUpdating(true);
@@ -149,6 +199,9 @@ ${itemsList}
         </div>
         <p className="text-xs text-[#707072]">
           Fecha de emisión: {new Date(order.createdAt).toLocaleString('es-AR')}
+        </p>
+        <p className="text-xs text-[#707072]">
+          Vendedor: <strong className="text-[#111111]">{order.soldBy?.name || 'Web'}</strong>
         </p>
       </div>
 
@@ -247,6 +300,9 @@ ${itemsList}
                 <span className="block text-[10px] font-medium text-[#707072]">
                   {formatPrice(item.unitPrice)} c/u
                 </span>
+                {typeof item.listPrice === 'number' && (
+                  <PriceAudit listPrice={item.listPrice} unitPrice={item.unitPrice} />
+                )}
               </div>
             </div>
           ))}
@@ -291,8 +347,24 @@ ${itemsList}
         </div>
       </div>
 
+      {history.length > 0 && (
+        <section className="space-y-2" aria-label="Historial">
+          <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#111111]">Historial</h3>
+          <ul className="border border-[#e5e5e5] bg-[#f5f5f5] divide-y divide-[#e5e5e5] max-h-48 overflow-y-auto">
+            {history.map((h, idx) => (
+              <li key={idx} className="p-3 text-xs">
+                <p className="text-[#111111]">{h.summary}</p>
+                <p className="text-[10px] text-[#707072] mt-0.5">
+                  {new Date(h.at).toLocaleString('es-AR')} • {h.byName}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {/* Authorize Payment Method Selector (only for pending) */}
-      {isPending && (
+      {isPending && isAdminViewer && (
         <div className="p-4 bg-[#007d48]/5 border border-[#007d48]/20 space-y-2">
           <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111]">
             Medio de pago a registrar al autorizar
@@ -311,9 +383,9 @@ ${itemsList}
       )}
 
       {/* Status Actions */}
-      {!isFinalized && (
+      {showActions && (
         <div className="pt-4 border-t border-[#e5e5e5] flex flex-wrap gap-2 justify-end">
-          {isPending && (
+          {(isPending || isSellerActionable) && (
             <button
               onClick={() => onEdit(order)}
               disabled={updating}
@@ -324,7 +396,7 @@ ${itemsList}
             </button>
           )}
 
-          {isPending && (
+          {isPending && isAdminViewer && (
             <button
               onClick={handleAuthorize}
               disabled={updating}
@@ -346,7 +418,7 @@ ${itemsList}
         </div>
       )}
 
-      {isFinalized && (
+      {!showActions && (
         <div className="pt-4 border-t border-[#e5e5e5] flex justify-end">
           <button
             onClick={onClose}

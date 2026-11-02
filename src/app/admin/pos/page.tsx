@@ -87,7 +87,9 @@ export default function AdminPOSPage() {
   });
 
   const subtotal = computedItems.reduce((sum, i) => sum + i.unitPrice * i.qty, 0);
-  const total = Math.max(0, subtotal - discount);
+  // The server rejects a discount above the subtotal, so it is capped here.
+  const effectiveDiscount = Math.min(discount, subtotal);
+  const total = Math.max(0, subtotal - effectiveDiscount);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -205,7 +207,7 @@ export default function AdminPOSPage() {
             unitPrice: i.unitPrice,
           })),
           paymentMethod,
-          discount,
+          discount: effectiveDiscount,
           discountNote,
         }),
       });
@@ -518,10 +520,14 @@ export default function AdminPOSPage() {
                 <input
                   type="number"
                   min="0"
+                  max={subtotal}
                   value={discount}
-                  onChange={(e) => setDiscount(Math.max(0, Number(e.target.value)))}
+                  onChange={(e) => setDiscount(Math.min(subtotal, Math.max(0, Number(e.target.value) || 0)))}
                   className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-extrabold py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
                 />
+                {subtotal > 0 && discount >= subtotal && (
+                  <p className="text-[11px] text-[#707072] mt-1">El descuento no puede superar el subtotal.</p>
+                )}
               </div>
 
               {/* Notes */}
@@ -550,10 +556,10 @@ export default function AdminPOSPage() {
                     <span>Aplicado</span>
                   </div>
                 )}
-                {discount > 0 && (
+                {effectiveDiscount > 0 && (
                   <div className="flex justify-between text-[#007d48] font-semibold">
                     <span>Descuento</span>
-                    <span>-{formatPrice(discount)}</span>
+                    <span>-{formatPrice(effectiveDiscount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-extrabold text-xl text-[#111111] pt-2 border-t border-[#e5e5e5]">

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AdminNav } from '@/components/admin/AdminNav';
-import { OrderDetailModal, AdminOrderItem } from '@/components/admin/OrderDetailModal';
+import { OrderDetailModal, AdminOrderItem, type ViewerRole } from '@/components/admin/OrderDetailModal';
 import { OrderEditModal } from '@/components/admin/OrderEditModal';
 import {
   ShoppingBag,
@@ -47,6 +47,12 @@ export default function AdminOrdersPage() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [selectedSeller, setSelectedSeller] = useState<string>('');
+  const [sellers, setSellers] = useState<Array<{ id: string; name: string }>>([]);
+
+  // null while loading or if it cannot be read: no admin-only controls either way.
+  const [role, setRole] = useState<ViewerRole>(null);
+  const isAdminViewer = role === 'admin' || role === 'superadmin';
 
   const [selectedOrder, setSelectedOrder] = useState<AdminOrderItem | null>(null);
   const [editingOrder, setEditingOrder] = useState<AdminOrderItem | null>(null);
@@ -58,10 +64,46 @@ export default function AdminOrdersPage() {
     const params = new URLSearchParams();
     if (searchTerm) params.append('search', searchTerm);
     if (selectedStatus) params.append('status', selectedStatus);
+    if (isAdminViewer && selectedSeller) params.append('userId', selectedSeller);
     params.append('page', targetPage.toString());
     params.append('limit', PAGE_SIZE.toString());
     return params;
-  }, [searchTerm, selectedStatus]);
+  }, [searchTerm, selectedStatus, selectedSeller, isAdminViewer]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/auth/me')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const r = data?.user?.role;
+        if (!cancelled && (r === 'superadmin' || r === 'admin' || r === 'seller')) setRole(r);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Admins pick a seller from every user (admins also register POS sales).
+  useEffect(() => {
+    if (!isAdminViewer) return;
+    let cancelled = false;
+    fetch('/api/admin/users')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (cancelled || !json?.ok || !Array.isArray(json.data)) return;
+        setSellers(
+          json.data.map((u: { _id: string; name?: string; username: string }) => ({
+            id: String(u._id),
+            name: u.name || u.username,
+          }))
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdminViewer]);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -211,7 +253,25 @@ export default function AdminOrdersPage() {
             <Search className="w-4 h-4 text-[#707072] absolute left-3 top-1/2 -translate-y-1/2" />
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
+            {isAdminViewer && (
+              <label className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-wider text-[#707072]">
+                Vendedor
+                <select
+                  value={selectedSeller}
+                  onChange={(e) => setSelectedSeller(e.target.value)}
+                  className="bg-[#f5f5f5] text-[#111111] text-xs font-bold py-2 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] cursor-pointer normal-case tracking-normal"
+                >
+                  <option value="">Todos</option>
+                  <option value="web">Web</option>
+                  {sellers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {[
               { label: 'Todas', value: '' },
               { label: 'Pendientes', value: 'pendiente' },
@@ -252,6 +312,7 @@ export default function AdminOrdersPage() {
                     <th className="py-3 px-4">Cliente</th>
                     <th className="py-3 px-4 text-center">Ítems</th>
                     <th className="py-3 px-4 text-center">Origen</th>
+                    <th className="py-3 px-4">Vendedor</th>
                     <th className="py-3 px-4 text-right">Total ($)</th>
                     <th className="py-3 px-4 text-center">Estado</th>
                     <th className="py-3 px-4 text-right">Acciones</th>
@@ -290,6 +351,10 @@ export default function AdminOrdersPage() {
                         }`}>
                           {ord.origin === 'admin_direct' ? 'Directa' : 'Web'}
                         </span>
+                      </td>
+
+                      <td className="py-3 px-4 font-medium text-[#111111]">
+                        {ord.soldBy?.name || 'Web'}
                       </td>
 
                       <td className="py-3 px-4 text-right font-extrabold text-sm text-[#111111]">
@@ -342,6 +407,7 @@ export default function AdminOrdersPage() {
       <OrderDetailModal
         order={selectedOrder}
         onClose={() => setSelectedOrder(null)}
+        role={role}
         onAuthorize={handleAuthorize}
         onCancel={handleCancel}
         onEdit={(order) => {

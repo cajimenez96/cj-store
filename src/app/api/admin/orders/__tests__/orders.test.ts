@@ -512,6 +512,41 @@ for (const topo of topologies) {
       });
     });
 
+    describe('audit fields in responses', () => {
+      it('list and detail expose soldBy, item listPrice and history; seller sees own history, admin any', async () => {
+        const admin = await makeUser('admin', 'Admin Uno');
+        const s1 = await makeUser('seller', 'Vendedor Uno');
+        const p = await makeProduct(10);
+        const o = await makeOrder(p, { soldBy: s1.user, qty: 2, listPrice: 10000 });
+        const put = await detail.PUT(
+          req('PUT', `/api/admin/orders/${o._id}`, s1.token, { items: [editItem(p, 1)] }),
+          ctx(String(o._id))
+        );
+        expect(put.status).toBe(200);
+
+        for (const who of [s1, admin]) {
+          const d = await detail.GET(req('GET', `/api/admin/orders/${o._id}`, who.token), ctx(String(o._id)));
+          expect(d.status).toBe(200);
+          const data = (await d.json()).data;
+          expect(data.soldBy).toMatchObject({ userId: s1.id, username: s1.user.username, name: 'Vendedor Uno' });
+          expect(data.items[0].listPrice).toBe(10000);
+          expect(data.history.length).toBeGreaterThan(0);
+          expect(data.history[0]).toMatchObject({ byName: 'Vendedor Uno', action: expect.any(String), summary: expect.any(String) });
+          // fields the admin UI already relied on are still there
+          for (const k of ['orderNumber', 'status', 'subtotal', 'discount', 'total', 'paymentMethod', 'guest', 'origin']) {
+            expect(data).toHaveProperty(k);
+          }
+          expect(data.items[0]).toMatchObject({ name: 'Zapato Test', qty: 1, unitPrice: 10000, appliedPriceType: 'retail' });
+        }
+
+        const l = await list.GET(req('GET', '/api/admin/orders', admin.token));
+        const row = (await l.json()).data[0];
+        expect(row.soldBy.name).toBe('Vendedor Uno');
+        expect(row.items[0].listPrice).toBe(10000);
+        expect(row).toHaveProperty('history');
+      });
+    });
+
     describe('seller edits', () => {
       it('qty 2 -> 1 restocks exactly 1 unit and appends quantity_changed', async () => {
         const s1 = await makeUser('seller', 'Vendedor Uno');

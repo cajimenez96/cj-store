@@ -146,7 +146,14 @@ export default function AdminStockPage() {
               <Boxes className="w-7 h-7" /> Control de Stock e Inventario
             </h1>
             <p className="text-xs text-[#707072] mt-1">
-              Monitoreá el stock total por producto, alertas de reposición (total ≤ {minStockAlert} unidades){canEdit ? ' y modificá cantidades por variante en tiempo real' : ''}.
+              Monitoreá el stock total por producto, alertas de reposición (total ≤ {minStockAlert} unidades){canEdit ? (
+                ' y modificá cantidades por variante en tiempo real'
+              ) : role === null ? (
+                // Reserve the space while the role loads so the subtitle does not jump.
+                <span className="invisible" aria-hidden="true"> y modificá cantidades por variante en tiempo real</span>
+              ) : (
+                ''
+              )}.
             </p>
             {isReadOnly && (
               <p className="text-[11px] font-extrabold uppercase tracking-wider text-[#707072] mt-2">

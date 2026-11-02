@@ -29,7 +29,13 @@ export const AdminNav: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     fetch("/api/admin/auth/me")
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        if (res.status === 401) {
+          if (!cancelled) router.push("/admin/login");
+          return null;
+        }
+        return res.ok ? res.json() : null;
+      })
       .then((data) => {
         if (!cancelled && data?.user?.role) setRole(data.user.role);
       })
@@ -37,7 +43,7 @@ export const AdminNav: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [router]);
 
   const handleLogout = async () => {
     try {
