@@ -23,6 +23,8 @@ export interface IOrderItem {
   variantLabel?: string;
   variantName?: string;
   qty: number;
+  /** Catalog price at order time (audit); unitPrice may differ if overridden. */
+  listPrice?: number;
   appliedPriceType: AppliedPriceType;
   unitPrice: number;
   subtotal: number;
@@ -34,7 +36,32 @@ export interface ICustomerGuest {
   phone: string;
 }
 
+export interface ISoldBy {
+  userId: Types.ObjectId;
+  username: string;
+  name: string;
+}
+
+export interface IOrderHistoryEntry {
+  at: Date;
+  byUserId?: Types.ObjectId;
+  byName: string;
+  action:
+    | 'created'
+    | 'item_added'
+    | 'item_removed'
+    | 'quantity_changed'
+    | 'price_changed'
+    | 'discount_changed'
+    | 'payment_changed'
+    | 'status_changed'
+    | 'cancelled';
+  summary: string;
+}
+
 export interface IOrder {
+  soldBy?: ISoldBy;
+  history: IOrderHistoryEntry[];
   orderNumber: string;
   origin: OrderOrigin;
   guest: ICustomerGuest;
@@ -92,6 +119,10 @@ const OrderItemSchema = new Schema<IOrderItem>(
       required: [true, 'La cantidad es obligatoria'],
       min: [1, 'La cantidad mínima es 1'],
     },
+    listPrice: {
+      type: Number,
+      min: 0,
+    },
     appliedPriceType: {
       type: String,
       enum: ['retail', 'wholesale', 'custom'],
@@ -128,6 +159,40 @@ const CustomerGuestSchema = new Schema<ICustomerGuest>(
       required: [true, 'El teléfono del cliente es obligatorio'],
       trim: true,
     },
+  },
+  { _id: false }
+);
+
+const SoldBySchema = new Schema<ISoldBy>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    username: { type: String, required: true, trim: true },
+    name: { type: String, required: true, trim: true },
+  },
+  { _id: false }
+);
+
+const HistoryEntrySchema = new Schema<IOrderHistoryEntry>(
+  {
+    at: { type: Date, default: Date.now },
+    byUserId: { type: Schema.Types.ObjectId, ref: 'User' },
+    byName: { type: String, required: true },
+    action: {
+      type: String,
+      required: true,
+      enum: [
+        'created',
+        'item_added',
+        'item_removed',
+        'quantity_changed',
+        'price_changed',
+        'discount_changed',
+        'payment_changed',
+        'status_changed',
+        'cancelled',
+      ],
+    },
+    summary: { type: String, required: true },
   },
   { _id: false }
 );
@@ -195,6 +260,14 @@ const OrderSchema: Schema<IOrderDocument> = new Schema(
       trim: true,
       default: '',
     },
+    soldBy: {
+      type: SoldBySchema,
+      required: false,
+    },
+    history: {
+      type: [HistoryEntrySchema],
+      default: [],
+    },
   },
   {
     timestamps: true,
@@ -203,6 +276,7 @@ const OrderSchema: Schema<IOrderDocument> = new Schema(
 
 OrderSchema.index({ status: 1, createdAt: -1 });
 OrderSchema.index({ origin: 1, createdAt: -1 });
+OrderSchema.index({ 'soldBy.userId': 1 });
 
 const Order: Model<IOrderDocument> =
   mongoose.models.Order || mongoose.model<IOrderDocument>('Order', OrderSchema);

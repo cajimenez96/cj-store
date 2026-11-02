@@ -2,7 +2,14 @@ import mongoose, { Schema, Document, Model, Types } from 'mongoose';
 
 export type RecordedPaymentMethod = 'efectivo' | 'transferencia' | 'tarjeta' | 'otro';
 
+export interface ISalesRecordSoldBy {
+  userId: Types.ObjectId;
+  username: string;
+  name: string;
+}
+
 export interface ISalesRecord {
+  soldBy?: ISalesRecordSoldBy;
   orderId: Types.ObjectId;
   orderNumber: string;
   confirmationDate: Date;
@@ -42,6 +49,17 @@ const SalesRecordSchema: Schema<ISalesRecordDocument> = new Schema(
       type: String,
       trim: true,
       default: '',
+    },
+    soldBy: {
+      type: new Schema(
+        {
+          userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+          username: { type: String, required: true, trim: true },
+          name: { type: String, required: true, trim: true },
+        },
+        { _id: false }
+      ),
+      required: false,
     },
     finalTotal: {
       type: Number,
