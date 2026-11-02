@@ -579,7 +579,7 @@ export default function AdminUsersPage() {
                 {currentUser?.role === 'superadmin' && (
                   <option value="superadmin">Superadmin (Acceso total y gestión de usuarios)</option>
                 )}
-                <option value="seller">Vendedor (Solo pedidos y catálogo)</option>
+                <option value="seller">Vendedor (ventas por POS, sus solicitudes, su contabilidad y stock en solo lectura)</option>
               </select>
             </div>
 

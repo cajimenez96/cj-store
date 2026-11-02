@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { AdminNav } from '@/components/admin/AdminNav';
 import {
   DollarSign,
@@ -73,26 +74,52 @@ interface AccountingData {
     incomeTotal: number;
     incomeCash: number;
     incomeTransfer: number;
-    expenseTotal: number;
-    expenseCash: number;
-    expenseTransfer: number;
-    netBalance: number;
-    netCash: number;
-    netTransfer: number;
     totalOrdersCount: number;
     totalPairsSold: number;
     averageTicket: number;
-    expensesByCategory: Record<string, number>;
+    // Admin-only: the API omits these for sellers.
+    expenseTotal?: number;
+    expenseCash?: number;
+    expenseTransfer?: number;
+    netBalance?: number;
+    netCash?: number;
+    netTransfer?: number;
+    expensesByCategory?: Record<string, number>;
   };
   transactions: TransactionItem[];
+  deviation?: { above: number; below: number };
+  // Admin-only.
+  bySeller?: SellerRow[];
 }
 
+interface SellerRow {
+  userId: string;
+  name: string;
+  totalSold: number;
+  salesCount: number;
+  units: number;
+  above: number;
+  below: number;
+}
+
+type ViewerRole = 'superadmin' | 'admin' | 'seller' | null;
+
 export default function AdminAccountingPage() {
+  const router = useRouter();
+  // Bumped per request: only the latest accounting fetch may write state.
+  const requestIdRef = useRef(0);
   const today = new Date();
   const [selectedMonth, setSelectedMonth] = useState<number>(today.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(today.getFullYear());
   const [data, setData] = useState<AccountingData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // null while loading or if it cannot be read: income-only (seller-safe) view either way.
+  const [role, setRole] = useState<ViewerRole>(null);
+  const [roleResolved, setRoleResolved] = useState(false);
+  const isAdminViewer = role === 'admin' || role === 'superadmin';
+  const [users, setUsers] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedUser, setSelectedUser] = useState<string>('');
 
   // Filter for transactions table
   const [typeFilter, setTypeFilter] = useState<'all' | 'ingreso' | 'egreso'>('all');
@@ -108,29 +135,80 @@ export default function AdminAccountingPage() {
   const [expenseNotes, setExpenseNotes] = useState('');
   const [savingExpense, setSavingExpense] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/auth/me')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        const r = json?.user?.role;
+        if (!cancelled && (r === 'superadmin' || r === 'admin' || r === 'seller')) setRole(r);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setRoleResolved(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Admins can filter by any user (admins also register POS sales).
+  useEffect(() => {
+    if (!isAdminViewer) return;
+    let cancelled = false;
+    fetch('/api/admin/users')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (cancelled || !json?.ok || !Array.isArray(json.data)) return;
+        setUsers(
+          json.data.map((u: { _id: string; name?: string; username: string }) => ({
+            id: String(u._id),
+            name: u.name || u.username,
+          }))
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdminViewer]);
+
   const fetchAccounting = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/admin/accounting?month=${selectedMonth}&year=${selectedYear}`
-      );
+      const params = new URLSearchParams({
+        month: String(selectedMonth),
+        year: String(selectedYear),
+      });
+      if (isAdminViewer && selectedUser) params.set('userId', selectedUser);
+      const res = await fetch(`/api/admin/accounting?${params.toString()}`);
+      if (requestId !== requestIdRef.current) return;
+      if (res.status === 401) {
+        router.push('/admin/login');
+        return;
+      }
       const json = await res.json();
+      if (requestId !== requestIdRef.current) return;
       if (json.ok) {
         setData(json.data);
       } else {
         toast.error(json.message || 'Error al cargar balance contable');
       }
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       console.error('Error cargando contabilidad:', err);
       toast.error('Error al conectar con el servidor');
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [selectedMonth, selectedYear]);
+  }, [selectedMonth, selectedYear, isAdminViewer, selectedUser, router]);
 
+  // Wait for the role so a seller never receives (or flashes) admin-only data.
   useEffect(() => {
+    if (!roleResolved) return;
     fetchAccounting();
-  }, [fetchAccounting]);
+  }, [roleResolved, fetchAccounting]);
 
   const handlePrevMonth = () => {
     if (selectedMonth === 1) {
@@ -209,7 +287,18 @@ export default function AdminAccountingPage() {
     }
   };
 
+  // Admin-only fields are absent for sellers; default them so nothing reads undefined.
+  const expenseTotal = data?.summary.expenseTotal ?? 0;
+  const expenseCash = data?.summary.expenseCash ?? 0;
+  const expenseTransfer = data?.summary.expenseTransfer ?? 0;
+  const netBalance = data?.summary.netBalance ?? 0;
+  const netCash = data?.summary.netCash ?? 0;
+  const netTransfer = data?.summary.netTransfer ?? 0;
+  const expensesByCategory = data?.summary.expensesByCategory ?? {};
+  const bySeller = data?.bySeller ?? [];
+
   const filteredTransactions = data?.transactions.filter((tx) => {
+    if (!isAdminViewer && tx.type !== 'ingreso') return false;
     if (typeFilter !== 'all' && tx.type !== typeFilter) return false;
     if (methodFilter !== 'all' && tx.paymentMethod !== methodFilter) return false;
     return true;
@@ -224,10 +313,13 @@ export default function AdminAccountingPage() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[#e5e5e5] pb-6">
           <div>
             <h1 className="text-3xl font-extrabold uppercase tracking-tight text-[#111111] flex items-center gap-2">
-              <DollarSign className="w-7 h-7" /> Control Contable & Caja Mensual
+              <DollarSign className="w-7 h-7" />{' '}
+              {isAdminViewer ? 'Control Contable & Caja Mensual' : 'Mi Contabilidad Mensual'}
             </h1>
             <p className="text-xs text-[#707072] mt-1">
-              Arqueo de ingresos y egresos, balance neto operativo y flujo de efectivo.
+              {isAdminViewer
+                ? 'Arqueo de ingresos y egresos, balance neto operativo y flujo de efectivo.'
+                : 'Tus ventas del mes: ingresos, medios de pago y desviación de precio.'}
             </p>
           </div>
 
@@ -270,13 +362,32 @@ export default function AdminAccountingPage() {
               </button>
             )}
 
+            {isAdminViewer && (
+              <select
+                value={selectedUser}
+                onChange={(e) => setSelectedUser(e.target.value)}
+                aria-label="Vendedor"
+                className="bg-white text-[#111111] text-xs font-bold py-2.5 px-3 border border-[#e5e5e5]"
+              >
+                <option value="">Vendedor: Todos</option>
+                <option value="web">Web</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            )}
+
             {/* New Expense Button */}
-            <button
-              onClick={() => setIsExpenseModalOpen(true)}
-              className="py-2.5 px-5 bg-[#111111] hover:bg-black text-white text-xs font-extrabold uppercase tracking-wider rounded-none flex items-center gap-2 transition-all shadow-sm active:scale-95 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" /> Registrar Egreso
-            </button>
+            {isAdminViewer && (
+              <button
+                onClick={() => setIsExpenseModalOpen(true)}
+                className="py-2.5 px-5 bg-[#111111] hover:bg-black text-white text-xs font-extrabold uppercase tracking-wider rounded-none flex items-center gap-2 transition-all shadow-sm active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" /> Registrar Egreso
+              </button>
+            )}
           </div>
         </div>
 
@@ -287,7 +398,11 @@ export default function AdminAccountingPage() {
         ) : data ? (
           <>
             {/* Top Financial KPI Summary Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div
+              className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${
+                isAdminViewer ? 'lg:grid-cols-4' : ''
+              }`}
+            >
               {/* 1. Ingresos Totales */}
               <div className="bg-white p-5 border border-[#e5e5e5] space-y-2 shadow-xs">
                 <div className="flex justify-between items-center text-[#707072]">
@@ -306,6 +421,8 @@ export default function AdminAccountingPage() {
                 </p>
               </div>
 
+              {isAdminViewer && (
+              <>
               {/* 2. Egresos Totales */}
               <div className="bg-white p-5 border border-[#e5e5e5] space-y-2 shadow-xs">
                 <div className="flex justify-between items-center text-[#707072]">
@@ -317,7 +434,7 @@ export default function AdminAccountingPage() {
                   </div>
                 </div>
                 <div className="text-2xl font-black text-[#d30005]">
-                  {formatPrice(data.summary.expenseTotal)}
+                  {formatPrice(expenseTotal)}
                 </div>
                 <p className="text-[11px] text-[#707072] font-semibold">
                   Gastos operativos registrados
@@ -327,7 +444,7 @@ export default function AdminAccountingPage() {
               {/* 3. Balance Neto */}
               <div
                 className={`p-5 border space-y-2 shadow-xs ${
-                  data.summary.netBalance >= 0
+                  netBalance >= 0
                     ? 'bg-[#007d48]/5 border-[#007d48]/30'
                     : 'bg-[#d30005]/5 border-[#d30005]/30'
                 }`}
@@ -336,7 +453,7 @@ export default function AdminAccountingPage() {
                   <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#111111]">
                     Balance Neto Mensual
                   </span>
-                  {data.summary.netBalance >= 0 ? (
+                  {netBalance >= 0 ? (
                     <TrendingUp className="w-4 h-4 text-[#007d48]" />
                   ) : (
                     <TrendingDown className="w-4 h-4 text-[#d30005]" />
@@ -344,15 +461,18 @@ export default function AdminAccountingPage() {
                 </div>
                 <div
                   className={`text-2xl font-black ${
-                    data.summary.netBalance >= 0 ? 'text-[#007d48]' : 'text-[#d30005]'
+                    netBalance >= 0 ? 'text-[#007d48]' : 'text-[#d30005]'
                   }`}
                 >
-                  {formatPrice(data.summary.netBalance)}
+                  {formatPrice(netBalance)}
                 </div>
                 <p className="text-[11px] font-bold text-[#707072]">
-                  {data.summary.netBalance >= 0 ? '✓ Superávit operativo' : '⚠ Déficit en el mes'}
+                  {netBalance >= 0 ? '✓ Superávit operativo' : '⚠ Déficit en el mes'}
                 </p>
               </div>
+
+              </>
+              )}
 
               {/* 4. Ticket Promedio */}
               <div className="bg-white p-5 border border-[#e5e5e5] space-y-2 shadow-xs">
@@ -382,16 +502,18 @@ export default function AdminAccountingPage() {
                       Caja Efectivo (En Mano)
                     </h3>
                   </div>
-                  <span
-                    className={`text-sm font-black ${
-                      data.summary.netCash >= 0 ? 'text-[#007d48]' : 'text-[#d30005]'
-                    }`}
-                  >
-                    Saldo: {formatPrice(data.summary.netCash)}
-                  </span>
+                  {isAdminViewer && (
+                    <span
+                      className={`text-sm font-black ${
+                        netCash >= 0 ? 'text-[#007d48]' : 'text-[#d30005]'
+                      }`}
+                    >
+                      Saldo: {formatPrice(netCash)}
+                    </span>
+                  )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className={`grid gap-3 text-xs ${isAdminViewer ? 'grid-cols-2' : 'grid-cols-1'}`}>
                   <div className="p-3 bg-[#f5f5f5] border border-[#e5e5e5]">
                     <span className="text-[10px] text-[#707072] uppercase font-bold block">
                       Ingresos en Efectivo
@@ -400,14 +522,16 @@ export default function AdminAccountingPage() {
                       +{formatPrice(data.summary.incomeCash)}
                     </span>
                   </div>
+                  {isAdminViewer && (
                   <div className="p-3 bg-[#f5f5f5] border border-[#e5e5e5]">
                     <span className="text-[10px] text-[#707072] uppercase font-bold block">
                       Egresos en Efectivo
                     </span>
                     <span className="font-extrabold text-[#d30005] text-base block mt-0.5">
-                      -{formatPrice(data.summary.expenseCash)}
+                      -{formatPrice(expenseCash)}
                     </span>
                   </div>
+                  )}
                 </div>
               </div>
 
@@ -420,16 +544,18 @@ export default function AdminAccountingPage() {
                       Caja Banco / Transferencias
                     </h3>
                   </div>
-                  <span
-                    className={`text-sm font-black ${
-                      data.summary.netTransfer >= 0 ? 'text-[#007d48]' : 'text-[#d30005]'
-                    }`}
-                  >
-                    Saldo: {formatPrice(data.summary.netTransfer)}
-                  </span>
+                  {isAdminViewer && (
+                    <span
+                      className={`text-sm font-black ${
+                        netTransfer >= 0 ? 'text-[#007d48]' : 'text-[#d30005]'
+                      }`}
+                    >
+                      Saldo: {formatPrice(netTransfer)}
+                    </span>
+                  )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className={`grid gap-3 text-xs ${isAdminViewer ? 'grid-cols-2' : 'grid-cols-1'}`}>
                   <div className="p-3 bg-[#f5f5f5] border border-[#e5e5e5]">
                     <span className="text-[10px] text-[#707072] uppercase font-bold block">
                       Cobros por Transferencia
@@ -438,20 +564,22 @@ export default function AdminAccountingPage() {
                       +{formatPrice(data.summary.incomeTransfer)}
                     </span>
                   </div>
+                  {isAdminViewer && (
                   <div className="p-3 bg-[#f5f5f5] border border-[#e5e5e5]">
                     <span className="text-[10px] text-[#707072] uppercase font-bold block">
                       Pagos por Transferencia
                     </span>
                     <span className="font-extrabold text-[#d30005] text-base block mt-0.5">
-                      -{formatPrice(data.summary.expenseTransfer)}
+                      -{formatPrice(expenseTransfer)}
                     </span>
                   </div>
+                  )}
                 </div>
               </div>
             </div>
 
             {/* Expenses By Category Section */}
-            {data.summary.expenseTotal > 0 && (
+            {isAdminViewer && expenseTotal > 0 && (
               <div className="bg-white border border-[#e5e5e5] p-6 space-y-4 shadow-sm">
                 <div className="flex items-center gap-2 border-b border-[#e5e5e5] pb-3">
                   <PieChart className="w-5 h-5 text-[#111111]" />
@@ -462,10 +590,10 @@ export default function AdminAccountingPage() {
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
                   {(Object.keys(CATEGORY_LABELS) as ExpenseCategory[]).map((cat) => {
-                    const amount = data.summary.expensesByCategory[cat] || 0;
+                    const amount = expensesByCategory[cat] || 0;
                     const pct =
-                      data.summary.expenseTotal > 0
-                        ? Math.round((amount / data.summary.expenseTotal) * 100)
+                      expenseTotal > 0
+                        ? Math.round((amount / expenseTotal) * 100)
                         : 0;
 
                     return (
@@ -489,6 +617,72 @@ export default function AdminAccountingPage() {
               </div>
             )}
 
+            {/* Price deviation (charged vs list price) */}
+            <div className="bg-white border border-[#e5e5e5] p-6 space-y-4 shadow-sm">
+              <div className="flex items-center gap-2 border-b border-[#e5e5e5] pb-3">
+                <Tag className="w-5 h-5 text-[#111111]" />
+                <h2 className="text-base font-extrabold uppercase tracking-tight text-[#111111]">
+                  Desviación de precio
+                </h2>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="p-3 bg-[#f5f5f5] border border-[#e5e5e5]">
+                  <span className="text-[10px] text-[#707072] uppercase font-bold block">
+                    Cobrado por encima de lista
+                  </span>
+                  <span className="font-extrabold text-[#007d48] text-base block mt-0.5">
+                    +{formatPrice(data.deviation?.above ?? 0)}
+                  </span>
+                </div>
+                <div className="p-3 bg-[#f5f5f5] border border-[#e5e5e5]">
+                  <span className="text-[10px] text-[#707072] uppercase font-bold block">
+                    Cobrado por debajo de lista
+                  </span>
+                  <span className="font-extrabold text-[#d30005] text-base block mt-0.5">
+                    -{formatPrice(data.deviation?.below ?? 0)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Sales per seller (admin, unfiltered view only) */}
+            {isAdminViewer && !selectedUser && bySeller.length > 0 && (
+              <div className="bg-white border border-[#e5e5e5] p-6 space-y-4 shadow-sm">
+                <div className="flex items-center gap-2 border-b border-[#e5e5e5] pb-3">
+                  <Layers className="w-5 h-5 text-[#111111]" />
+                  <h2 className="text-base font-extrabold uppercase tracking-tight text-[#111111]">
+                    Ventas por vendedor
+                  </h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-[#e5e5e5] bg-[#f5f5f5] text-[#707072] uppercase text-[10px] font-extrabold tracking-wider">
+                        <th className="py-3 px-4">Vendedor</th>
+                        <th className="py-3 px-4 text-right">Ventas</th>
+                        <th className="py-3 px-4 text-right">Unidades</th>
+                        <th className="py-3 px-4 text-right">Total vendido</th>
+                        <th className="py-3 px-4 text-right">Por encima de lista</th>
+                        <th className="py-3 px-4 text-right">Por debajo de lista</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#e5e5e5]">
+                      {bySeller.map((row) => (
+                        <tr key={row.userId} className="hover:bg-[#fafafa] transition-colors">
+                          <td className="py-3 px-4 font-extrabold text-[#111111]">{row.name || '-'}</td>
+                          <td className="py-3 px-4 text-right">{row.salesCount}</td>
+                          <td className="py-3 px-4 text-right">{row.units}</td>
+                          <td className="py-3 px-4 text-right font-black">{formatPrice(row.totalSold)}</td>
+                          <td className="py-3 px-4 text-right text-[#007d48]">+{formatPrice(row.above)}</td>
+                          <td className="py-3 px-4 text-right text-[#d30005]">-{formatPrice(row.below)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* Monthly Journal / Ledger Table */}
             <div className="bg-white border border-[#e5e5e5] shadow-sm space-y-4 p-6">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#e5e5e5] pb-4">
@@ -497,21 +691,25 @@ export default function AdminAccountingPage() {
                     <FileSpreadsheet className="w-5 h-5" /> Libro Diario de Movimientos ({filteredTransactions.length})
                   </h2>
                   <p className="text-xs text-[#707072]">
-                    Registro cronológico de todas las ventas cobradas y gastos del mes.
+                    {isAdminViewer
+                      ? 'Registro cronológico de todas las ventas cobradas y gastos del mes.'
+                      : 'Registro cronológico de tus ventas cobradas del mes.'}
                   </p>
                 </div>
 
                 {/* Table Filters */}
                 <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                  <select
-                    value={typeFilter}
-                    onChange={(e) => setTypeFilter(e.target.value as any)}
-                    className="bg-[#f5f5f5] text-[#111111] text-xs font-bold py-2 px-3 border border-[#e5e5e5]"
-                  >
-                    <option value="all">Todos los Movimientos</option>
-                    <option value="ingreso">Solo Ingresos (+)</option>
-                    <option value="egreso">Solo Egresos (-)</option>
-                  </select>
+                  {isAdminViewer && (
+                    <select
+                      value={typeFilter}
+                      onChange={(e) => setTypeFilter(e.target.value as any)}
+                      className="bg-[#f5f5f5] text-[#111111] text-xs font-bold py-2 px-3 border border-[#e5e5e5]"
+                    >
+                      <option value="all">Todos los Movimientos</option>
+                      <option value="ingreso">Solo Ingresos (+)</option>
+                      <option value="egreso">Solo Egresos (-)</option>
+                    </select>
+                  )}
 
                   <select
                     value={methodFilter}
@@ -540,7 +738,7 @@ export default function AdminAccountingPage() {
                         <th className="py-3 px-4">Rubro / Categoría</th>
                         <th className="py-3 px-4">Medio de Pago</th>
                         <th className="py-3 px-4 text-right">Monto</th>
-                        <th className="py-3 px-4 text-center">Acciones</th>
+                        {isAdminViewer && <th className="py-3 px-4 text-center">Acciones</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#e5e5e5]">
@@ -622,6 +820,7 @@ export default function AdminAccountingPage() {
                               </span>
                             </td>
 
+                            {isAdminViewer && (
                             <td className="py-3 px-4 text-center">
                               {!isIncome ? (
                                 <button
@@ -636,6 +835,7 @@ export default function AdminAccountingPage() {
                                 <span className="text-[11px] text-[#9e9ea0] font-mono">-</span>
                               )}
                             </td>
+                            )}
                           </tr>
                         );
                       })}
@@ -649,7 +849,7 @@ export default function AdminAccountingPage() {
       </main>
 
       {/* Modal Registrar Nuevo Egreso */}
-      {isExpenseModalOpen && (
+      {isAdminViewer && isExpenseModalOpen && (
         <ResponsiveModal
           open
           onOpenChange={(open) => !open && setIsExpenseModalOpen(false)}
