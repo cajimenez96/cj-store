@@ -5,6 +5,7 @@ import Expense from '@/models/Expense';
 import { getSession, sessionError } from '@/lib/session';
 import { ordersScope } from '@/lib/order-access';
 import { isAdminRole } from '@/lib/permissions';
+import { sellerKey, sellerLabel } from '@/lib/seller-label';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,12 +61,13 @@ export async function GET(req: NextRequest) {
     >();
 
     for (const ord of orders) {
-      const key = ord.soldBy?.userId ? String(ord.soldBy.userId) : 'web';
+      // Web orders under 'web'; direct sales recorded before attribution under 'legacy'.
+      const key = sellerKey(ord);
       let row = sellers.get(key);
       if (!row) {
         row = {
           userId: key,
-          name: key === 'web' ? 'Web' : ord.soldBy?.name ?? '',
+          name: ord.soldBy?.userId ? ord.soldBy.name ?? '' : sellerLabel(ord),
           totalSold: 0,
           salesCount: 0,
           units: 0,

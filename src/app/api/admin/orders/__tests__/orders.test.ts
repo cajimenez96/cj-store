@@ -212,6 +212,40 @@ for (const topo of topologies) {
     // Admin behaviour that existed before this task (pinned on the
     // unchanged code first, must keep passing after the rewrite).
     // -------------------------------------------------------------------
+    describe('legacy POS sales (admin_direct without soldBy)', () => {
+      it('userId=legacy lists only legacy direct sales and userId=web only web orders', async () => {
+        const admin = await makeUser('admin');
+        const seller = await makeUser('seller', 'Vera');
+        const p = await makeProduct(10);
+        const web = await makeOrder(p, { origin: 'web', status: 'pendiente' });
+        const legacy = await makeOrder(p, { origin: 'admin_direct', status: 'autorizado' });
+        const sold = await makeOrder(p, {
+          origin: 'admin_direct',
+          soldBy: { _id: seller.user._id, username: seller.user.username, name: 'Vera' },
+        });
+
+        const ids = async (url: string, token = admin.token) => {
+          const res = await list.GET(req('GET', url, token));
+          expect(res.status).toBe(200);
+          return ((await res.json()).data as { _id: string }[]).map((o) => String(o._id)).sort();
+        };
+
+        expect(await ids('/api/admin/orders?userId=legacy')).toEqual([String(legacy._id)]);
+        expect(await ids('/api/admin/orders?userId=web')).toEqual([String(web._id)]);
+        expect(await ids(`/api/admin/orders?userId=${seller.id}`)).toEqual([String(sold._id)]);
+        expect(await ids('/api/admin/orders')).toEqual(
+          [String(web._id), String(legacy._id), String(sold._id)].sort()
+        );
+        // A seller still sees only their own orders, whatever the filter says.
+        expect(await ids('/api/admin/orders?userId=legacy', seller.token)).toEqual([String(sold._id)]);
+
+        // Orders with soldBy keep their stored seller in the response.
+        const res = await list.GET(req('GET', `/api/admin/orders?userId=${seller.id}`, admin.token));
+        const [row] = (await res.json()).data;
+        expect(row.soldBy).toEqual({ userId: seller.id, username: seller.user.username, name: 'Vera' });
+      });
+    });
+
     describe('existing admin behaviour', () => {
       it('GET list returns every order with the same shape, status filter and pagination', async () => {
         const { token } = await makeUser('admin');
@@ -1208,6 +1242,12 @@ describe('order-access', () => {
     expect(String(ordersScope(admin, other)['soldBy.userId' as never])).toBe(other);
     expect(ordersScope(admin, 'junk')).toEqual({});
     expect(ordersScope(admin, '{"$ne":null}')).toEqual({});
+
+    // Legacy POS sales (admin_direct without soldBy) have their own filter.
+    expect(ordersScope(admin, 'legacy')).toEqual({ origin: 'admin_direct', 'soldBy.userId': { $exists: false } });
+    expect(String(ordersScope(seller, 'legacy')['soldBy.userId' as never])).toBe(sellerId);
+    const superadmin = { ...admin, role: 'superadmin' as const };
+    expect(ordersScope(superadmin, 'legacy')).toEqual({ origin: 'admin_direct', 'soldBy.userId': { $exists: false } });
 
     const own = {
       origin: 'admin_direct',

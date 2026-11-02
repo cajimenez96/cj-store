@@ -1,6 +1,7 @@
 import { Types, type QueryFilter } from 'mongoose';
 import { isObjectIdString } from '@/lib/input-validation';
 import { isAdminRole } from '@/lib/permissions';
+import { LEGACY_SELLER_KEY, WEB_SELLER_KEY } from '@/lib/seller-label';
 import type { Session } from '@/lib/session';
 import type { IOrder } from '@/models/Order';
 
@@ -14,8 +15,9 @@ export function isCancelledStatus(status?: string): boolean {
  * Which orders a session may see.
  * - seller: always only their own (`soldBy.userId`); `userFilter` is ignored, so a
  *   query parameter can never widen it.
- * - admin/superadmin: everything by default; `'web'` -> web orders; a valid
- *   ObjectId string -> orders sold by that user; any other value is ignored.
+ * - admin/superadmin: everything by default; `'web'` -> web orders; `'legacy'` ->
+ *   direct sales recorded before attribution (`admin_direct` without `soldBy`); a
+ *   valid ObjectId string -> orders sold by that user; any other value is ignored.
  * - any other role: nothing (fail closed).
  */
 export function ordersScope(session: Session, userFilter?: string): QueryFilter<IOrder> {
@@ -25,7 +27,10 @@ export function ordersScope(session: Session, userFilter?: string): QueryFilter<
   if (!isAdminRole(session.role)) {
     return { _id: { $exists: false } };
   }
-  if (userFilter === 'web') return { origin: 'web' };
+  if (userFilter === WEB_SELLER_KEY) return { origin: 'web' };
+  if (userFilter === LEGACY_SELLER_KEY) {
+    return { origin: 'admin_direct', 'soldBy.userId': { $exists: false } };
+  }
   if (isObjectIdString(userFilter)) return { 'soldBy.userId': new Types.ObjectId(userFilter) };
   return {};
 }

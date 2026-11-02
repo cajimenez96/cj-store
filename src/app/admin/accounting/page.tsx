@@ -377,6 +377,7 @@ export default function AdminAccountingPage() {
               >
                 <option value="">Vendedor: Todos</option>
                 <option value="web">Web</option>
+                <option value="legacy">Admin (sin registro)</option>
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}

@@ -6,6 +6,7 @@ import { MessageSquare, Check, Ban, Clock, Loader2, ShieldCheck, Edit3, Shopping
 import type { OrderStatus } from '@/models/Order';
 import type { Role } from '@/lib/permissions';
 import { formatPrice } from '@/utils/formatCurrency';
+import { sellerLabel } from '@/lib/seller-label';
 import { useSettings } from '@/context/SettingsContext';
 import { ResponsiveModal } from '@/components/ui/responsive-modal';
 
@@ -228,7 +229,7 @@ ${itemsList}
           Fecha de emisión: {new Date(order.createdAt).toLocaleString('es-AR')}
         </p>
         <p className="text-xs text-[#707072]">
-          Vendedor: <strong className="text-[#111111]">{order.soldBy?.name || 'Web'}</strong>
+          Vendedor: <strong className="text-[#111111]">{sellerLabel(order)}</strong>
         </p>
       </div>
 

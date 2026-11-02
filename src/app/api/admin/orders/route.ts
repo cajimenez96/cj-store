@@ -24,7 +24,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/admin/orders
- * Admins: every order, optionally `?userId=web|<userId>`. Sellers: only their
+ * Admins: every order, optionally `?userId=web|legacy|<userId>`. Sellers: only their
  * own orders; `userId` is ignored for them (forced from the session).
  */
 export async function GET(req: NextRequest) {

@@ -37,6 +37,7 @@ const STATUS_ICON: Record<string, React.ReactNode> = {
 };
 
 import { formatPrice } from '@/utils/formatCurrency';
+import { sellerLabel } from '@/lib/seller-label';
 import { toast } from '@/components/ui/sonner';
 
 export default function AdminOrdersPage() {
@@ -285,6 +286,7 @@ export default function AdminOrdersPage() {
                 >
                   <option value="">Todos</option>
                   <option value="web">Web</option>
+                  <option value="legacy">Admin (sin registro)</option>
                   {sellers.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name}
@@ -375,7 +377,7 @@ export default function AdminOrdersPage() {
                       </td>
 
                       <td className="py-3 px-4 font-medium text-[#111111]">
-                        {ord.soldBy?.name || 'Web'}
+                        {sellerLabel(ord)}
                       </td>
 
                       <td className="py-3 px-4 text-right font-extrabold text-sm text-[#111111]">

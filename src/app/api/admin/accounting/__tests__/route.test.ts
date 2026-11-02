@@ -415,6 +415,35 @@ describe('admin accounting API', () => {
       ]);
     });
 
+    it('legacy direct sales (no soldBy) get their own row, apart from web; ?userId=legacy filters them', async () => {
+      const { admin, s1, s2 } = await seed();
+      await makeOrder({ origin: 'admin_direct', createdAt: d(10), items: [{ qty: 1, unitPrice: 5000 }] });
+      await makeOrder({ origin: 'admin_direct', createdAt: d(11), items: [{ qty: 2, unitPrice: 4000, listPrice: 5000 }] });
+
+      const all = (await (await route.GET(get(JUNE, admin.token))).json()).data;
+      expect(all.bySeller).toEqual([
+        { userId: s2.id, name: 'Vendedor Dos', totalSold: 60000, salesCount: 1, units: 3, above: 0, below: 0 },
+        { userId: s1.id, name: 'Vendedor Uno', totalSold: 33000, salesCount: 2, units: 3, above: 4000, below: 1000 },
+        { userId: 'web', name: 'Web', totalSold: 15000, salesCount: 2, units: 3, above: 0, below: 0 },
+        { userId: 'legacy', name: 'Admin (sin registro)', totalSold: 13000, salesCount: 2, units: 3, above: 0, below: 2000 },
+        { userId: admin.id, name: 'Admin Principal', totalSold: 7000, salesCount: 1, units: 1, above: 0, below: 0 },
+      ]);
+
+      const web = (await (await route.GET(get(`${JUNE}&userId=web`, admin.token))).json()).data;
+      expect(web.summary.incomeTotal).toBe(15000);
+      expect(web.bySeller).toEqual([all.bySeller[2]]);
+
+      const legacy = (await (await route.GET(get(`${JUNE}&userId=legacy`, admin.token))).json()).data;
+      expect(legacy.summary.incomeTotal).toBe(13000);
+      expect(legacy.summary.totalOrdersCount).toBe(2);
+      expect(legacy.bySeller).toEqual([all.bySeller[3]]);
+      expect(legacy.deviation).toEqual({ above: 0, below: 2000 });
+
+      // A seller's ?userId=legacy is ignored: own sales only.
+      const own = (await (await route.GET(get(`${JUNE}&userId=legacy`, s1.token))).json()).data;
+      expect(own.summary.incomeTotal).toBe(33000);
+    });
+
     it('a junk userId is ignored for admins (all orders)', async () => {
       const { admin } = await seed();
       const { data } = await (await route.GET(get(`${JUNE}&userId[$ne]=x`, admin.token))).json();
