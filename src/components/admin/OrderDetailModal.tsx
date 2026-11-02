@@ -116,6 +116,14 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [updating, setUpdating] = useState(false);
   // Two-step cancel: the request only fires after the user confirms.
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  // Reset during render (not in an effect) whenever the shown order changes or the modal closes.
+  const orderId = order?._id ?? null;
+  const [confirmOrderId, setConfirmOrderId] = useState<string | null>(orderId);
+  if (confirmOrderId !== orderId) {
+    setConfirmOrderId(orderId);
+    setConfirmingCancel(false);
+    setUpdating(false);
+  }
   const [paymentMethod, setPaymentMethod] = useState('efectivo');
   const { settings } = useSettings();
   const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
