@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
 import { Product } from '@/models';
 import { calculateDerivedProductFields } from '@/lib/derived';
+import { getSession, sessionError } from '@/lib/session';
+import { isAdminRole } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +12,10 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getSession(req);
+    if (!session) return sessionError(401);
+    if (!isAdminRole(session.role)) return sessionError(403);
+
     await connectToDatabase();
     const { id } = await params;
     const body = await req.json();

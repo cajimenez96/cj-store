@@ -32,6 +32,23 @@ export default function AdminStockPage() {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  // null while loading: no edit controls until we know the role is not a seller.
+  const [role, setRole] = useState<string | null>(null);
+  const canEdit = role !== null && role !== 'seller';
+  const isReadOnly = role === 'seller';
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/auth/me')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.user?.role) setRole(data.user.role);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const fetchStock = useCallback(async () => {
     setLoading(true);
@@ -69,6 +86,7 @@ export default function AdminStockPage() {
     entry: StockEntry,
     delta: number
   ) => {
+    if (!canEdit) return; // sellers never call the write endpoint
     const newStock = Math.max(0, entry.stock + delta);
     setUpdatingId(`${productId}-${entry.key}`);
 
@@ -128,8 +146,13 @@ export default function AdminStockPage() {
               <Boxes className="w-7 h-7" /> Control de Stock e Inventario
             </h1>
             <p className="text-xs text-[#707072] mt-1">
-              Monitoreá el stock total por producto, alertas de reposición (total ≤ {minStockAlert} unidades) y modificá cantidades por variante en tiempo real.
+              Monitoreá el stock total por producto, alertas de reposición (total ≤ {minStockAlert} unidades){canEdit ? ' y modificá cantidades por variante en tiempo real' : ''}.
             </p>
+            {isReadOnly && (
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-[#707072] mt-2">
+                Vista de solo lectura
+              </p>
+            )}
           </div>
 
           <button
@@ -299,6 +322,7 @@ export default function AdminStockPage() {
                             )}
 
                             <div className="flex items-center justify-center gap-1">
+                              {canEdit && (
                               <button
                                 type="button"
                                 onClick={() => handleUpdateSingleStock(prod._id, entry, -1)}
@@ -307,11 +331,13 @@ export default function AdminStockPage() {
                               >
                                 <Minus className="w-3 h-3" />
                               </button>
+                              )}
 
                               <span className="font-extrabold text-xs text-[#111111] min-w-[20px]">
                                 {entry.stock}
                               </span>
 
+                              {canEdit && (
                               <button
                                 type="button"
                                 onClick={() => handleUpdateSingleStock(prod._id, entry, 1)}
@@ -320,6 +346,7 @@ export default function AdminStockPage() {
                               >
                                 <Plus className="w-3 h-3" />
                               </button>
+                              )}
                             </div>
                           </div>
                         );

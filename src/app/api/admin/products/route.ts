@@ -3,6 +3,8 @@ import { connectToDatabase } from '@/lib/db';
 import { Product, Brand, Category } from '@/models';
 import { calculateDerivedProductFields } from '@/lib/derived';
 import { buildGenderCondition } from '@/lib/genderFilter';
+import { getSession, sessionError } from '@/lib/session';
+import { isAdminRole } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,8 +20,57 @@ function slugify(text: string): string {
     .replace(/\-\-+/g, '-');
 }
 
+/**
+ * Seller-facing product shape: an explicit ALLOWLIST, so fields added to the model
+ * (or written outside the schema, e.g. costPrice/supplier/internalNotes) never leak
+ * by default. Field-by-field decision for Product.ts:
+ *  KEEP  _id, name, slug, active, isClearance      identity/visibility, needed by POS and edit modal
+ *  KEEP  images (_id,url,isPrincipal,position,axisValue)  thumbnails
+ *  KEEP  variants (_id,sku,name,options,retailPrice,wholesalePrice,stock,active)  selling data
+ *  KEEP  retailPrice, wholesalePrice, price, stock, priceRange, totalStock, hasWholesale, wholesale  prices/stock
+ *  KEEP  brandId {_id,name}, categoryId {_id,name,slug,variantAxes}  display info
+ *  DROP  description, specs, categoryAncestors, createdAt, updatedAt, __v  not needed for selling
+ *  DROP  anything else (cost/purchase/supplier/margin/notes): not allowlisted
+ */
+function pick(src: Record<string, unknown> | null | undefined, keys: string[]) {
+  const out: Record<string, unknown> = {};
+  if (!src) return out;
+  for (const k of keys) if (src[k] !== undefined) out[k] = src[k];
+  return out;
+}
+
+function refPick(ref: unknown, keys: string[]) {
+  // Populated reference -> allowlisted subset; plain id (or null) passes through unchanged.
+  return ref && typeof ref === 'object' && !Array.isArray(ref) && !('_bsontype' in ref)
+    ? pick(ref as Record<string, unknown>, keys)
+    : ref;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function sanitizeProductForSeller(prod: any) {
+  return {
+    ...pick(prod, [
+      '_id', 'name', 'slug', 'active', 'isClearance', 'wholesale', 'priceRange', 'totalStock',
+      'hasWholesale', 'price', 'retailPrice', 'wholesalePrice', 'stock',
+    ]),
+    brandId: refPick(prod.brandId, ['_id', 'name']),
+    categoryId: refPick(prod.categoryId, ['_id', 'name', 'slug', 'variantAxes']),
+    images: (prod.images ?? []).map((i: Record<string, unknown>) =>
+      pick(i, ['_id', 'url', 'isPrincipal', 'position', 'axisValue'])
+    ),
+    variants: (prod.variants ?? []).map((v: Record<string, unknown>) =>
+      pick(v, ['_id', 'sku', 'name', 'options', 'retailPrice', 'wholesalePrice', 'stock', 'active'])
+    ),
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
+    const session = await getSession(req);
+    if (!session) return sessionError(401);
+    const isAdmin = isAdminRole(session.role);
+    if (!isAdmin && session.role !== 'seller') return sessionError(403);
+
     await connectToDatabase();
     const { searchParams } = new URL(req.url);
 
@@ -41,7 +92,10 @@ export async function GET(req: NextRequest) {
     if (brandId) query.brandId = brandId;
     if (categoryId) query.categoryId = categoryId;
     if (gender) query.$and = [...(query.$and ?? []), await buildGenderCondition(gender)];
-    if (active !== null && active !== undefined && active !== '') {
+    if (!isAdmin) {
+      // Sellers only ever see active products, whatever the `active` param says.
+      query.active = true;
+    } else if (active !== null && active !== undefined && active !== '') {
       query.active = active === 'true';
     }
     if (isClearance !== null && isClearance !== undefined && isClearance !== '') {
@@ -82,10 +136,9 @@ export async function GET(req: NextRequest) {
         totalStock = prod.stock;
       }
 
-      return {
-        ...prod,
-        totalStock,
-      };
+      return isAdmin
+        ? { ...prod, totalStock }
+        : sanitizeProductForSeller({ ...prod, totalStock });
     });
 
     return NextResponse.json({
@@ -109,6 +162,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await getSession(req);
+    if (!session) return sessionError(401);
+    if (!isAdminRole(session.role)) return sessionError(403);
+
     await connectToDatabase();
     const body = await req.json();
 
@@ -233,6 +290,10 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
+    const session = await getSession(req);
+    if (!session) return sessionError(401);
+    if (!isAdminRole(session.role)) return sessionError(403);
+
     await connectToDatabase();
     const body = await req.json();
     const productId = body._id || body.id;
@@ -347,6 +408,10 @@ export async function PUT(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    const session = await getSession(req);
+    if (!session) return sessionError(401);
+    if (!isAdminRole(session.role)) return sessionError(403);
+
     await connectToDatabase();
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');

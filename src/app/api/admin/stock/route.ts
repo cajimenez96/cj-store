@@ -8,11 +8,18 @@ import Settings from '@/models/Settings';
 import { calculateDerivedProductFields } from '@/lib/derived';
 import { GENDER_ATTRIBUTE_KEY } from '@/lib/genderFilter';
 import { buildStockEntries, sumActiveStock } from '@/lib/stock';
+import { getSession, sessionError } from '@/lib/session';
+import { isAdminRole } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    // Read-only: any active role (admin, superadmin, seller). The response carries no cost data.
+    const session = await getSession(req);
+    if (!session) return sessionError(401);
+    if (!isAdminRole(session.role) && session.role !== 'seller') return sessionError(403);
+
     await connectToDatabase();
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search');
@@ -104,6 +111,10 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
+    const session = await getSession(req);
+    if (!session) return sessionError(401);
+    if (!isAdminRole(session.role)) return sessionError(403);
+
     await connectToDatabase();
     const { productId, variantId, newStock } = await req.json();
 

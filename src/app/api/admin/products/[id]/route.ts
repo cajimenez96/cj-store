@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
 import { Product, Brand, Category } from '@/models';
+import { getSession, sessionError } from '@/lib/session';
+import { isAdminRole } from '@/lib/permissions';
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Admin-only: the full product document includes cost data sellers must not see.
+    const session = await getSession(req);
+    if (!session) return sessionError(401);
+    if (!isAdminRole(session.role)) return sessionError(403);
+
     await connectToDatabase();
     const { id } = await params;
 
