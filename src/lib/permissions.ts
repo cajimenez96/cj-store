@@ -61,3 +61,18 @@ export function canAccess(
   const m = method.toUpperCase();
   return SELLER_RULES.some((r) => r.methods.includes(m) && r.pattern.test(pathname));
 }
+
+/**
+ * Where to send an authenticated user denied on a page: /admin/orders only if they may
+ * view it and are not already there (avoids redirect loops); otherwise the login page.
+ */
+export function deniedPageRedirect(
+  role: Role,
+  pathname: string,
+  opts?: { sellerAccessEnabled?: boolean },
+): '/admin/orders' | '/admin/login' {
+  if (pathname !== '/admin/orders' && canAccess(role, 'GET', '/admin/orders', opts)) {
+    return '/admin/orders';
+  }
+  return '/admin/login';
+}
