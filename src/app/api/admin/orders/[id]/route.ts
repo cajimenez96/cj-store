@@ -5,6 +5,7 @@ import { isAdminRole } from '@/lib/permissions';
 import { canMutateOrder, isCancelledStatus, ordersScope } from '@/lib/order-access';
 import { diffOrder } from '@/lib/order-history';
 import { resolveListPrice } from '@/lib/pricing';
+import { withProductImages } from '@/lib/order-items';
 import { runInTransaction } from '@/lib/transaction';
 import { isObjectIdString, isPlainObject, optionalString, toNumber } from '@/lib/input-validation';
 import {
@@ -55,30 +56,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
     if (!isObjectIdString(id)) return notFoundResponse();
 
-    const order = await Order.findOne({ _id: id, ...ordersScope(user) })
-      .populate('items.productId', 'images name')
-      .lean();
+    const order = await Order.findOne({ _id: id, ...ordersScope(user) }).lean();
 
     if (!order) return notFoundResponse();
 
-    const formattedOrder = {
-      ...order,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      items: ((order as any).items || []).map((item: any) => {
-        const prod = item.productId && typeof item.productId === 'object' ? item.productId : null;
-        const mainImage =
-          item.image ||
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          prod?.images?.find((img: any) => img.isPrincipal)?.url ||
-          prod?.images?.[0]?.url ||
-          '';
-        return {
-          ...item,
-          productId: prod?._id ? prod._id.toString() : item.productId?.toString() || '',
-          image: mainImage,
-        };
-      }),
-    };
+    const [formattedOrder] = await withProductImages([order as { items?: unknown[] }]);
 
     return NextResponse.json({ ok: true, data: formattedOrder });
   } catch (error) {

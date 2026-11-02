@@ -17,6 +17,7 @@ import {
   writeOrderIfUnchanged,
   type ItemDelta,
 } from '@/lib/order-mutation';
+import { withProductImages } from '@/lib/order-items';
 import Order from '@/models/Order';
 
 export const dynamic = 'force-dynamic';
@@ -68,7 +69,6 @@ export async function GET(req: NextRequest) {
 
     const total = await Order.countDocuments(query);
     let orderQuery = Order.find(query)
-      .populate('items.productId', 'images name')
       .sort({ createdAt: -1, _id: -1 });
 
     if (hasPagination) {
@@ -78,25 +78,7 @@ export async function GET(req: NextRequest) {
 
     const orders = await orderQuery.lean();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const formattedOrders = orders.map((order: any) => ({
-      ...order,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      items: (order.items || []).map((item: any) => {
-        const prod = item.productId && typeof item.productId === 'object' ? item.productId : null;
-        const mainImage =
-          item.image ||
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          prod?.images?.find((img: any) => img.isPrincipal)?.url ||
-          prod?.images?.[0]?.url ||
-          '';
-        return {
-          ...item,
-          productId: prod?._id ? prod._id.toString() : item.productId?.toString() || '',
-          image: mainImage,
-        };
-      }),
-    }));
+    const formattedOrders = await withProductImages(orders);
 
     return NextResponse.json({
       ok: true,

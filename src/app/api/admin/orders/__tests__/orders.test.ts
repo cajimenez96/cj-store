@@ -512,6 +512,82 @@ for (const topo of topologies) {
       });
     });
 
+    describe('read path with unusual item product ids', () => {
+      async function rawOrderWithProductId(productId: unknown, soldBy?: Types.ObjectId) {
+        orderSeq += 1;
+        const _id = new Types.ObjectId();
+        await Order.collection.insertOne({
+          _id,
+          orderNumber: `PED-RAW-${orderSeq}`,
+          origin: 'admin_direct',
+          guest: { name: 'Ana', lastName: 'Pérez', phone: '1' },
+          items: [{ productId, name: 'Legacy', qty: 1, appliedPriceType: 'retail', unitPrice: 100, subtotal: 100 }],
+          subtotal: 100,
+          discount: 0,
+          total: 100,
+          paymentMethod: 'efectivo',
+          status: 'autorizado',
+          history: [],
+          ...(soldBy ? { soldBy: { userId: soldBy, username: 'u', name: 'u' } } : {}),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        return String(_id);
+      }
+
+      it('valid ids keep productId as a string and the principal image (list and detail)', async () => {
+        const { token } = await makeUser('admin');
+        const p = await makeProduct(10);
+        await Product.updateOne(
+          { _id: p.productId },
+          { $set: { images: [{ url: 'https://img/a.jpg', isPrincipal: false }, { url: 'https://img/b.jpg', isPrincipal: true }] } }
+        );
+        const o = await makeOrder(p);
+        const l = await (await list.GET(req('GET', '/api/admin/orders', token))).json();
+        expect(l.data[0].items[0].productId).toBe(p.productId);
+        expect(l.data[0].items[0].image).toBe('https://img/b.jpg');
+        const d = await (await detail.GET(req('GET', `/api/admin/orders/${o._id}`, token), ctx(String(o._id)))).json();
+        expect(d.data.items[0].productId).toBe(p.productId);
+        expect(d.data.items[0].image).toBe('https://img/b.jpg');
+      });
+
+      it('nonexistent product id lists fine with productId "" and no image', async () => {
+        const { token } = await makeUser('admin');
+        const id = await rawOrderWithProductId(new Types.ObjectId());
+        const l = await list.GET(req('GET', '/api/admin/orders', token));
+        expect(l.status).toBe(200);
+        const row = (await l.json()).data.find((o: { _id: string }) => o._id === id);
+        expect(row.items[0].productId).toBe('');
+        expect(row.items[0].image).toBe('');
+      });
+
+      for (const bad of ['', 'not-an-id']) {
+        it(`item productId ${JSON.stringify(bad)} does not break list or detail for admin and seller`, async () => {
+          const admin = await makeUser('admin');
+          const seller = await makeUser('seller');
+          const p = await makeProduct(10);
+          await makeOrder(p, { soldBy: seller.user });
+          const id = await rawOrderWithProductId(bad, seller.user._id);
+
+          for (const who of [admin, seller]) {
+            const l = await list.GET(req('GET', '/api/admin/orders', who.token));
+            expect(l.status).toBe(200);
+            const rows = (await l.json()).data;
+            const row = rows.find((o: { _id: string }) => o._id === id);
+            expect(row).toBeDefined();
+            expect(row.items[0].productId).toBe('');
+            expect(row.items[0].image).toBe('');
+            const valid = rows.find((o: { _id: string }) => o._id !== id);
+            expect(valid.items[0].productId).toBe(p.productId);
+
+            const d = await detail.GET(req('GET', `/api/admin/orders/${id}`, who.token), ctx(id));
+            expect(d.status).toBe(200);
+            expect((await d.json()).data.items[0].productId).toBe('');
+          }
+        });
+      }
+    });
+
     describe('audit fields in responses', () => {
       it('list and detail expose soldBy, item listPrice and history; seller sees own history, admin any', async () => {
         const admin = await makeUser('admin', 'Admin Uno');
