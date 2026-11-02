@@ -333,7 +333,6 @@ export async function PUT(req: NextRequest) {
       variants,
       specs,
       wholesale,
-      stock,
       brandId,
       categoryId,
     } = body;
@@ -383,7 +382,10 @@ export async function PUT(req: NextRequest) {
           options: Array.isArray(v.options) ? v.options : [],
           retailPrice: Number(v.retailPrice) || 0,
           wholesalePrice: v.wholesalePrice !== undefined && v.wholesalePrice !== null ? Number(v.wholesalePrice) : undefined,
-          stock: Math.max(0, Number(v.stock) || 0),
+          // Stock of an existing variant only moves through guarded stock operations (sales,
+          // orders, the Stock page): the form's value may be stale, so it is ignored here.
+          // A new variant takes its initial stock from the form.
+          stock: existing ? existing.stock : Math.max(0, Number(v.stock) || 0),
           active: v.active !== undefined ? Boolean(v.active) : true,
         };
       });
@@ -400,7 +402,7 @@ export async function PUT(req: NextRequest) {
     // Legacy fields
     if (retailPrice !== undefined) product.retailPrice = Number(retailPrice);
     if (wholesalePrice !== undefined) product.wholesalePrice = wholesalePrice ? Number(wholesalePrice) : undefined;
-    if (stock !== undefined) product.stock = Number(stock);
+    // The legacy product-level `stock` is kept as stored: it is edited from the Stock page only.
 
     await product.save();
 

@@ -391,4 +391,58 @@ describe('seller read-only stock and restricted product reads', () => {
       expect(inactiveId).toBeTruthy();
     });
   });
+
+  describe('PUT /api/admin/products keeps live stock of existing variants', () => {
+    it('ignores a stale form stock for an existing variant while updating its price; a new variant takes its form stock', async () => {
+      // The form was opened with stock 7; meanwhile a sale left 4 units.
+      await Product.updateOne({ _id: activeId, 'variants._id': variantId }, { $set: { 'variants.$.stock': 4 } });
+
+      const res = await productsRoute.PUT(
+        req('PUT', '/api/admin/products', tokens.admin, {
+          _id: activeId,
+          variants: [
+            {
+              _id: variantId,
+              sku: 'ZA-1',
+              options: [{ key: 'color', value: 'negro' }],
+              retailPrice: 12500,
+              wholesalePrice: 8000,
+              stock: 7,
+              active: true,
+            },
+            { sku: 'ZA-2', options: [{ key: 'color', value: 'rojo' }], retailPrice: 11000, stock: 5, active: true },
+          ],
+          stock: 12,
+        })
+      );
+      expect(res.status).toBe(200);
+
+      const saved = await Product.findById(activeId).lean();
+      const existing = saved!.variants!.find((v) => String(v._id) === variantId)!;
+      expect(existing.stock).toBe(4);
+      expect(existing.retailPrice).toBe(12500);
+      const added = saved!.variants!.find((v) => v.sku === 'ZA-2')!;
+      expect(added.stock).toBe(5);
+      expect(saved!.totalStock).toBe(9);
+    });
+
+    it('keeps the stored product-level stock of a product without variants', async () => {
+      const legacy = await Product.create({
+        name: 'Producto Simple',
+        slug: 'producto-simple',
+        images: [],
+        active: true,
+        retailPrice: 3000,
+        stock: 2,
+        totalStock: 2,
+      });
+      const res = await productsRoute.PUT(
+        req('PUT', '/api/admin/products', tokens.admin, { _id: String(legacy._id), retailPrice: 3500, stock: 9 })
+      );
+      expect(res.status).toBe(200);
+      const saved = await Product.findById(legacy._id).lean();
+      expect(saved!.stock).toBe(2);
+      expect(saved!.retailPrice).toBe(3500);
+    });
+  });
 });

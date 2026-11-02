@@ -66,6 +66,9 @@ interface FormVariant {
   active: boolean;
 }
 
+/** Stock of stored variants is only edited from the Stock page (guarded stock moves). */
+const STOCK_LOCKED_HINT = 'El stock se edita desde la pantalla Stock';
+
 interface ProductFormProps {
   initialData?: any;
   isEditing?: boolean;
@@ -344,11 +347,17 @@ export const ProductForm: React.FC<ProductFormProps> = ({
     toast.success(`Precio minorista $${num} aplicado a todas las variantes`);
   };
 
+  // Stored variants keep their live stock (the server ignores the form value for them),
+  // so the common stock only applies to newly added variants.
   const handleApplyBulkStock = () => {
     const num = Math.max(0, parseInt(bulkStockInput, 10) || 0);
-    setVariants((prev) => prev.map((v) => ({ ...v, stock: num })));
+    if (!variants.some((v) => !v._id)) {
+      toast.error(STOCK_LOCKED_HINT);
+      return;
+    }
+    setVariants((prev) => prev.map((v) => (v._id ? v : { ...v, stock: num })));
     setBulkStockInput('');
-    toast.success(`Stock de ${num} unidades aplicado a todas las variantes`);
+    toast.success(`Stock de ${num} unidades aplicado a las variantes nuevas`);
   };
 
   // Form Submission
@@ -773,8 +782,13 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                         setSimpleStock(e.target.value === '' ? '' : Number(e.target.value))
                       }
                       required
-                      className="w-full bg-white text-[#111111] text-sm font-extrabold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                      disabled={Boolean(variants[0]?._id)}
+                      title={variants[0]?._id ? STOCK_LOCKED_HINT : undefined}
+                      className="w-full bg-white text-[#111111] text-sm font-extrabold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] disabled:bg-[#f5f5f5] disabled:text-[#707072] disabled:cursor-not-allowed"
                     />
+                    {variants[0]?._id && (
+                      <p className="mt-1 text-[11px] text-[#707072]">{STOCK_LOCKED_HINT}</p>
+                    )}
                   </div>
                 </div>
 
@@ -974,7 +988,10 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                                       e.target.value === '' ? '' : Number(e.target.value)
                                     )
                                   }
-                                  className="w-24 bg-white font-bold p-1.5 border border-[#e5e5e5]"
+                                  disabled={Boolean(v._id)}
+                                  title={v._id ? STOCK_LOCKED_HINT : undefined}
+                                  aria-label={`Stock de ${v.sku}`}
+                                  className="w-24 bg-white font-bold p-1.5 border border-[#e5e5e5] disabled:bg-[#f5f5f5] disabled:text-[#707072] disabled:cursor-not-allowed"
                                 />
                               </td>
                               <td className="p-2 text-center">
@@ -992,6 +1009,11 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                         </tbody>
                       </table>
                     </div>
+                    {variants.some((v) => v._id) && (
+                      <p className="mt-2 text-[11px] text-[#707072]">
+                        {STOCK_LOCKED_HINT}; solo se carga acá el stock inicial de las variantes nuevas.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
