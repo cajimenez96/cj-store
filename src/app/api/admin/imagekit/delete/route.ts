@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/session';
 import { imagekit } from '@/lib/imagekit';
 
 export async function DELETE(req: NextRequest) {
   try {
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
     const { searchParams } = new URL(req.url);
     const fileId = searchParams.get('fileId');
 

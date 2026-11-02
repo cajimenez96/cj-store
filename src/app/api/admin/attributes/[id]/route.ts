@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/session';
 import { connectToDatabase } from '@/lib/db';
 import { Attribute, Category, Product } from '@/models';
 import { updateAttributeSchema } from '@/schemas/attribute';
@@ -6,10 +7,12 @@ import { updateAttributeSchema } from '@/schemas/attribute';
 export const dynamic = 'force-dynamic';
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
     await connectToDatabase();
     const { id } = await params;
 
@@ -36,6 +39,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
     await connectToDatabase();
     const { id } = await params;
     const body = await req.json();
@@ -133,10 +138,12 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
     await connectToDatabase();
     const { id } = await params;
 

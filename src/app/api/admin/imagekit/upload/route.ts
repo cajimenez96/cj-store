@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/session';
 import { imagekit } from '@/lib/imagekit';
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
     const folder = (formData.get('folder') as string) || '/products';

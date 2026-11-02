@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/session';
 import { connectToDatabase } from '@/lib/db';
 import { Category, Product } from '@/models';
 import { createCategorySchema } from '@/schemas/category';
@@ -6,8 +7,10 @@ import mongoose from 'mongoose';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
     await connectToDatabase();
 
     const categories = await Category.find({}).sort({ order: 1, name: 1 }).lean();
@@ -36,6 +39,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
     await connectToDatabase();
     const body = await req.json();
 

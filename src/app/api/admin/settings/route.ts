@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/session';
 import { connectToDatabase } from '@/lib/db';
 import Settings from '@/models/Settings';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
     await connectToDatabase();
     let settings = await Settings.findOne({}).lean();
 
@@ -25,6 +28,8 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   try {
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
     await connectToDatabase();
     const body = await req.json();
 

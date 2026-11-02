@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import { connectToDatabase } from '@/lib/db';
 import { verifySessionToken } from '@/lib/jwt';
-import type { Role } from '@/lib/permissions';
+import { isAdminRole, type Role } from '@/lib/permissions';
 import User from '@/models/User';
 
 export interface Session {
@@ -40,4 +40,20 @@ const MESSAGES = {
 
 export function sessionError(status: 401 | 403 | 404): NextResponse {
   return NextResponse.json({ ok: false, ...MESSAGES[status] }, { status });
+}
+
+/**
+ * Guard for admin-only handlers: re-validates the session against the DB, so a
+ * deactivated user gets 401 and a user whose current role is not admin gets 403,
+ * whatever the JWT still claims. Usage:
+ *   const auth = await requireAdmin(req);
+ *   if ('response' in auth) return auth.response;
+ */
+export async function requireAdmin(
+  req: NextRequest
+): Promise<{ session: Session } | { response: NextResponse }> {
+  const session = await getSession(req);
+  if (!session) return { response: sessionError(401) };
+  if (!isAdminRole(session.role)) return { response: sessionError(403) };
+  return { session };
 }

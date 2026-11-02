@@ -2,21 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { connectToDatabase } from '@/lib/db';
 import User from '@/models/User';
-import { decodeToken } from '@/lib/auth';
-
-async function getRequester(req: NextRequest) {
-  const token = req.cookies.get('admin_token')?.value;
-  if (!token) return null;
-  return await decodeToken(token);
-}
+import { requireAdmin } from '@/lib/session';
 
 // GET /api/admin/users - List users
 export async function GET(req: NextRequest) {
   try {
-    const requester = await getRequester(req);
-    if (!requester || (requester.role !== 'superadmin' && requester.role !== 'admin')) {
-      return NextResponse.json({ ok: false, error: 'FORBIDDEN' }, { status: 403 });
-    }
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
 
     await connectToDatabase();
     const users = await User.find({})
@@ -37,10 +29,10 @@ export async function GET(req: NextRequest) {
 // POST /api/admin/users - Create new user
 export async function POST(req: NextRequest) {
   try {
-    const requester = await getRequester(req);
-    if (!requester || (requester.role !== 'superadmin' && requester.role !== 'admin')) {
-      return NextResponse.json({ ok: false, error: 'FORBIDDEN' }, { status: 403 });
-    }
+    // Role checks below use the DB role (session), never the JWT claim.
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
+    const requester = auth.session;
 
     const { username, password, name, email, role, active } = await req.json();
 
@@ -121,10 +113,10 @@ export async function POST(req: NextRequest) {
 // PUT /api/admin/users - Update user
 export async function PUT(req: NextRequest) {
   try {
-    const requester = await getRequester(req);
-    if (!requester || (requester.role !== 'superadmin' && requester.role !== 'admin')) {
-      return NextResponse.json({ ok: false, error: 'FORBIDDEN' }, { status: 403 });
-    }
+    // Role checks below use the DB role (session), never the JWT claim.
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
+    const requester = auth.session;
 
     const body = await req.json();
     const { id, name, email, role, active, password } = body;
@@ -215,8 +207,10 @@ export async function PUT(req: NextRequest) {
 // DELETE /api/admin/users - Delete user
 export async function DELETE(req: NextRequest) {
   try {
-    const requester = await getRequester(req);
-    if (!requester || requester.role !== 'superadmin') {
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
+    const requester = auth.session;
+    if (requester.role !== 'superadmin') {
       return NextResponse.json(
         { ok: false, error: 'FORBIDDEN', message: 'Solo un Superadmin puede eliminar usuarios definitivamente' },
         { status: 403 }

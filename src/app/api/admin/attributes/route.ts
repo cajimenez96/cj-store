@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/session';
 import { connectToDatabase } from '@/lib/db';
 import { Attribute, Category } from '@/models';
 import { createAttributeSchema } from '@/schemas/attribute';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
     await connectToDatabase();
 
     const attributes = await Attribute.find({}).sort({ label: 1 }).lean();
@@ -41,6 +44,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
     await connectToDatabase();
     const body = await req.json();
 

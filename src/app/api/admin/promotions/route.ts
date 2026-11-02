@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/session';
 import { connectToDatabase } from '@/lib/db';
 import Promotion from '@/models/Promotion';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
     await connectToDatabase();
     const promotions = await Promotion.find({}).sort({ order: 1, createdAt: -1 }).lean();
     return NextResponse.json({ ok: true, data: promotions });
@@ -18,6 +21,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
     await connectToDatabase();
     const { title, description, imageUrl, active, order } = await req.json();
 
@@ -48,6 +53,8 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
     await connectToDatabase();
     const body = await req.json();
     const promoId = body._id || body.id;
@@ -95,6 +102,8 @@ export async function PUT(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    const auth = await requireAdmin(req);
+    if ('response' in auth) return auth.response;
     await connectToDatabase();
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');

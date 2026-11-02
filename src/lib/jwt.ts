@@ -25,27 +25,6 @@ export async function signAdminToken(user?: {
     .sign(SECRET_KEY);
 }
 
-export async function verifyAdminToken(token: string): Promise<boolean> {
-  try {
-    const { payload } = await jwtVerify(token, SECRET_KEY);
-    return Boolean(
-      payload &&
-        (payload.role === 'superadmin' || payload.role === 'admin')
-    );
-  } catch {
-    return false;
-  }
-}
-
-export async function decodeToken(token: string) {
-  try {
-    const { payload } = await jwtVerify(token, SECRET_KEY);
-    return payload;
-  } catch {
-    return null;
-  }
-}
-
 export interface SessionTokenPayload {
   role: Role;
   id?: string;
