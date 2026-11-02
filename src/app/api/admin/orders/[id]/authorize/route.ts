@@ -1,238 +1,135 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
+import { getSession, sessionError } from '@/lib/session';
+import { isAdminRole } from '@/lib/permissions';
+import { diffOrder } from '@/lib/order-history';
+import { runInTransaction } from '@/lib/transaction';
+import { isObjectIdString, isPlainObject, optionalString, toNumber } from '@/lib/input-validation';
+import {
+  applyThenWrite,
+  itemDeltas,
+  jsonError,
+  mutationErrorResponse,
+  orderNotFound,
+  orderSnapshot,
+  OrderHttpError,
+  writeOrderIfUnchanged,
+  type ItemDelta,
+} from '@/lib/order-mutation';
 import Order from '@/models/Order';
-import Product from '@/models/Product';
 import SalesRecord from '@/models/SalesRecord';
-import mongoose from 'mongoose';
+
+const PAYMENT_REQUIRED = 'El medio de pago registrado es obligatorio.';
+const PAYMENT_METHODS = ['efectivo', 'transferencia', 'tarjeta', 'otro'] as const;
 
 /**
- * POST /api/admin/orders/:id/authorize
+ * POST /api/admin/orders/:id/authorize  (admin/superadmin only; sellers -> 403)
  * Authorizes a pending order:
- * 1. Verifies stock availability for each item+variant
- * 2. Atomically decrements stock (supports Replica Set transactions & Standalone local)
- * 3. Transitions order status to 'autorizado'
- * 4. Creates a SalesRecord
+ * 1. Takes the stock of every item with the guarded atomic update
+ *    (`applyStockDeltas`): missing product -> 409 PRODUCT_NOT_FOUND, not enough
+ *    stock -> 409 INSUFFICIENT_STOCK, nothing written.
+ * 2. Moves the order to 'autorizado' (only if it is still 'pendiente', so two
+ *    concurrent authorizations cannot both take stock) and appends history.
+ * 3. Creates the SalesRecord.
+ * Replica set: one transaction. Standalone: stock and order are reverted if a
+ * later step fails.
  */
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   await connectToDatabase();
+  const user = await getSession(req);
+  if (!user) return sessionError(401);
+  if (!isAdminRole(user.role)) return sessionError(403);
 
-  let session: mongoose.ClientSession | null = null;
-  let useTransaction = false;
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return jsonError(400, 'BAD_REQUEST', 'El cuerpo de la solicitud no es válido.');
+  }
+  const { recordedPaymentMethod, discountNote, finalTotal } = isPlainObject(body) ? body : ({} as Record<string, unknown>);
 
-  const client = mongoose.connection?.getClient() as any;
-  const topologyType = client?.topology?.description?.type;
-  const isReplicaSet = typeof topologyType === 'string' && topologyType.includes('ReplicaSet');
-
-  if (isReplicaSet) {
-    try {
-      session = await mongoose.startSession();
-      session.startTransaction();
-      useTransaction = true;
-    } catch {
-      if (session) {
-        await session.endSession().catch(() => {});
-      }
-      session = null;
-      useTransaction = false;
+  if (!recordedPaymentMethod) {
+    return jsonError(400, 'BAD_REQUEST', PAYMENT_REQUIRED);
+  }
+  // Any other value failed the SalesRecord schema before (500); now a clear 400.
+  const paymentMethod = PAYMENT_METHODS.find((m) => m === recordedPaymentMethod);
+  if (!paymentMethod) return jsonError(400, 'BAD_REQUEST', 'El medio de pago registrado no es válido.');
+  const note = optionalString(discountNote);
+  if (!note.ok) return jsonError(400, 'BAD_REQUEST', 'La nota de descuento no es válida.');
+  let resolvedFinal: number | undefined;
+  if (finalTotal !== undefined) {
+    resolvedFinal = toNumber(finalTotal);
+    if (!Number.isFinite(resolvedFinal) || resolvedFinal < 0) {
+      return jsonError(400, 'BAD_REQUEST', 'El total final debe ser un número mayor o igual a 0.');
     }
   }
 
-  const decrementedItems: Array<{ productId: any; variantId?: any; variantName?: string; qty: number }> = [];
+  const { id } = await params;
+  if (!isObjectIdString(id)) return jsonError(404, 'NOT_FOUND', 'Solicitud no encontrada.');
+  const actor = { id: user.id, name: user.name };
 
+  let deltas: ItemDelta[] = [];
   try {
-    const { id } = await params;
-    const body = await req.json();
-    const { recordedPaymentMethod, discountNote, finalTotal } = body;
+    const result = await runInTransaction(async (session) => {
+      deltas = [];
+      const opts = session ? { session } : {};
+      const query = Order.findById(id);
+      const order = await (session ? query.session(session) : query);
+      if (!order) throw orderNotFound('Solicitud no encontrada.');
 
-    if (!recordedPaymentMethod) {
-      if (session && useTransaction) {
-        await session.abortTransaction();
-        session.endSession();
-      }
-      return NextResponse.json(
-        { ok: false, error: 'BAD_REQUEST', message: 'El medio de pago registrado es obligatorio.' },
-        { status: 400 }
-      );
-    }
-
-    const orderQuery = Order.findById(id);
-    const order = session && useTransaction
-      ? await orderQuery.session(session)
-      : await orderQuery;
-
-    if (!order) {
-      if (session && useTransaction) {
-        await session.abortTransaction();
-        session.endSession();
-      }
-      return NextResponse.json(
-        { ok: false, error: 'NOT_FOUND', message: 'Solicitud no encontrada.' },
-        { status: 404 }
-      );
-    }
-
-    if (order.status !== 'pendiente') {
-      if (session && useTransaction) {
-        await session.abortTransaction();
-        session.endSession();
-      }
-      return NextResponse.json(
-        {
-          ok: false,
-          error: 'INVALID_STATUS',
-          message: `Solo se pueden autorizar órdenes en estado "pendiente". Estado actual: "${order.status}".`,
-        },
-        { status: 409 }
-      );
-    }
-
-    // 1. Verify stock availability for all items before any write
-    for (const item of order.items) {
-      const prodQuery = Product.findById(item.productId);
-      const product = session && useTransaction
-        ? await prodQuery.session(session)
-        : await prodQuery;
-
-      if (!product) {
-        if (session && useTransaction) {
-          await session.abortTransaction();
-          session.endSession();
-        }
-        return NextResponse.json(
-          {
-            ok: false,
-            error: 'PRODUCT_NOT_FOUND',
-            message: `Producto "${item.name}" ya no existe en el catálogo.`,
-          },
-          { status: 409 }
+      if (order.status !== 'pendiente') {
+        throw new OrderHttpError(
+          409,
+          'INVALID_STATUS',
+          `Solo se pueden autorizar órdenes en estado "pendiente". Estado actual: "${order.status}".`
         );
       }
 
-      let availableStock = 0;
-      let label = '';
-      if (item.variantId && product.variants && product.variants.length > 0) {
-        const variantEntry = product.variants.find((v: any) => v._id?.toString() === item.variantId?.toString());
-        availableStock = variantEntry?.stock ?? 0;
-        label = item.variantLabel || `Variante ${item.variantId}`;
-      } else if (item.variantName && product.variants && product.variants.length > 0) {
-        const variantEntry = product.variants.find((v) => v.name === item.variantName);
-        availableStock = variantEntry?.stock ?? 0;
-        label = `Variante ${item.variantName}`;
-      } else {
-        availableStock = product.stock ?? 0;
-        label = 'Stock general';
-      }
+      deltas = await itemDeltas([], order.items, session);
 
-      if (availableStock < item.qty) {
-        if (session && useTransaction) {
-          await session.abortTransaction();
-          session.endSession();
+      const before = orderSnapshot(order);
+      const history = diffOrder(before, { ...before, status: 'autorizado' }, actor);
+      const set: Record<string, unknown> = { status: 'autorizado' };
+      if (note.value) set.notes = note.value.trim();
+      const previous = { status: order.status, notes: order.notes ?? '' };
+
+      return applyThenWrite(deltas, session, async () => {
+        const updated = await writeOrderIfUnchanged(order, set, history, session);
+        try {
+          const [salesRecord] = await SalesRecord.create(
+            [
+              {
+                orderId: updated._id,
+                orderNumber: updated.orderNumber,
+                confirmationDate: new Date(),
+                recordedPaymentMethod: paymentMethod,
+                appliedDiscountNote: note.value ?? '',
+                finalTotal: resolvedFinal ?? updated.total,
+              },
+            ],
+            opts
+          );
+          return { order: updated, salesRecord };
+        } catch (err) {
+          if (!session) {
+            // Standalone: put the order back to pendiente (its history entry too).
+            await Order.updateOne(
+              { _id: updated._id, status: 'autorizado', updatedAt: updated.updatedAt },
+              { $set: previous, $pop: { history: 1 } }
+            ).catch((e) => console.error('[authorize] No se pudo revertir la orden tras el error:', e));
+          }
+          throw err;
         }
-        return NextResponse.json(
-          {
-            ok: false,
-            error: 'INSUFFICIENT_STOCK',
-            message: `Stock insuficiente para "${item.name}" (${label}). Disponible: ${availableStock}, Requerido: ${item.qty}.`,
-          },
-          { status: 409 }
-        );
-      }
-    }
-
-    // 2. Decrement stock atomically for each item
-    for (const item of order.items) {
-      const updateFilter = item.variantId
-        ? { _id: item.productId, 'variants._id': item.variantId }
-        : item.variantName
-        ? { _id: item.productId, 'variants.name': item.variantName }
-        : { _id: item.productId };
-
-      const updateOp = (item.variantId || item.variantName)
-        ? { $inc: { 'variants.$.stock': -item.qty } }
-        : { $inc: { stock: -item.qty } };
-
-      if (session && useTransaction) {
-        await Product.updateOne(updateFilter, updateOp, { session });
-      } else {
-        await Product.updateOne(updateFilter, updateOp);
-      }
-      decrementedItems.push({
-        productId: item.productId,
-        variantId: item.variantId,
-        variantName: item.variantName,
-        qty: item.qty,
       });
-    }
-
-    // 3. Update order to 'autorizado'
-    const resolvedFinalTotal = finalTotal !== undefined ? Number(finalTotal) : order.total;
-    order.status = 'autorizado';
-    if (discountNote) order.notes = discountNote.trim();
-
-    if (session && useTransaction) {
-      await order.save({ session });
-    } else {
-      await order.save();
-    }
-
-    // 4. Create SalesRecord
-    const salesRecordPayload = {
-      orderId: order._id,
-      orderNumber: order.orderNumber,
-      confirmationDate: new Date(),
-      recordedPaymentMethod,
-      appliedDiscountNote: discountNote ?? '',
-      finalTotal: resolvedFinalTotal,
-    };
-
-    const salesRecord = session && useTransaction
-      ? (await SalesRecord.create([salesRecordPayload], { session }))[0]
-      : await SalesRecord.create(salesRecordPayload);
-
-    if (session && useTransaction) {
-      await session.commitTransaction();
-      session.endSession();
-    }
+    });
 
     return NextResponse.json({
       ok: true,
       message: 'Venta autorizada exitosamente y stock actualizado.',
-      salesRecordId: salesRecord._id.toString(),
-      orderNumber: order.orderNumber,
+      salesRecordId: result.salesRecord._id.toString(),
+      orderNumber: result.order.orderNumber,
     });
-  } catch (error: any) {
-    if (session && useTransaction) {
-      await session.abortTransaction();
-      session.endSession();
-    } else if (decrementedItems.length > 0) {
-      // Manual rollback in non-replica set environment
-      for (const item of decrementedItems) {
-        if (item.variantId) {
-          await Product.updateOne(
-            { _id: item.productId, 'variants._id': item.variantId },
-            { $inc: { 'variants.$.stock': item.qty } }
-          ).catch(() => {});
-        } else if (item.variantName) {
-          await Product.updateOne(
-            { _id: item.productId, 'variants.name': item.variantName },
-            { $inc: { 'variants.$.stock': item.qty } }
-          ).catch(() => {});
-        } else {
-          await Product.updateOne(
-            { _id: item.productId },
-            { $inc: { stock: item.qty } }
-          ).catch(() => {});
-        }
-      }
-    }
-
-    console.error('Error al autorizar orden:', error);
-    return NextResponse.json(
-      { ok: false, error: 'INTERNAL_SERVER_ERROR', message: error?.message || 'Error al autorizar la venta.' },
-      { status: 500 }
-    );
+  } catch (error) {
+    return mutationErrorResponse(error, deltas, 'Error al autorizar orden:', 'Error al autorizar la venta.');
   }
 }
