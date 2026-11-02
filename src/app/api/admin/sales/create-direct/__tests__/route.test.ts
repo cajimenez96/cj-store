@@ -477,6 +477,29 @@ for (const topo of topologies) {
         return Order.findById((await res.json()).orderId).lean();
       }
 
+      it('rejects a unitPrice above 1.000.000.000 (no overflow of unitPrice x qty)', async () => {
+        await expectRejected(
+          await POST(post(body({}, { unitPrice: 1_000_000_001, qty: 10000 }), token)),
+          /Precio inválido en la línea 1/
+        );
+        await expectRejected(await POST(post(body({}, { unitPrice: 1e300 }), token)), /Precio inválido/);
+      });
+
+      it('accepts a unitPrice of exactly 1.000.000.000', async () => {
+        const order = await expectAccepted(await POST(post(body({}, { unitPrice: 1_000_000_000 }), token)));
+        expect(order!.items[0].unitPrice).toBe(1_000_000_000);
+      });
+
+      it('insufficient stock names the variant (not its id) when only variantId is sent', async () => {
+        const res = await POST(post(body({}, { variantLabel: undefined, qty: 11 }), token));
+        expect(res.status).toBe(409);
+        const json = await res.json();
+        expect(json.error).toBe('INSUFFICIENT_STOCK');
+        expect(json.message).toContain('Negro 40');
+        expect(json.message).not.toContain(variantId);
+        expect(await variantStock(productId, variantId)).toBe(10);
+      });
+
       it('rejects operator objects as productId (no arbitrary product is sold)', async () => {
         const json = await expectRejected(await POST(post(body({}, { productId: { $ne: null }, variantId: undefined }), token)));
         expect(json.message).not.toContain('$ne');

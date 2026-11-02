@@ -8,7 +8,7 @@ import Order from '@/models/Order';
 import Product from '@/models/Product';
 import SalesRecord from '@/models/SalesRecord';
 import mongoose, { Types, type ClientSession } from 'mongoose';
-import { isPlainObject, isObjectIdString, optionalString, toNumber } from '@/lib/input-validation';
+import { isPlainObject, isObjectIdString, optionalString, toNumber, MAX_UNIT_PRICE, MAX_UNIT_PRICE_LABEL } from '@/lib/input-validation';
 import { isReplicaSet } from '@/lib/transaction';
 
 /** Validated order line, ready to be stored on the Order. */
@@ -91,8 +91,8 @@ function parseItem(item: unknown, n: number): Parsed<SaleInputItem> {
   let unitPrice: number | undefined;
   if (item.unitPrice !== undefined && item.unitPrice !== null) {
     unitPrice = toNumber(item.unitPrice);
-    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-      return fail(`Precio inválido en la línea ${n}: debe ser un número mayor o igual a 0.`);
+    if (!Number.isFinite(unitPrice) || unitPrice < 0 || unitPrice > MAX_UNIT_PRICE) {
+      return fail(`Precio inválido en la línea ${n}: debe ser un número entre 0 y ${MAX_UNIT_PRICE_LABEL}.`);
     }
   }
 
@@ -237,7 +237,7 @@ export async function POST(req: NextRequest) {
       if (item.variantId && product.variants && product.variants.length > 0) {
         variantRequested = true;
         matchedVariant = product.variants.find((v) => v._id?.toString() === item.variantId?.toString());
-        label = item.variantLabel || `Variante ${item.variantId}`;
+        label = item.variantLabel || matchedVariant?.name || `Variante ${item.variantId}`;
       } else if (item.variantName && product.variants && product.variants.length > 0) {
         variantRequested = true;
         matchedVariant = product.variants.find((v) => v.name === item.variantName);

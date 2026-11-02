@@ -300,6 +300,66 @@ for (const topo of topologies) {
       });
     });
 
+    describe('order edit guards', () => {
+      it('a seller cannot add a new line for an inactive product; existing lines and admins are unaffected', async () => {
+        const seller = await makeUser('seller', 'Vera');
+        const admin = await makeUser('admin');
+        const p = await makeProduct(10);
+        const inactive = await makeProduct(10);
+        await Product.updateOne({ _id: inactive.productId }, { $set: { active: false } });
+        const soldBy = { _id: seller.user._id, username: seller.user.username, name: 'Vera' };
+        const o = await makeOrder(p, { status: 'autorizado', qty: 2, soldBy });
+
+        const added = await detail.PUT(
+          req('PUT', `/api/admin/orders/${o._id}`, seller.token, { items: [editItem(p, 2), editItem(inactive, 1)] }),
+          ctx(String(o._id))
+        );
+        expect(added.status).toBe(409);
+        const json = await added.json();
+        expect(json.ok).toBe(false);
+        expect(json.message).toContain('no está disponible');
+        expect(await variantStock(inactive)).toBe(10);
+        expect((await Order.findById(o._id).lean())!.items).toHaveLength(1);
+
+        // An existing line whose product was deactivated later can still be edited by the seller.
+        await Product.updateOne({ _id: p.productId }, { $set: { active: false } });
+        const kept = await detail.PUT(
+          req('PUT', `/api/admin/orders/${o._id}`, seller.token, { items: [editItem(p, 1)] }),
+          ctx(String(o._id))
+        );
+        expect(kept.status).toBe(200);
+        expect(await variantStock(p)).toBe(11);
+
+        // Admins may still add lines for inactive products (unchanged behaviour).
+        const byAdmin = await detail.PUT(
+          req('PUT', `/api/admin/orders/${o._id}`, admin.token, { items: [editItem(p, 1), editItem(inactive, 1)] }),
+          ctx(String(o._id))
+        );
+        expect(byAdmin.status).toBe(200);
+        expect(await variantStock(inactive)).toBe(9);
+      });
+
+      it('rejects a unitPrice above 1.000.000.000 with 400 before touching anything', async () => {
+        const { token } = await makeUser('admin');
+        const p = await makeProduct(10);
+        const o = await makeOrder(p, { status: 'autorizado', qty: 2 });
+        const res = await detail.PUT(
+          req('PUT', `/api/admin/orders/${o._id}`, token, { items: [editItem(p, 10000, 1_000_000_001)] }),
+          ctx(String(o._id))
+        );
+        expect(res.status).toBe(400);
+        expect((await res.json()).message).toMatch(/Precio inválido en la línea 1/);
+        expect(await variantStock(p)).toBe(10);
+        expect((await Order.findById(o._id).lean())!.items[0].qty).toBe(2);
+
+        const ok = await detail.PUT(
+          req('PUT', `/api/admin/orders/${o._id}`, token, { items: [editItem(p, 2, 1_000_000_000)] }),
+          ctx(String(o._id))
+        );
+        expect(ok.status).toBe(200);
+      });
+    });
+
     describe('existing admin behaviour', () => {
       it('GET list returns every order with the same shape, status filter and pagination', async () => {
         const { token } = await makeUser('admin');

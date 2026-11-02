@@ -7,7 +7,7 @@ import { diffOrder } from '@/lib/order-history';
 import { resolveListPrice } from '@/lib/pricing';
 import { withProductImages } from '@/lib/order-items';
 import { runInTransaction } from '@/lib/transaction';
-import { isObjectIdString, isPlainObject, optionalString, toNumber } from '@/lib/input-validation';
+import { isObjectIdString, isPlainObject, optionalString, toNumber, MAX_UNIT_PRICE, MAX_UNIT_PRICE_LABEL } from '@/lib/input-validation';
 import {
   applyThenWrite,
   holdsStock,
@@ -127,8 +127,8 @@ function parseEditItem(item: unknown, n: number): Parsed<EditItem> {
     return fail(`Cantidad inválida en la línea ${n}: debe ser un número entero entre 1 y ${MAX_LINE_QTY}.`);
   }
   const unitPrice = toNumber(item.unitPrice);
-  if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-    return fail(`Precio inválido en la línea ${n}: debe ser un número mayor o igual a 0.`);
+  if (!Number.isFinite(unitPrice) || unitPrice < 0 || unitPrice > MAX_UNIT_PRICE) {
+    return fail(`Precio inválido en la línea ${n}: debe ser un número entre 0 y ${MAX_UNIT_PRICE_LABEL}.`);
   }
   let appliedPriceType: PriceType = 'custom';
   if (item.appliedPriceType !== undefined && item.appliedPriceType !== null) {
@@ -207,7 +207,8 @@ function lineKey(i: { productId: unknown; variantId?: unknown; variantName?: str
 async function buildItems(
   input: EditItem[],
   previous: IOrderItem[],
-  session: ClientSession | null
+  session: ClientSession | null,
+  { rejectInactiveNew = false }: { rejectInactiveNew?: boolean } = {}
 ): Promise<Array<{ item: IOrderItem; catalogListPrice?: number }>> {
   const ids = [...new Set(input.map((i) => i.productId))];
   const query = Product.find({ _id: { $in: ids } }).lean();
@@ -222,8 +223,15 @@ async function buildItems(
     storedListPrice.set(k, [...(storedListPrice.get(k) ?? []), p.listPrice]);
   }
 
+  // Products already in the order; a line for any other product is a new line.
+  const previousProductIds = new Set(previous.map((p) => (p.productId == null ? '' : String(p.productId))));
+
   return input.map((item) => {
     const dbProd = productMap.get(item.productId);
+    if (rejectInactiveNew && dbProd && !dbProd.active && !previousProductIds.has(item.productId)) {
+      // Same rule as the POS: an inactive product cannot be sold in a new line.
+      throw new OrderHttpError(409, 'PRODUCT_INACTIVE', `El producto "${dbProd.name}" no está disponible para la venta.`);
+    }
     const dbVariant = item.variantId
       ? dbProd?.variants?.find((v) => v._id?.toString() === item.variantId)
       : undefined;
@@ -325,7 +333,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         status: order.status,
       };
       if (input.items) {
-        const built = await buildItems(input.items, previousItems, session);
+        const built = await buildItems(input.items, previousItems, session, {
+          rejectInactiveNew: user.role === 'seller',
+        });
         draft.items = built.map((b) => b.item);
         // listPrice follows the quantity: recomputed for every line when any
         // quantity/line changed (the total drives wholesale), else kept.

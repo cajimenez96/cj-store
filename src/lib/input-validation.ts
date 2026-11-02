@@ -27,6 +27,10 @@ export function optionalString(v: unknown): { ok: boolean; value?: string } {
   return typeof v === 'string' ? { ok: true, value: v } : { ok: false };
 }
 
+/** Upper bound for a line's unit price, so `unitPrice * qty` stays a safe number. */
+export const MAX_UNIT_PRICE = 1_000_000_000;
+export const MAX_UNIT_PRICE_LABEL = '1.000.000.000';
+
 /** Escapes regex metacharacters so user text is matched literally (no invalid pattern, no ReDoS). */
 export function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
