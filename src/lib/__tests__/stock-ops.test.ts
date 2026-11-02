@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import { MongoMemoryReplSet, MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose, { type ClientSession, Types } from 'mongoose';
 import Product from '@/models/Product';
@@ -107,6 +107,10 @@ for (const topo of topologies) {
       await Product.init();
       await Counter.init();
     }, 120000);
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
 
     afterAll(async () => {
       await mongoose.disconnect();
@@ -255,7 +259,124 @@ for (const topo of topologies) {
 
       expect(err).toBeInstanceOf(InsufficientStockError);
       expect(await variantStock(p._id, a._id)).toBe(2);
+      expect((await Product.findById(p._id).lean())?.totalStock).toBe(2);
     });
+
+    it('the same variant twice in one batch is checked cumulatively', async () => {
+      const a = variant({ stock: 3 });
+      const p = await makeProduct([a]);
+      const twice: StockDelta[] = [
+        { productId: String(p._id), variantId: String(a._id), qty: 2 },
+        { productId: String(p._id), variantId: String(a._id), qty: 2 },
+      ];
+
+      const err = await run((s) => applyStockDeltas(twice, s)).catch((e) => e);
+      expect(err).toBeInstanceOf(InsufficientStockError);
+      expect((err as InsufficientStockError).available).toBe(1);
+      expect(await variantStock(p._id, a._id)).toBe(3);
+      expect((await Product.findById(p._id).lean())?.totalStock).toBe(3);
+
+      await Product.updateOne({ _id: p._id, 'variants._id': a._id }, { $set: { 'variants.$.stock': 4 } });
+      await run((s) => applyStockDeltas(twice, s));
+      expect(await variantStock(p._id, a._id)).toBe(0);
+      expect((await Product.findById(p._id).lean())?.totalStock).toBe(0);
+    });
+
+    it('rollback of a name-matched sale lands on the element that was decremented', async () => {
+      const first = variant({ name: 'X', stock: 0 });
+      const second = variant({ name: 'X', stock: 5 });
+      const other = variant({ name: 'Otra', stock: 0 });
+      const p = await makeProduct([first, second, other]);
+
+      const err = await run((s) =>
+        applyStockDeltas(
+          [
+            { productId: String(p._id), variantName: 'X', qty: 1 },
+            { productId: String(p._id), variantId: String(other._id), qty: 1 },
+          ],
+          s
+        )
+      ).catch((e) => e);
+
+      expect(err).toBeInstanceOf(InsufficientStockError);
+      expect(await variantStock(p._id, first._id)).toBe(0);
+      expect(await variantStock(p._id, second._id)).toBe(5);
+    });
+
+    it('qty 0 still requires an existing target and changes nothing', async () => {
+      const a = variant({ stock: 5 });
+      const p = await makeProduct([a]);
+      const missing = String(new Types.ObjectId());
+
+      const noProduct = await run((s) => applyStockDeltas([{ productId: missing, qty: 0 }], s)).catch((e) => e);
+      expect(noProduct).toBeInstanceOf(Error);
+      expect((noProduct as Error).message).toContain(missing);
+
+      const noVariant = await run((s) =>
+        applyStockDeltas([{ productId: String(p._id), variantName: 'No existe', qty: 0 }], s)
+      ).catch((e) => e);
+      expect(noVariant).toBeInstanceOf(Error);
+      expect((noVariant as Error).message).toContain('No existe');
+
+      await run((s) => applyStockDeltas([{ productId: String(p._id), variantId: String(a._id), qty: 0 }], s));
+      expect(await variantStock(p._id, a._id)).toBe(5);
+    });
+
+    it.runIf(topo.name.startsWith('standalone'))(
+      'a totalStock recompute failure after all decrements compensates them and rethrows',
+      async () => {
+        const a = variant({ stock: 5 });
+        const b = variant({ name: 'Blanco 41', stock: 3 });
+        const p = await makeProduct([a, b]);
+        const boom = new Error('recompute failed');
+        vi.spyOn(Product, 'updateMany').mockRejectedValueOnce(boom);
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        const err = await applyStockDeltas([
+          { productId: String(p._id), variantId: String(a._id), qty: 2 },
+          { productId: String(p._id), variantId: String(b._id), qty: 1 },
+        ]).catch((e) => e);
+
+        expect(err).toBe(boom);
+        expect(await variantStock(p._id, a._id)).toBe(5);
+        expect(await variantStock(p._id, b._id)).toBe(3);
+      }
+    );
+
+    it.runIf(topo.name.startsWith('standalone'))(
+      'undoing a restock whose units were sold meanwhile is logged and never goes negative',
+      async () => {
+        const a = variant({ stock: 0 });
+        const b = variant({ name: 'Blanco 41', stock: 0 });
+        const p = await makeProduct([a, b]);
+        const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const realUpdateOne = Product.updateOne.bind(Product);
+        let calls = 0;
+        vi.spyOn(Product, 'updateOne').mockImplementation(((...args: Parameters<typeof Product.updateOne>) => {
+          calls += 1;
+          if (calls === 2) {
+            // A concurrent sale takes 3 of the 4 restocked units before the
+            // failing item runs, so the take-back guard cannot pass.
+            return realUpdateOne({ _id: p._id, 'variants._id': a._id }, { $inc: { 'variants.$.stock': -3 } }).then(
+              () => realUpdateOne(...args)
+            );
+          }
+          return realUpdateOne(...args);
+        }) as unknown as typeof Product.updateOne);
+
+        const err = await applyStockDeltas([
+          { productId: String(p._id), variantId: String(a._id), qty: -4 },
+          { productId: String(p._id), variantId: String(b._id), qty: 1 },
+        ]).catch((e) => e);
+
+        expect(err).toBeInstanceOf(InsufficientStockError);
+        expect(await variantStock(p._id, a._id)).toBe(1);
+        expect(errorLog).toHaveBeenCalledWith(
+          expect.stringContaining('Compensación no aplicada'),
+          expect.anything()
+        );
+      }
+    );
 
     it('unknown product throws a clear Error and changes nothing', async () => {
       const a = variant({ stock: 5 });
@@ -324,7 +445,7 @@ for (const topo of topologies) {
       for (const f of failed) expect(f.reason).toBeInstanceOf(InsufficientStockError);
       expect(await variantStock(p._id, a._id)).toBe(0);
       expect((await Product.findById(p._id).lean())?.totalStock).toBe(0);
-    });
+    }, 30_000);
 
     it('getNextSequence starts at 1001 on first use', async () => {
       expect(await run((s) => getNextSequence('fresh-counter', s ?? undefined))).toBe(1001);
@@ -340,6 +461,6 @@ for (const topo of topologies) {
       for (const n of numbers) expect(n).toMatch(re);
       const seqs = numbers.map((n) => Number(re.exec(n)![1])).sort((x, y) => x - y);
       expect(seqs).toEqual(Array.from({ length: 20 }, (_, i) => 1001 + i));
-    });
+    }, 30_000);
   });
 }

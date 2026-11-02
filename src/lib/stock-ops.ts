@@ -79,14 +79,36 @@ function stockPath(t: Target): 'variants.$.stock' | 'stock' {
   return t.variant ? 'variants.$.stock' : 'stock';
 }
 
-/** Applies `-qty` to the target; decrements are guarded. Returns whether it matched. */
-async function incStock(t: Target, qty: number, session: ClientSession | null): Promise<boolean> {
-  const res = await Product.updateOne(
-    stockFilter(t, qty > 0 ? qty : undefined),
-    { $inc: { [stockPath(t)]: -qty } },
-    session ? { session } : {}
-  );
-  return res.matchedCount === 1;
+/**
+ * Applies `-qty` to the target; decrements are guarded. Returns the target that
+ * was actually written (null when nothing matched). Variant names are not
+ * unique, so for a name match the pre-image is read in the same atomic
+ * operation and the target is pinned to the `_id` of the element the positional
+ * `$` updated (the first element satisfying the `$elemMatch`). Compensation then
+ * reverts exactly that element.
+ */
+async function incStock(t: Target, qty: number, session: ClientSession | null): Promise<Target | null> {
+  const minStock = qty > 0 ? qty : undefined;
+  const filter = stockFilter(t, minStock);
+  const update = { $inc: { [stockPath(t)]: -qty } };
+  const opts = session ? { session } : {};
+
+  if (t.variant && 'name' in t.variant) {
+    const name = t.variant.name;
+    const before = await Product.findOneAndUpdate(filter, update, {
+      ...opts,
+      returnDocument: 'before',
+      projection: { 'variants._id': 1, 'variants.name': 1, 'variants.stock': 1 },
+    }).lean<{ variants?: Array<{ _id?: Types.ObjectId; name?: string; stock?: number }> }>();
+    if (!before) return null;
+    const hit = (before.variants ?? []).find(
+      (v) => v.name === name && (minStock === undefined || (v.stock ?? 0) >= minStock)
+    );
+    return hit?._id ? { productId: t.productId, variant: { _id: hit._id } } : t;
+  }
+
+  const res = await Product.updateOne(filter, update, opts);
+  return res.matchedCount === 1 ? t : null;
 }
 
 /** Explains a failed update: unknown product/variant (Error) or not enough stock. */
@@ -153,7 +175,21 @@ async function recomputeTotalStock(ids: Types.ObjectId[], session: ClientSession
  *   the already-applied deltas are reverted once each with compensating `$inc`
  *   (best effort, see `compensate`) and the original error is rethrown.
  *
- * On success, `totalStock` of every touched product is recomputed.
+ * On success, `totalStock` of every touched product is recomputed (a failure
+ * of that recompute is treated like any other failure).
+ *
+ * Caller obligations:
+ * - Pass `variantId` for products with variants; without a variant the legacy
+ *   product-level `stock` is used. `variantName` is a fallback (names are not
+ *   unique; the first matching element with enough stock is used).
+ * - On a replica set (the production path) wrap the call in
+ *   `session.withTransaction(...)`, or retry on `TransientTransactionError`:
+ *   concurrent sales of the same product conflict and one is retried.
+ * - Standalone (local dev only) gives no isolation: while a failing batch is
+ *   being compensated, its temporary decrements are visible, so a concurrent
+ *   batch (e.g. the same items in the opposite order) can be rejected
+ *   spuriously. It never oversells and never loses units through compensation.
+ * - `qty: 0` writes nothing but still throws for an unknown product/variant.
  */
 export async function applyStockDeltas(deltas: StockDelta[], session?: ClientSession | null): Promise<void> {
   const s = session ?? null;
@@ -166,14 +202,24 @@ export async function applyStockDeltas(deltas: StockDelta[], session?: ClientSes
     for (let i = 0; i < deltas.length; i++) {
       const d = deltas[i];
       const t = targets[i];
-      if (d.qty === 0) continue;
-      if (!(await incStock(t, d.qty, s))) {
+      if (d.qty === 0) {
+        // qty 0 writes nothing, but an unknown product/variant is still a
+        // caller bug and is reported like any other delta.
+        const q = Product.exists(stockFilter(t));
+        if (!(await (s ? q.session(s) : q))) throw await failureFor(d, t, s);
+        continue;
+      }
+      const written = await incStock(t, d.qty, s);
+      if (!written) {
         throw await failureFor(d, t, s);
       }
-      applied.push({ target: t, qty: d.qty });
+      applied.push({ target: written, qty: d.qty });
       touched.set(String(t.productId), t.productId);
     }
+    await recomputeTotalStock([...touched.values()], s);
   } catch (err) {
+    // Replica set: the caller aborts the transaction. Standalone: revert every
+    // applied delta, including when only the final recompute failed.
     if (!s) {
       await compensate(applied);
       await recomputeTotalStock([...touched.values()], null).catch((e) =>
@@ -182,8 +228,6 @@ export async function applyStockDeltas(deltas: StockDelta[], session?: ClientSes
     }
     throw err;
   }
-
-  await recomputeTotalStock([...touched.values()], s);
 }
 
 /**
@@ -196,8 +240,8 @@ export async function applyStockDeltas(deltas: StockDelta[], session?: ClientSes
 async function compensate(applied: Array<{ target: Target; qty: number }>): Promise<void> {
   for (const { target, qty } of [...applied].reverse()) {
     try {
-      const ok = await incStock(target, -qty, null);
-      if (!ok) {
+      const written = await incStock(target, -qty, null);
+      if (!written) {
         console.error('[stock-ops] Compensación no aplicada', { productId: String(target.productId), qty });
       }
     } catch (e) {
