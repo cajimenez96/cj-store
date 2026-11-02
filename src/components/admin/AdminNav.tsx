@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -18,11 +18,26 @@ import {
   DollarSign,
   Users as UsersIcon,
   ExternalLink,
+  Store,
 } from "lucide-react";
 
 export const AdminNav: React.FC = () => {
   const pathname = usePathname();
   const router = useRouter();
+  const [role, setRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/auth/me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.user?.role) setRole(data.user.role);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -34,8 +49,9 @@ export const AdminNav: React.FC = () => {
     }
   };
 
-  const links = [
+  const allLinks = [
     { label: "Solicitudes", href: "/admin/orders", icon: ShoppingBag },
+    { label: "Punto de venta", href: "/admin/pos", icon: Store },
     { label: "Productos", href: "/admin/products", icon: Package },
     { label: "Categorías", href: "/admin/categories", icon: Layers },
     { label: "Atributos", href: "/admin/attributes", icon: Sliders },
@@ -47,6 +63,20 @@ export const AdminNav: React.FC = () => {
     { label: "Usuarios", href: "/admin/users", icon: UsersIcon },
     { label: "Ajustes", href: "/admin/settings", icon: Settings },
   ];
+
+  const SELLER_HREFS = [
+    "/admin/orders",
+    "/admin/pos",
+    "/admin/accounting",
+    "/admin/stock",
+  ];
+  // While the role is loading, show no links so admin entries never flash to a seller.
+  const links =
+    role === "seller"
+      ? allLinks.filter((l) => SELLER_HREFS.includes(l.href))
+      : role
+        ? allLinks
+        : [];
 
   return (
     <header className="bg-[#111111] text-white border-b border-[#2d2d30] sticky top-0 z-40 shadow-sm">
