@@ -8,13 +8,12 @@ import { runInTransaction } from '@/lib/transaction';
 import { isObjectIdString, isPlainObject } from '@/lib/input-validation';
 import {
   applyThenWrite,
-  holdsStock,
-  itemDeltas,
   jsonError,
   mutationErrorResponse,
   orderNotFound,
   orderSnapshot,
   OrderHttpError,
+  statusTransitionDeltas,
   writeOrderIfUnchanged,
   type ItemDelta,
 } from '@/lib/order-mutation';
@@ -39,9 +38,12 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search');
     const pageParam = searchParams.get('page');
     const limitParam = searchParams.get('limit');
-    const page = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
-    const hasPagination = Boolean(limitParam !== null && parseInt(limitParam, 10) > 0);
-    const limit = hasPagination ? parseInt(limitParam!, 10) : 0;
+    // Invalid, zero or negative values fall back to the defaults (page 1, no limit).
+    const parsedPage = pageParam ? parseInt(pageParam, 10) : NaN;
+    const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+    const parsedLimit = limitParam !== null ? parseInt(limitParam, 10) : NaN;
+    const hasPagination = Number.isFinite(parsedLimit) && parsedLimit > 0;
+    const limit = hasPagination ? parsedLimit : 0;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const query: Record<string, any> = {};
@@ -52,11 +54,13 @@ export async function GET(req: NextRequest) {
     }
 
     if (search) {
+      // Plain, case-insensitive substring: metacharacters are escaped (no ReDoS, no invalid regex).
+      const pattern = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
-        { orderNumber: { $regex: search, $options: 'i' } },
-        { 'guest.name': { $regex: search, $options: 'i' } },
-        { 'guest.lastName': { $regex: search, $options: 'i' } },
-        { 'guest.phone': { $regex: search, $options: 'i' } },
+        { orderNumber: { $regex: pattern, $options: 'i' } },
+        { 'guest.name': { $regex: pattern, $options: 'i' } },
+        { 'guest.lastName': { $regex: pattern, $options: 'i' } },
+        { 'guest.phone': { $regex: pattern, $options: 'i' } },
       ];
     }
 
@@ -117,15 +121,13 @@ const LIST_STATUSES = ['pendiente', 'completada', 'cancelada'];
 
 /**
  * PUT /api/admin/orders  { id, status: 'pendiente'|'completada'|'cancelada', notes? }
- * Admin-only status change (sellers -> 403). Stock rules, as before except
- * where "cancelled is final and restocks exactly once" requires otherwise:
- * - into completada (from any other status): takes the order's stock
- *   (now guarded: not enough stock -> 409 instead of clamping at 0);
- * - into cancelada: returns the stock if it had been taken (autorizado or
- *   completada; before, only completada restocked);
- * - a cancelled order is final: any change -> 409, no stock movement;
- * - completada -> pendiente: no stock movement (as before).
- * Stock, status and history are written together.
+ * Admin-only status change (sellers -> 403). Stock follows the single rule in
+ * `order-mutation.ts` (`holdsStock`): moving into a holding status (completada)
+ * from pendiente takes the order's units (guarded: short stock -> 409); moving
+ * out of one (to pendiente or cancelada) restocks them once; autorizado <->
+ * completada moves nothing. A cancelled order is final (409). Re-sending the
+ * current status is a no-op for stock and history. Stock, status and history
+ * are written together.
  */
 export async function PUT(req: NextRequest) {
   await connectToDatabase();
@@ -162,12 +164,8 @@ export async function PUT(req: NextRequest) {
         throw new OrderHttpError(409, 'INVALID_STATUS', 'La orden está cancelada y no se puede modificar.');
       }
 
-      if (previousStatus !== 'completada' && status === 'completada') {
-        // As before: a product that no longer exists is skipped.
-        deltas = await itemDeltas([], order.items, session, { skipMissing: true });
-      } else if (status === 'cancelada' && holdsStock(previousStatus)) {
-        deltas = await itemDeltas(order.items, [], session);
-      }
+      // As before: a product that no longer exists is skipped, not an error.
+      deltas = await statusTransitionDeltas(previousStatus, status, order.items, session, { skipMissing: true });
 
       const before = orderSnapshot(order);
       const history = diffOrder(before, { ...before, status }, actor);

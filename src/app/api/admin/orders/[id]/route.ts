@@ -17,6 +17,7 @@ import {
   orderNotFound,
   orderSnapshot,
   OrderHttpError,
+  statusTransitionDeltas,
   writeOrderIfUnchanged,
   type ItemDelta,
 } from '@/lib/order-mutation';
@@ -27,11 +28,16 @@ import { Types, type ClientSession } from 'mongoose';
 const notFoundResponse = () => jsonError(404, 'NOT_FOUND', ORDER_NOT_FOUND_MESSAGE);
 const badRequest = (message: string) => jsonError(400, 'BAD_REQUEST', message);
 
-/** Loads the order inside the caller's scope; out of scope is indistinguishable from missing. */
+/**
+ * Loads an order to mutate inside the caller's scope; out of scope is
+ * indistinguishable from missing. A seller may only ever mutate direct sales,
+ * so anything else carrying their soldBy is also a 404.
+ */
 async function loadScopedOrder(id: string, user: Session, session: ClientSession | null): Promise<IOrderDocument> {
   const query = Order.findOne({ _id: id, ...ordersScope(user) });
   const order = await (session ? query.session(session) : query);
   if (!order) throw orderNotFound();
+  if (!isAdminRole(user.role) && order.origin !== 'admin_direct') throw orderNotFound();
   return order;
 }
 
@@ -286,7 +292,8 @@ const QUANTITY_ACTIONS = new Set(['quantity_changed', 'item_added', 'item_remove
  *   (diff-and-apply): more units take stock, fewer/removed units restock.
  * Stock, order and history are written together (one transaction on a replica
  * set; reverted on standalone if the order write fails).
- * Sellers: only their own direct sale (else 404), never completada (403).
+ * Sellers: only their own direct sale (else 404), only while it is autorizado,
+ * and never to completada (403).
  */
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   await connectToDatabase();
@@ -385,11 +392,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 /**
  * PATCH /api/admin/orders/:id  { action: 'cancel', notes?, cancelReason? }
  * Cancels the order. A cancelled order is final: cancelling again (or editing)
- * is 409 and never restocks twice. The stock is returned exactly once when it
- * had been taken (autorizado, completada); a pendiente order holds none.
+ * is 409 and never restocks twice. The stock is returned exactly once when the
+ * order held it (`holdsStock`: autorizado, completada); others hold none.
  * Appends a `cancelled` history entry with the reason.
- * Sellers: only their own direct sale (else 404), not a completada one (403),
- * and never to completada (403).
+ * Sellers: only their own direct sale (else 404), and only while it is
+ * autorizado (else 403); never to completada (403).
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   await connectToDatabase();
@@ -436,9 +443,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (notes.value) set.notes = notes.value.trim();
       if (cancelReason) set.cancelReason = cancelReason;
 
-      if (holdsStock(order.status)) {
-        deltas = await itemDeltas(order.items, [], session);
-      }
+      deltas = await statusTransitionDeltas(order.status, 'cancelado', order.items, session);
       return applyThenWrite(deltas, session, () => writeOrderIfUnchanged(order, set, history, session));
     });
 

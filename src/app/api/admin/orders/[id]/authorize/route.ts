@@ -7,12 +7,12 @@ import { runInTransaction } from '@/lib/transaction';
 import { isObjectIdString, isPlainObject, optionalString, toNumber } from '@/lib/input-validation';
 import {
   applyThenWrite,
-  itemDeltas,
   jsonError,
   mutationErrorResponse,
   orderNotFound,
   orderSnapshot,
   OrderHttpError,
+  statusTransitionDeltas,
   writeOrderIfUnchanged,
   type ItemDelta,
 } from '@/lib/order-mutation';
@@ -85,13 +85,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         );
       }
 
-      deltas = await itemDeltas([], order.items, session);
+      deltas = await statusTransitionDeltas(order.status, 'autorizado', order.items, session);
 
       const before = orderSnapshot(order);
       const history = diffOrder(before, { ...before, status: 'autorizado' }, actor);
       const set: Record<string, unknown> = { status: 'autorizado' };
       if (note.value) set.notes = note.value.trim();
-      const previous = { status: order.status, notes: order.notes ?? '' };
+      // Standalone revert restores exactly what was there: notes are only
+      // touched if this write changed them, and unset again if they were unset.
+      const revert: Record<string, unknown> = { $set: { status: order.status }, $pop: { history: 1 } };
+      if ('notes' in set) {
+        if (order.$isDefault('notes')) revert.$unset = { notes: '' };
+        else (revert.$set as Record<string, unknown>).notes = order.notes;
+      }
 
       return applyThenWrite(deltas, session, async () => {
         const updated = await writeOrderIfUnchanged(order, set, history, session);
@@ -115,7 +121,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             // Standalone: put the order back to pendiente (its history entry too).
             await Order.updateOne(
               { _id: updated._id, status: 'autorizado', updatedAt: updated.updatedAt },
-              { $set: previous, $pop: { history: 1 } }
+              revert
             ).catch((e) => console.error('[authorize] No se pudo revertir la orden tras el error:', e));
           }
           throw err;

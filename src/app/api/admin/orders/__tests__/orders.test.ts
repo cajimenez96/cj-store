@@ -799,6 +799,241 @@ for (const topo of topologies) {
       }
     });
 
+    // -------------------------------------------------------------------
+    // Fix round 1: stock state machine, seller status rule, search, paging.
+    // -------------------------------------------------------------------
+    describe('stock state machine', () => {
+      const QTY = 3;
+      const TOTAL = 10; // stock + units held by the order, conserved by every transition
+      const HOLDING = new Set(['autorizado', 'completada']);
+      const held = (status: string) => (HOLDING.has(status) ? QTY : 0);
+      const FROM: OrderStatus[] = ['pendiente', 'autorizado', 'completada', 'cancelado'];
+      type Via = { to: string; run: (id: string, token: string) => Promise<Response> };
+      const VIAS: Via[] = [
+        ...['pendiente', 'completada', 'cancelada'].map((to) => ({
+          to,
+          run: (id: string, token: string) => list.PUT(req('PUT', '/api/admin/orders', token, { id, status: to })),
+        })),
+        {
+          to: 'cancelado',
+          run: (id, token) => detail.PATCH(req('PATCH', `/api/admin/orders/${id}`, token, { action: 'cancel' }), ctx(id)),
+        },
+        {
+          to: 'autorizado',
+          run: (id, token) =>
+            authorize.POST(
+              req('POST', `/api/admin/orders/${id}/authorize`, token, { recordedPaymentMethod: 'efectivo' }),
+              ctx(id)
+            ),
+        },
+      ];
+
+      for (const from of FROM) {
+        for (const via of VIAS) {
+          it(`${from} -> ${via.to}`, async () => {
+            const admin = await makeUser('admin');
+            const p = await makeProduct(TOTAL - held(from));
+            const o = await makeOrder(p, { status: from, qty: QTY });
+            const res = await via.run(String(o._id), admin.token);
+
+            const cancelledFrom = from === 'cancelado';
+            const authorizeNotPending = via.to === 'autorizado' && from !== 'pendiente';
+            if (cancelledFrom || authorizeNotPending) {
+              expect(res.status).toBe(409);
+              expect((await Order.findById(o._id).lean())!.status).toBe(from);
+              expect(await variantStock(p)).toBe(TOTAL - held(from));
+              return;
+            }
+            expect(res.status).toBe(200);
+            const saved = await Order.findById(o._id).lean();
+            expect(saved!.status).toBe(via.to);
+            const stock = (await variantStock(p))!;
+            expect(stock).toBe(TOTAL - held(via.to));
+            expect(stock + held(saved!.status)).toBe(TOTAL);
+            if (from === via.to) expect(saved!.history).toHaveLength(0);
+          });
+        }
+      }
+
+      it('a round trip autorizado -> pendiente -> completada -> pendiente -> authorize -> cancel conserves stock', async () => {
+        const admin = await makeUser('admin');
+        const p = await makeProduct(TOTAL - QTY);
+        const o = await makeOrder(p, { status: 'autorizado', qty: QTY });
+        const id = String(o._id);
+        const put = (status: string) => list.PUT(req('PUT', '/api/admin/orders', admin.token, { id, status }));
+        expect((await put('pendiente')).status).toBe(200);
+        expect(await variantStock(p)).toBe(TOTAL);
+        expect((await put('completada')).status).toBe(200);
+        expect(await variantStock(p)).toBe(TOTAL - QTY);
+        expect((await put('pendiente')).status).toBe(200);
+        expect(await variantStock(p)).toBe(TOTAL);
+        const auth = await authorize.POST(
+          req('POST', `/api/admin/orders/${id}/authorize`, admin.token, { recordedPaymentMethod: 'efectivo' }),
+          ctx(id)
+        );
+        expect(auth.status).toBe(200);
+        expect(await variantStock(p)).toBe(TOTAL - QTY);
+        const cancel = await detail.PATCH(req('PATCH', `/api/admin/orders/${id}`, admin.token, { action: 'cancel' }), ctx(id));
+        expect(cancel.status).toBe(200);
+        expect(await variantStock(p)).toBe(TOTAL);
+      });
+
+      it('admin cancel of a completada order restocks once', async () => {
+        const admin = await makeUser('admin');
+        const p = await makeProduct(TOTAL - QTY);
+        const o = await makeOrder(p, { status: 'completada', qty: QTY });
+        const id = String(o._id);
+        const first = await detail.PATCH(req('PATCH', `/api/admin/orders/${id}`, admin.token, { action: 'cancel' }), ctx(id));
+        expect(first.status).toBe(200);
+        const second = await detail.PATCH(req('PATCH', `/api/admin/orders/${id}`, admin.token, { action: 'cancel' }), ctx(id));
+        expect(second.status).toBe(409);
+        expect(await variantStock(p)).toBe(TOTAL);
+      });
+
+      it('an admin edit of a pendiente order changes it but moves no stock', async () => {
+        const admin = await makeUser('admin');
+        const p = await makeProduct(TOTAL);
+        const o = await makeOrder(p, { status: 'pendiente', qty: QTY, origin: 'web' });
+        const res = await detail.PUT(
+          req('PUT', `/api/admin/orders/${o._id}`, admin.token, { items: [editItem(p, 7)] }),
+          ctx(String(o._id))
+        );
+        expect(res.status).toBe(200);
+        expect((await Order.findById(o._id).lean())!.items[0].qty).toBe(7);
+        expect(await variantStock(p)).toBe(TOTAL);
+      });
+
+      if (!topo.replSet) {
+        it('10 parallel cancels: one 200, the rest 409, stock restored once', async () => {
+          const s1 = await makeUser('seller');
+          const p = await makeProduct(TOTAL - QTY);
+          const o = await makeOrder(p, { soldBy: s1.user, qty: QTY });
+          const id = String(o._id);
+          const results = await Promise.all(
+            Array.from({ length: 10 }, () =>
+              detail.PATCH(req('PATCH', `/api/admin/orders/${id}`, s1.token, { action: 'cancel' }), ctx(id))
+            )
+          );
+          const statuses = results.map((r) => r.status);
+          expect(statuses.filter((s) => s === 200)).toHaveLength(1);
+          expect(statuses.filter((s) => s === 409)).toHaveLength(9);
+          expect(await variantStock(p)).toBe(TOTAL);
+          const saved = await Order.findById(id).lean();
+          expect(saved!.history.filter((e) => e.action === 'cancelled')).toHaveLength(1);
+        });
+      }
+    });
+
+    describe('seller status rule', () => {
+      for (const status of ['pendiente', 'confirmada'] as OrderStatus[]) {
+        it(`a seller cannot edit or cancel their own ${status} order (403, nothing persisted)`, async () => {
+          const s1 = await makeUser('seller');
+          const p = await makeProduct(10);
+          const o = await makeOrder(p, { soldBy: s1.user, status, qty: 2 });
+          const before = await Order.findById(o._id).lean();
+          const put = await detail.PUT(
+            req('PUT', `/api/admin/orders/${o._id}`, s1.token, { items: [editItem(p, 1)] }),
+            ctx(String(o._id))
+          );
+          expect(put.status).toBe(403);
+          const patch = await detail.PATCH(
+            req('PATCH', `/api/admin/orders/${o._id}`, s1.token, { action: 'cancel' }),
+            ctx(String(o._id))
+          );
+          expect(patch.status).toBe(403);
+          expect(await Order.findById(o._id).lean()).toEqual(before);
+          expect(await variantStock(p)).toBe(10);
+        });
+      }
+
+      it("a seller's own soldBy on a web order is 404 for edit and cancel", async () => {
+        const s1 = await makeUser('seller');
+        const p = await makeProduct(10);
+        const o = await makeOrder(p, { soldBy: s1.user, origin: 'web', qty: 2 });
+        const before = await Order.findById(o._id).lean();
+        const put = await detail.PUT(
+          req('PUT', `/api/admin/orders/${o._id}`, s1.token, { items: [editItem(p, 1)] }),
+          ctx(String(o._id))
+        );
+        expect(put.status).toBe(404);
+        const patch = await detail.PATCH(
+          req('PATCH', `/api/admin/orders/${o._id}`, s1.token, { action: 'cancel' }),
+          ctx(String(o._id))
+        );
+        expect(patch.status).toBe(404);
+        expect(await Order.findById(o._id).lean()).toEqual(before);
+        expect(await variantStock(p)).toBe(10);
+      });
+    });
+
+    describe('list search and paging', () => {
+      it('treats regex metacharacters literally and still matches normal text', async () => {
+        const admin = await makeUser('admin');
+        const p = await makeProduct(10);
+        const o = await makeOrder(p);
+        await Order.updateOne({ _id: o._id }, { $set: { 'guest.name': 'Ana (a+)+$ [x] .* fin' } });
+        await makeOrder(p);
+
+        const count = async (q: string) => {
+          const res = await list.GET(req('GET', `/api/admin/orders?search=${encodeURIComponent(q)}`, admin.token));
+          expect(res.status).toBe(200);
+          return (await res.json()).data.length;
+        };
+        expect(await count('(')).toBe(1);
+        expect(await count('[')).toBe(1);
+        expect(await count('.*')).toBe(1);
+        expect(await count('(a+)+$')).toBe(1);
+        expect(await count('a.a')).toBe(0);
+        expect(await count('pérez')).toBe(2);
+        expect(await count(o.orderNumber.toLowerCase())).toBe(1);
+      });
+
+      it('invalid page/limit fall back to the defaults', async () => {
+        const admin = await makeUser('admin');
+        const p = await makeProduct(10);
+        await makeOrder(p);
+        await makeOrder(p);
+        for (const q of ['page=abc', 'page=-2', 'page=0', 'page=abc&limit=xyz', 'limit=-1', 'limit=0']) {
+          const res = await list.GET(req('GET', `/api/admin/orders?${q}`, admin.token));
+          const json = await res.json();
+          expect(json.pagination, q).toEqual({ page: 1, limit: 2, total: 2, totalPages: 1 });
+          expect(json.data).toHaveLength(2);
+        }
+        const paged = await (await list.GET(req('GET', '/api/admin/orders?page=abc&limit=1', admin.token))).json();
+        expect(paged.pagination).toEqual({ page: 1, limit: 1, total: 2, totalPages: 2 });
+      });
+    });
+
+    describe('authorize revert keeps notes', () => {
+      for (const previous of [undefined, 'nota previa']) {
+        it(`restores notes exactly (${previous === undefined ? 'unset' : 'set'}) after a standalone failure`, async () => {
+          const admin = await makeUser('admin');
+          const p = await makeProduct(10);
+          const o = await makeOrder(p, { origin: 'web', status: 'pendiente', qty: 2 });
+          if (previous === undefined) {
+            await Order.collection.updateOne({ _id: o._id }, { $unset: { notes: '' } });
+          } else {
+            await Order.collection.updateOne({ _id: o._id }, { $set: { notes: previous } });
+          }
+          vi.spyOn(SalesRecord, 'create').mockRejectedValueOnce(new Error('boom'));
+          const res = await authorize.POST(
+            req('POST', `/api/admin/orders/${o._id}/authorize`, admin.token, {
+              recordedPaymentMethod: 'efectivo',
+              discountNote: 'descuento',
+            }),
+            ctx(String(o._id))
+          );
+          expect(res.status).toBe(500);
+          const raw = await Order.collection.findOne({ _id: o._id });
+          expect(raw!.status).toBe('pendiente');
+          if (previous === undefined) expect('notes' in raw!).toBe(false);
+          else expect(raw!.notes).toBe(previous);
+          expect(raw!.history ?? []).toHaveLength(0);
+          expect(await variantStock(p)).toBe(10);
+        });
+      }
+    });
+
     describe('authorize', () => {
       it('a seller gets 403 and nothing changes', async () => {
         const s1 = await makeUser('seller');
@@ -873,6 +1108,8 @@ describe('order-access', () => {
     expect(canMutateOrder(seller, own, 'completada')).toBe(false);
     expect(canMutateOrder(seller, { ...(own as object), status: 'completada' } as never)).toBe(false);
     expect(canMutateOrder(seller, { ...(own as object), status: 'cancelado' } as never)).toBe(false);
+    expect(canMutateOrder(seller, { ...(own as object), status: 'pendiente' } as never)).toBe(false);
+    expect(canMutateOrder(seller, { ...(own as object), status: 'confirmada' } as never)).toBe(false);
     expect(canMutateOrder(seller, { ...(own as object), origin: 'web' } as never)).toBe(false);
     expect(
       canMutateOrder(seller, { ...(own as object), soldBy: { userId: new Types.ObjectId(other), username: 'o', name: 'O' } } as never)

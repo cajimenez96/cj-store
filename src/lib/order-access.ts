@@ -34,7 +34,7 @@ export function ordersScope(session: Session, userFilter?: string): QueryFilter<
  * Whether the session may edit/cancel this order (and move it to `nextStatus`).
  * Admins may mutate any order (status rules are applied by the handlers). A
  * seller only their own direct sale (`admin_direct`, `soldBy.userId` = them)
- * that is neither completada nor cancelled, and never to completada.
+ * whose status is exactly `autorizado`, and never to completada.
  */
 export function canMutateOrder(
   session: Session,
@@ -45,7 +45,7 @@ export function canMutateOrder(
   if (session.role !== 'seller') return false;
   if (order.origin !== 'admin_direct') return false;
   if (!order.soldBy?.userId || String(order.soldBy.userId) !== session.id) return false;
-  if (order.status === 'completada' || isCancelledStatus(order.status)) return false;
+  if (order.status !== 'autorizado') return false;
   if (nextStatus === 'completada') return false;
   return true;
 }

@@ -34,11 +34,41 @@ export function orderNotFound(message = ORDER_NOT_FOUND_MESSAGE): OrderHttpError
   return new OrderHttpError(404, 'NOT_FOUND', message);
 }
 
-/** Statuses whose stock has already been taken (authorize/POS sale, or list PUT -> completada). */
+/**
+ * The one stock rule for orders. An order HOLDS stock (its units are out of the
+ * shared stock) exactly while its status is `autorizado` or `completada`;
+ * `pendiente`, `confirmada` and the cancelled aliases hold none.
+ *
+ * - Status transitions (any handler) move stock by the difference, see
+ *   `statusTransitionDeltas`: not-holding -> holding takes the order's units
+ *   (guarded), holding -> not-holding restocks them once, holding <-> holding
+ *   and not-holding <-> not-holding move nothing.
+ * - Item edits move stock only while the order holds stock (diff-and-apply).
+ *   Editing a not-holding order (e.g. an admin editing a pendiente web order)
+ *   changes the order but moves no stock: its units are taken when it moves
+ *   into a holding status.
+ */
 const STOCK_HELD = new Set(['autorizado', 'completada']);
 
 export function holdsStock(status: string): boolean {
   return STOCK_HELD.has(status);
+}
+
+/**
+ * Stock movement for a status change of an order with `items`, per the rule
+ * above. Same status, or both on the same side of the rule -> no deltas.
+ */
+export async function statusTransitionDeltas(
+  from: string,
+  to: string,
+  items: StockItem[],
+  session: ClientSession | null,
+  options: DeltaOptions = {}
+): Promise<ItemDelta[]> {
+  const was = holdsStock(from);
+  const will = holdsStock(to);
+  if (was === will) return [];
+  return will ? itemDeltas([], items, session, options) : itemDeltas(items, [], session, options);
 }
 
 /** The order fields an item-level stock movement needs. */
