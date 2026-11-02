@@ -101,6 +101,8 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, 
 
   if (!order) return null;
 
+  // Lines whose product was deleted come back without a valid id; the server rejects them.
+  const hasInvalidLine = items.some((i) => !/^[a-f0-9]{24}$/i.test(i.productId ?? ''));
   const subtotal = items.reduce((sum, i) => sum + i.unitPrice * i.qty, 0);
   const total = Math.max(0, subtotal - discount);
 
@@ -166,6 +168,7 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, 
   };
 
   const handleSave = async () => {
+    if (hasInvalidLine) return;
     if (items.length === 0) {
       toast.error('La orden debe tener al menos un producto.');
       return;
@@ -230,7 +233,7 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, 
           </button>
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || hasInvalidLine}
             className="py-3 px-6 bg-[#111111] text-white font-bold text-xs uppercase tracking-wider rounded-full flex items-center gap-2 hover:bg-black transition-all disabled:opacity-50 cursor-pointer"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -240,6 +243,12 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, 
       }
     >
       <div className="p-6 space-y-6">
+
+        {hasInvalidLine && (
+          <div role="alert" className="p-3 bg-[#d30005]/5 border border-[#d30005]/20 text-xs font-medium text-[#d30005]">
+            Este pedido contiene un producto que ya no existe; no se puede editar. Podés cancelar la solicitud.
+          </div>
+        )}
 
         {/* Customer Data */}
         <div className="space-y-3">

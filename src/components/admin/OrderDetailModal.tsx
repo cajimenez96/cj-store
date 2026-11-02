@@ -82,6 +82,7 @@ const PRICE_TYPE_LABELS: Record<string, string> = {
 
 /** Catalog vs charged price for one line; nothing to flag when they match. */
 const PriceAudit: React.FC<{ listPrice: number; unitPrice: number }> = ({ listPrice, unitPrice }) => {
+  if (!Number.isFinite(listPrice) || !Number.isFinite(unitPrice)) return null;
   if (listPrice === unitPrice) {
     return (
       <span className="block text-[10px] font-medium text-[#707072]">
@@ -147,9 +148,22 @@ ${itemsList}
   const isSellerActionable = role === 'seller' && order.status === 'autorizado';
   const showAdminActions = isAdminViewer && !isFinalized;
   const showActions = showAdminActions || isSellerActionable;
-  const history = [...(order.history ?? [])].sort(
-    (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()
-  );
+  // Newest first. History is append-only, so equal/invalid timestamps fall back to
+  // the original index (higher = newer).
+  const historyTime = (at: string) => {
+    const t = new Date(at).getTime();
+    return Number.isFinite(t) ? t : null;
+  };
+  const history = (order.history ?? [])
+    .map((h, idx) => ({ h, idx }))
+    .sort((a, b) => {
+      // Invalid timestamps sort last; the key keeps the comparator transitive.
+      const ta = historyTime(a.h.at) ?? -Infinity;
+      const tb = historyTime(b.h.at) ?? -Infinity;
+      if (ta !== tb) return tb > ta ? 1 : -1;
+      return b.idx - a.idx;
+    })
+    .map(({ h }) => h);
 
   const handleAuthorize = async () => {
     setUpdating(true);
@@ -355,7 +369,7 @@ ${itemsList}
               <li key={idx} className="p-3 text-xs">
                 <p className="text-[#111111]">{h.summary}</p>
                 <p className="text-[10px] text-[#707072] mt-0.5">
-                  {new Date(h.at).toLocaleString('es-AR')} • {h.byName}
+                  {historyTime(h.at) === null ? '—' : new Date(h.at).toLocaleString('es-AR')} • {h.byName}
                 </p>
               </li>
             ))}

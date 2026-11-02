@@ -18,7 +18,8 @@ describe('createdEntry', () => {
     expect(e.action).toBe('created');
     expect(e.byName).toBe('Ana');
     expect(e.byUserId).toBe('u1');
-    expect(e.summary).toContain('30000');
+    expect(e.summary).toBe('Pedido creado (total $30.000,00)');
+    expect(e.summary).not.toContain('creado por');
     expect(e.at).toBeInstanceOf(Date);
   });
 });

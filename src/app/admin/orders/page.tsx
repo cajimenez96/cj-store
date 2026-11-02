@@ -17,6 +17,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 const STATUS_STYLES: Record<string, string> = {
   pendiente: 'bg-[#f59e0b] text-white border-[#f59e0b]',
@@ -39,6 +40,9 @@ import { formatPrice } from '@/utils/formatCurrency';
 import { toast } from '@/components/ui/sonner';
 
 export default function AdminOrdersPage() {
+  const router = useRouter();
+  // Bumped per list request: only the latest request may write state.
+  const requestIdRef = useRef(0);
   const [orders, setOrders] = useState<AdminOrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -106,32 +110,48 @@ export default function AdminOrdersPage() {
   }, [isAdminViewer]);
 
   const fetchOrders = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     try {
       const params = buildParams(1);
       const res = await fetch(`/api/admin/orders?${params.toString()}`);
+      if (requestId !== requestIdRef.current) return;
+      if (res.status === 401) {
+        router.push('/admin/login');
+        return;
+      }
       const json = await res.json();
+      if (requestId !== requestIdRef.current) return;
       if (json.ok) {
         setOrders(json.data);
         setPage(1);
         setHasMore(json.pagination.page < json.pagination.totalPages);
       }
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       console.error('Error al cargar solicitudes de pedidos:', err);
       toast.error('Error al cargar la lista de pedidos');
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [buildParams]);
+  }, [buildParams, router]);
 
   const fetchMoreOrders = useCallback(async () => {
     if (loadingMore || !hasMore) return;
+    // Not bumped here: a newer fetchOrders (filter change) invalidates this one.
+    const requestId = requestIdRef.current;
     setLoadingMore(true);
     try {
       const nextPage = page + 1;
       const params = buildParams(nextPage);
       const res = await fetch(`/api/admin/orders?${params.toString()}`);
+      if (requestId !== requestIdRef.current) return;
+      if (res.status === 401) {
+        router.push('/admin/login');
+        return;
+      }
       const json = await res.json();
+      if (requestId !== requestIdRef.current) return;
       if (json.ok) {
         setOrders((prev) => {
           const existingIds = new Set(prev.map((o) => o._id));
@@ -144,9 +164,10 @@ export default function AdminOrdersPage() {
     } catch (err) {
       console.error('Error al cargar más solicitudes de pedidos:', err);
     } finally {
+      // A superseding fetchOrders resets the list; make sure paging is not stuck.
       setLoadingMore(false);
     }
-  }, [buildParams, page, loadingMore, hasMore]);
+  }, [buildParams, page, loadingMore, hasMore, router]);
 
   const onLoadMoreRef = useRef(fetchMoreOrders);
   useEffect(() => {

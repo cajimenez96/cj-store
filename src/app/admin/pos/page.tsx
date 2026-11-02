@@ -88,7 +88,8 @@ export default function AdminPOSPage() {
 
   const subtotal = computedItems.reduce((sum, i) => sum + i.unitPrice * i.qty, 0);
   // The server rejects a discount above the subtotal, so it is capped here.
-  const effectiveDiscount = Math.min(discount, subtotal);
+  const effectiveDiscount =
+    Number.isFinite(discount) && subtotal > 0 ? Math.max(0, Math.min(discount, subtotal)) : 0;
   const total = Math.max(0, subtotal - effectiveDiscount);
 
   const handleSearch = async () => {
@@ -520,12 +521,11 @@ export default function AdminPOSPage() {
                 <input
                   type="number"
                   min="0"
-                  max={subtotal}
                   value={discount}
-                  onChange={(e) => setDiscount(Math.min(subtotal, Math.max(0, Number(e.target.value) || 0)))}
+                  onChange={(e) => setDiscount(Math.max(0, Number(e.target.value) || 0))}
                   className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-extrabold py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
                 />
-                {subtotal > 0 && discount >= subtotal && (
+                {discount > subtotal && (
                   <p className="text-[11px] text-[#707072] mt-1">El descuento no puede superar el subtotal.</p>
                 )}
               </div>

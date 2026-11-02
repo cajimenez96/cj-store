@@ -1,3 +1,5 @@
+import { formatPrice } from '@/utils/formatCurrency';
+
 export type HistoryAction =
   | 'created'
   | 'item_added'
@@ -89,7 +91,7 @@ export function createdEntry(actor: Actor, total: number): HistoryEntry {
   return entry(
     actor,
     'created',
-    Number.isFinite(total) ? `Pedido creado por ${total}` : 'Pedido creado'
+    Number.isFinite(total) ? `Pedido creado (total ${formatPrice(total)})` : 'Pedido creado'
   );
 }
 
