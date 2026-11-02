@@ -1,44 +1,93 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
+import { getSession, sessionError } from '@/lib/session';
+import { applyStockDeltas, InsufficientStockError, nextOrderNumber, type StockDelta } from '@/lib/stock-ops';
+import { createdEntry } from '@/lib/order-history';
+import { resolveListPrice, WHOLESALE_THRESHOLD } from '@/lib/pricing';
 import Order from '@/models/Order';
 import Product from '@/models/Product';
 import SalesRecord from '@/models/SalesRecord';
-import mongoose from 'mongoose';
+import mongoose, { Types, type ClientSession } from 'mongoose';
 
-const WHOLESALE_THRESHOLD = 5;
+/** Validated order line, ready to be stored on the Order. */
+interface SaleLine {
+  productId: Types.ObjectId;
+  variantId?: Types.ObjectId;
+  sku?: string;
+  name: string;
+  image: string;
+  variantLabel?: string;
+  variantName?: string;
+  qty: number;
+  listPrice: number;
+  appliedPriceType: 'retail' | 'wholesale' | 'custom';
+  unitPrice: number;
+  subtotal: number;
+  /** Label used in the insufficient-stock message (not stored). */
+  stockLabel: string;
+}
+
+/** One stock movement per product/variant, with what the error message needs. */
+interface SaleDelta {
+  delta: StockDelta;
+  productName: string;
+  label: string;
+}
+
+function isReplicaSet(): boolean {
+  const client = mongoose.connection?.getClient() as unknown as {
+    topology?: { description?: { type?: unknown } };
+  };
+  const topologyType = client?.topology?.description?.type;
+  return typeof topologyType === 'string' && topologyType.includes('ReplicaSet');
+}
+
+function badRequest(error: string, message: string) {
+  return NextResponse.json({ ok: false, error, message }, { status: 400 });
+}
+
+/**
+ * Sums the lines per stock target, so two lines of the same variant are
+ * checked against the stock together.
+ */
+function buildDeltas(lines: SaleLine[]): SaleDelta[] {
+  const byTarget = new Map<string, SaleDelta>();
+  for (const line of lines) {
+    const productId = String(line.productId);
+    const variantId = line.variantId ? String(line.variantId) : undefined;
+    const key = `${productId}:${variantId ?? ''}`;
+    const existing = byTarget.get(key);
+    if (existing) {
+      existing.delta.qty += line.qty;
+    } else {
+      byTarget.set(key, {
+        delta: { productId, ...(variantId ? { variantId } : {}), qty: line.qty },
+        productName: line.name,
+        label: line.stockLabel,
+      });
+    }
+  }
+  return [...byTarget.values()];
+}
 
 /**
  * POST /api/admin/sales/create-direct
- * Creates a direct sale from the admin POS panel.
- * - Saved directly as 'autorizado' with origin 'admin_direct'
- * - Immediately decrements stock (real unified inventory)
- * - Supports both Replica Set (production with transactions) and Standalone (local dev)
+ * Creates a direct sale from the POS panel (any active role: superadmin, admin, seller).
+ * - Saved directly as 'autorizado' with origin 'admin_direct', attributed to the
+ *   session user (`soldBy`, never taken from the body), with a 'created' history entry.
+ * - Stock is decremented with a guarded atomic update (`applyStockDeltas`); not
+ *   enough stock -> 409 and nothing is written.
+ * - Replica set: stock, order number, Order and SalesRecord are written in one
+ *   transaction (retried on transient conflicts). Standalone (local dev): stock
+ *   and the Order are reverted if a later step fails.
  */
 export async function POST(req: NextRequest) {
   await connectToDatabase();
 
-  let session: mongoose.ClientSession | null = null;
-  let useTransaction = false;
+  const user = await getSession(req);
+  if (!user) return sessionError(401);
 
-  const client = mongoose.connection?.getClient() as any;
-  const topologyType = client?.topology?.description?.type;
-  const isReplicaSet = typeof topologyType === 'string' && topologyType.includes('ReplicaSet');
-
-  if (isReplicaSet) {
-    try {
-      session = await mongoose.startSession();
-      session.startTransaction();
-      useTransaction = true;
-    } catch {
-      if (session) {
-        await session.endSession().catch(() => {});
-      }
-      session = null;
-      useTransaction = false;
-    }
-  }
-
-  const decrementedItems: Array<{ productId: any; variantId?: any; variantName?: string; qty: number }> = [];
+  let deltas: SaleDelta[] = [];
 
   try {
     const body = await req.json();
@@ -46,25 +95,11 @@ export async function POST(req: NextRequest) {
 
     // 1. Validate guest data
     if (!guest || !guest.name || !guest.lastName || !guest.phone) {
-      if (session && useTransaction) {
-        await session.abortTransaction();
-        session.endSession();
-      }
-      return NextResponse.json(
-        { ok: false, error: 'BAD_REQUEST', message: 'Los datos del cliente son obligatorios.' },
-        { status: 400 }
-      );
+      return badRequest('BAD_REQUEST', 'Los datos del cliente son obligatorios.');
     }
 
     if (!items || !Array.isArray(items) || items.length === 0) {
-      if (session && useTransaction) {
-        await session.abortTransaction();
-        session.endSession();
-      }
-      return NextResponse.json(
-        { ok: false, error: 'BAD_REQUEST', message: 'La venta debe incluir al menos un producto.' },
-        { status: 400 }
-      );
+      return badRequest('BAD_REQUEST', 'La venta debe incluir al menos un producto.');
     }
 
     // 2. Server-side wholesale threshold evaluation
@@ -73,91 +108,72 @@ export async function POST(req: NextRequest) {
     }, 0);
     const isWholesale = totalPairs >= WHOLESALE_THRESHOLD;
 
-    // 3. Build validated items resolving prices from DB
-    const validatedItems = [];
+    // 3. Build validated items resolving prices from DB (before any write; the
+    //    stock itself is checked atomically by applyStockDeltas).
+    const lines: SaleLine[] = [];
     let calculatedSubtotal = 0;
 
     for (const item of items) {
-      const productQuery = Product.findById(item.productId);
-      const product = session && useTransaction
-        ? await productQuery.session(session)
-        : await productQuery;
+      const product = await Product.findById(item.productId);
 
       if (!product || !product.active) {
-        if (session && useTransaction) {
-          await session.abortTransaction();
-          session.endSession();
-        }
-        return NextResponse.json(
-          {
-            ok: false,
-            error: 'PRODUCT_NOT_FOUND',
-            message: `Producto con ID "${item.productId}" no disponible.`,
-          },
-          { status: 400 }
-        );
+        return badRequest('PRODUCT_NOT_FOUND', `Producto con ID "${item.productId}" no disponible.`);
       }
 
-      // Verify stock availability
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let matchedVariant: any = null;
-      let availableStock = 0;
       let label = '';
+      let variantRequested = false;
 
       if (item.variantId && product.variants && product.variants.length > 0) {
-        matchedVariant = product.variants.find((v: any) => v._id?.toString() === item.variantId?.toString());
-        availableStock = matchedVariant?.stock ?? 0;
+        variantRequested = true;
+        matchedVariant = product.variants.find((v) => v._id?.toString() === item.variantId?.toString());
         label = item.variantLabel || `Variante ${item.variantId}`;
       } else if (item.variantName && product.variants && product.variants.length > 0) {
-        matchedVariant = product.variants.find((v: any) => v.name === item.variantName);
-        availableStock = matchedVariant?.stock ?? 0;
+        variantRequested = true;
+        matchedVariant = product.variants.find((v) => v.name === item.variantName);
         label = `Variante ${item.variantName}`;
       } else {
-        availableStock = product.stock ?? 0;
         label = 'Stock general';
       }
       const itemQty = Math.max(1, Number(item.qty));
 
-      if (availableStock < itemQty) {
-        if (session && useTransaction) {
-          await session.abortTransaction();
-          session.endSession();
-        }
+      // A requested variant that does not exist has no stock (as before).
+      if (variantRequested && !matchedVariant) {
         return NextResponse.json(
           {
             ok: false,
             error: 'INSUFFICIENT_STOCK',
-            message: `Stock insuficiente para "${product.name}" (${label}). Disponible: ${availableStock}, Requerido: ${itemQty}.`,
+            message: `Stock insuficiente para "${product.name}" (${label}). Disponible: 0, Requerido: ${itemQty}.`,
           },
           { status: 409 }
         );
       }
 
-      // Use custom price if admin explicitly set it, otherwise resolve from catalog / variant
-      let unitPrice: number;
-      let appliedPriceType: 'retail' | 'wholesale' | 'custom';
-
       const vRetail = Number(matchedVariant?.retailPrice ?? product.retailPrice ?? product.price ?? 0);
       const vWholesale = Number(matchedVariant?.wholesalePrice ?? product.wholesalePrice ?? vRetail);
+      // Catalog list price by the normal rules, ignoring any manual override.
+      const listPrice = resolveListPrice({ retail: vRetail, wholesale: vWholesale }, totalPairs).price;
 
+      // Use custom price if explicitly set, otherwise the catalog / variant price.
+      let unitPrice: number;
+      let appliedPriceType: 'retail' | 'wholesale' | 'custom';
       if (item.unitPrice !== undefined && item.unitPrice !== null) {
         unitPrice = Number(item.unitPrice);
         appliedPriceType = 'custom';
-      } else if (isWholesale) {
-        unitPrice = vWholesale > 0 ? vWholesale : vRetail;
-        appliedPriceType = 'wholesale';
       } else {
-        unitPrice = vRetail;
-        appliedPriceType = 'retail';
+        unitPrice = listPrice;
+        appliedPriceType = isWholesale ? 'wholesale' : 'retail';
       }
 
       const itemSubtotal = unitPrice * itemQty;
       calculatedSubtotal += itemSubtotal;
 
       const principalImage =
-        product.images?.find((img: any) => img.isPrincipal)?.url || product.images?.[0]?.url || '';
+        product.images?.find((img) => img.isPrincipal)?.url || product.images?.[0]?.url || '';
 
-      validatedItems.push({
-        productId: product._id,
+      lines.push({
+        productId: product._id as Types.ObjectId,
         variantId: matchedVariant?._id,
         sku: matchedVariant?.sku || item.sku,
         name: product.name,
@@ -165,92 +181,105 @@ export async function POST(req: NextRequest) {
         variantLabel: item.variantLabel || item.variantName,
         variantName: item.variantName,
         qty: itemQty,
+        listPrice,
         appliedPriceType,
         unitPrice,
         subtotal: itemSubtotal,
+        stockLabel: label,
       });
     }
 
-    // 4. Atomically decrement stock for all items
-    for (const item of validatedItems) {
-      const updateFilter = item.variantId
-        ? { _id: item.productId, 'variants._id': item.variantId }
-        : item.variantName
-        ? { _id: item.productId, 'variants.name': item.variantName }
-        : { _id: item.productId };
-
-      const updateOp = (item.variantId || item.variantName)
-        ? { $inc: { 'variants.$.stock': -item.qty } }
-        : { $inc: { stock: -item.qty } };
-
-      if (session && useTransaction) {
-        await Product.updateOne(updateFilter, updateOp, { session });
-      } else {
-        await Product.updateOne(updateFilter, updateOp);
-      }
-      decrementedItems.push({
-        productId: item.productId,
-        variantId: item.variantId,
-        variantName: item.variantName,
-        qty: item.qty,
-      });
-    }
-
-    // 5. Generate order number
-    const currentYear = new Date().getFullYear();
-    const countQuery = Order.countDocuments();
-    const count = session && useTransaction
-      ? await countQuery.session(session)
-      : await countQuery;
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const orderNumber = `PED-${currentYear}-${(count + 1).toString().padStart(4, '0')}${randomSuffix.toString().slice(-2)}`;
+    deltas = buildDeltas(lines);
 
     const appliedDiscount = Math.max(0, Number(discount ?? 0));
     const total = Math.max(0, calculatedSubtotal - appliedDiscount);
+    const recordedPaymentMethod = ['transferencia', 'efectivo', 'tarjeta', 'otro'].includes(paymentMethod)
+      ? paymentMethod
+      : 'efectivo';
+    const soldBy = { userId: new Types.ObjectId(user.id), username: user.username, name: user.name };
+    const history = [createdEntry({ id: user.id, name: user.name }, total)];
+    const storedItems = lines.map((line) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { stockLabel, ...stored } = line;
+      return stored;
+    });
 
-    // 6. Create order directly as 'autorizado'
-    const orderPayload = {
-      orderNumber,
-      origin: 'admin_direct' as const,
-      guest: {
-        name: guest.name.trim(),
-        lastName: guest.lastName.trim(),
-        phone: guest.phone.trim(),
-      },
-      items: validatedItems,
-      subtotal: calculatedSubtotal,
-      discount: appliedDiscount,
-      total,
-      paymentMethod: ['transferencia', 'efectivo', 'tarjeta', 'otro'].includes(paymentMethod)
-        ? paymentMethod
-        : 'efectivo',
-      status: 'autorizado' as const,
-      notes: discountNote ? discountNote.trim() : '',
+    /**
+     * Writes the whole sale. Idempotent per attempt: everything is built from
+     * the values above, so `withTransaction` may re-run it after a conflict.
+     * Without a session (standalone) `applyStockDeltas` reverts its own partial
+     * writes, and a later failure returns the stock and removes the Order here.
+     */
+    const writeSale = async (session: ClientSession | null) => {
+      const opts = session ? { session } : {};
+      await applyStockDeltas(
+        deltas.map((d) => d.delta),
+        session
+      );
+      let orderId: Types.ObjectId | undefined;
+      try {
+        const orderNumber = await nextOrderNumber(session);
+        const [order] = await Order.create(
+          [
+            {
+              orderNumber,
+              origin: 'admin_direct' as const,
+              guest: {
+                name: guest.name.trim(),
+                lastName: guest.lastName.trim(),
+                phone: guest.phone.trim(),
+              },
+              items: storedItems,
+              subtotal: calculatedSubtotal,
+              discount: appliedDiscount,
+              total,
+              paymentMethod: recordedPaymentMethod,
+              status: 'autorizado' as const,
+              notes: discountNote ? discountNote.trim() : '',
+              soldBy,
+              history,
+            },
+          ],
+          opts
+        );
+        orderId = order._id as Types.ObjectId;
+        const [salesRecord] = await SalesRecord.create(
+          [
+            {
+              orderId: order._id,
+              orderNumber: order.orderNumber,
+              confirmationDate: new Date(),
+              recordedPaymentMethod: order.paymentMethod,
+              appliedDiscountNote: discountNote ?? '',
+              finalTotal: total,
+              soldBy,
+            },
+          ],
+          opts
+        );
+        return { order, salesRecord };
+      } catch (err) {
+        if (!session) await undoStandaloneSale(deltas, orderId);
+        throw err;
+      }
     };
 
-    const newOrder = session && useTransaction
-      ? (await Order.create([orderPayload], { session }))[0]
-      : await Order.create(orderPayload);
+    let result: Awaited<ReturnType<typeof writeSale>> | undefined;
+    const session = isReplicaSet() ? await mongoose.startSession().catch(() => null) : null;
 
-    // 7. Create SalesRecord immediately
-    const salesRecordPayload = {
-      orderId: newOrder._id,
-      orderNumber: newOrder.orderNumber,
-      confirmationDate: new Date(),
-      recordedPaymentMethod: newOrder.paymentMethod,
-      appliedDiscountNote: discountNote ?? '',
-      finalTotal: total,
-    };
-
-    const salesRecord = session && useTransaction
-      ? (await SalesRecord.create([salesRecordPayload], { session }))[0]
-      : await SalesRecord.create(salesRecordPayload);
-
-    if (session && useTransaction) {
-      await session.commitTransaction();
-      session.endSession();
+    if (session) {
+      try {
+        await session.withTransaction(async () => {
+          result = await writeSale(session);
+        });
+      } finally {
+        await session.endSession().catch(() => {});
+      }
+    } else {
+      result = await writeSale(null);
     }
 
+    const { order: newOrder, salesRecord } = result!;
     return NextResponse.json(
       {
         ok: true,
@@ -262,36 +291,38 @@ export async function POST(req: NextRequest) {
       },
       { status: 201 }
     );
-  } catch (error: any) {
-    if (session && useTransaction) {
-      await session.abortTransaction();
-      session.endSession();
-    } else if (decrementedItems.length > 0) {
-      // Manual rollback in non-replica set environment
-      for (const item of decrementedItems) {
-        if (item.variantId) {
-          await Product.updateOne(
-            { _id: item.productId, 'variants._id': item.variantId },
-            { $inc: { 'variants.$.stock': item.qty } }
-          ).catch(() => {});
-        } else if (item.variantName) {
-          await Product.updateOne(
-            { _id: item.productId, 'variants.name': item.variantName },
-            { $inc: { 'variants.$.stock': item.qty } }
-          ).catch(() => {});
-        } else {
-          await Product.updateOne(
-            { _id: item.productId },
-            { $inc: { stock: item.qty } }
-          ).catch(() => {});
-        }
-      }
+  } catch (error: unknown) {
+    if (error instanceof InsufficientStockError) {
+      const info = deltas.find((d) => d.delta === error.item);
+      const name = info?.productName ?? error.item.productId;
+      const label = info?.label ?? 'Stock general';
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'INSUFFICIENT_STOCK',
+          message: `Stock insuficiente para "${name}" (${label}). Disponible: ${error.available}, Requerido: ${error.item.qty}.`,
+        },
+        { status: 409 }
+      );
     }
 
     console.error('Error al registrar venta directa:', error);
-    return NextResponse.json(
-      { ok: false, error: 'INTERNAL_SERVER_ERROR', message: error?.message || 'Error al registrar la venta directa.' },
-      { status: 500 }
+    const message = error instanceof Error && error.message ? error.message : 'Error al registrar la venta directa.';
+    return NextResponse.json({ ok: false, error: 'INTERNAL_SERVER_ERROR', message }, { status: 500 });
+  }
+}
+
+/**
+ * Standalone only (no transactions): best-effort undo after the stock was taken
+ * but a later step failed. Errors are logged and never replace the original one.
+ */
+async function undoStandaloneSale(deltas: SaleDelta[], orderId?: Types.ObjectId): Promise<void> {
+  if (orderId) {
+    await Order.deleteOne({ _id: orderId }).catch((e) =>
+      console.error('[create-direct] No se pudo eliminar el pedido tras el error:', e)
     );
   }
+  await applyStockDeltas(deltas.map((d) => ({ ...d.delta, qty: -d.delta.qty }))).catch((e) =>
+    console.error('[create-direct] No se pudo devolver el stock tras el error:', e)
+  );
 }
