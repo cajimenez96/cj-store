@@ -404,6 +404,256 @@ for (const topo of topologies) {
         expect(r1.orderNumber).not.toBe(r2.orderNumber);
         expect(r1.orderNumber).toMatch(/^PED-\d{4}-N\d+$/);
       });
+
+      it('the 500 response does not leak the internal error text', async () => {
+        const { token } = await makeUser('seller');
+        const { productId, variantId } = await makeProduct(4);
+        const internal = 'E11000 duplicate key error collection: x.orders index: _id_ dup key: { _id: ObjectId("507f1f77bcf86cd799439011") }';
+        vi.spyOn(Order, 'create').mockRejectedValue(new Error(internal));
+        const res = await POST(post(saleBody(productId, variantId, 1), token));
+        expect(res.status).toBe(500);
+        const json = await res.json();
+        expect(json).toEqual({
+          ok: false,
+          error: 'INTERNAL_SERVER_ERROR',
+          message: 'Error al registrar la venta directa.',
+        });
+        expect(JSON.stringify(json)).not.toContain('E11000');
+        expect(JSON.stringify(json)).not.toContain('507f1f77bcf86cd799439011');
+        expect(await variantStock(productId, variantId)).toBe(4);
+        expect(await Order.countDocuments()).toBe(0);
+      });
+    });
+
+    // ---------------------------------------------------------------------
+    // Input validation: every rejection is a 400 and writes nothing
+    // ---------------------------------------------------------------------
+    describe('input validation', () => {
+      let token: string;
+      let productId: string;
+      let variantId: string;
+      let otherProductId: string;
+      let otherVariantId: string;
+
+      beforeEach(async () => {
+        ({ token } = await makeUser('seller'));
+        ({ productId, variantId } = await makeProduct(10));
+        ({ productId: otherProductId, variantId: otherVariantId } = await makeProduct(10));
+      });
+
+      function line(over: Record<string, unknown> = {}) {
+        return { productId, variantId, qty: 1, variantLabel: 'Negro 40', ...over };
+      }
+
+      function body(over: Record<string, unknown> = {}, lineOver: Record<string, unknown> = {}) {
+        return { guest, paymentMethod: 'efectivo', items: [line(lineOver)], ...over };
+      }
+
+      async function expectRejected(res: Response, message?: string | RegExp) {
+        expect(res.status).toBe(400);
+        const json = await res.json();
+        expect(json.ok).toBe(false);
+        expect(typeof json.error).toBe('string');
+        expect(typeof json.message).toBe('string');
+        if (typeof message === 'string') expect(json.message).toBe(message);
+        if (message instanceof RegExp) expect(json.message).toMatch(message);
+        expect(await Order.countDocuments()).toBe(0);
+        expect(await SalesRecord.countDocuments()).toBe(0);
+        expect(await variantStock(productId, variantId)).toBe(10);
+        expect(await variantStock(otherProductId, otherVariantId)).toBe(10);
+        return json;
+      }
+
+      function rawPost(raw: string) {
+        return new NextRequest('http://localhost/api/admin/sales/create-direct', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', cookie: `admin_token=${token}` },
+          body: raw,
+        });
+      }
+
+      async function expectAccepted(res: Response) {
+        expect(res.status).toBe(201);
+        return Order.findById((await res.json()).orderId).lean();
+      }
+
+      it('rejects operator objects as productId (no arbitrary product is sold)', async () => {
+        const json = await expectRejected(await POST(post(body({}, { productId: { $ne: null }, variantId: undefined }), token)));
+        expect(json.message).not.toContain('$ne');
+      });
+
+      it('rejects operator objects as variantId', async () => {
+        await expectRejected(await POST(post(body({}, { variantId: { $ne: null } }), token)));
+      });
+
+      it.each([
+        ['array', [] as unknown],
+        ['number', 123],
+        ['malformed string', 'not-an-id'],
+        ['short hex', 'abc123'],
+        ['empty string', ''],
+      ])('rejects a %s productId', async (_label, value) => {
+        await expectRejected(await POST(post(body({}, { productId: value }), token)));
+      });
+
+      it('rejects a missing productId', async () => {
+        await expectRejected(await POST(post(body({}, { productId: undefined }), token)));
+      });
+
+      it.each([
+        ['array', ['x'] as unknown],
+        ['number', 5],
+        ['malformed string', 'zzz'],
+      ])('rejects a %s variantId', async (_label, value) => {
+        await expectRejected(await POST(post(body({}, { variantId: value }), token)));
+      });
+
+      it.each([
+        ['0', 0],
+        ['-1', -1],
+        ['1.5', 1.5],
+        ['NaN (null in JSON)', NaN],
+        ['"abc"', 'abc'],
+        ['null', null],
+        ['[]', []],
+        ['true', true],
+        ['1e9', 1e9],
+        ['missing', undefined],
+      ])('rejects qty %s', async (_label, qty) => {
+        await expectRejected(await POST(post(body({}, { qty }), token)));
+      });
+
+      it('accepts qty "2" as 2 units', async () => {
+        const order = await expectAccepted(await POST(post(body({}, { qty: '2' }), token)));
+        expect(order?.items[0].qty).toBe(2);
+        expect(await variantStock(productId, variantId)).toBe(8);
+      });
+
+      it.each([
+        ['negative', -1],
+        ['"abc"', 'abc'],
+        ['{}', {}],
+        ['true', true],
+        ['[]', []],
+        ['Infinity string', 'Infinity'],
+      ])('rejects unitPrice %s', async (_label, unitPrice) => {
+        await expectRejected(await POST(post(body({}, { unitPrice }), token)));
+      });
+
+      it('NaN unitPrice (serialized as null) means no custom price, as before', async () => {
+        const order = await expectAccepted(await POST(post(body({}, { unitPrice: NaN }), token)));
+        expect(order?.items[0].appliedPriceType).toBe('retail');
+        expect(order?.items[0].unitPrice).toBe(10000);
+      });
+
+      it('accepts unitPrice "100" as a custom 100', async () => {
+        const order = await expectAccepted(await POST(post(body({}, { unitPrice: '100' }), token)));
+        expect(order?.items[0].unitPrice).toBe(100);
+        expect(order?.items[0].appliedPriceType).toBe('custom');
+      });
+
+      it('accepts unitPrice 0 (audited through listPrice)', async () => {
+        const order = await expectAccepted(await POST(post(body({}, { unitPrice: 0 }), token)));
+        expect(order?.items[0].unitPrice).toBe(0);
+        expect(order?.items[0].listPrice).toBe(10000);
+        expect(order?.total).toBe(0);
+      });
+
+      it.each([
+        ['negative', -1],
+        ['"abc"', 'abc'],
+        ['{}', {}],
+        ['true', true],
+      ])('rejects discount %s', async (_label, discount) => {
+        await expectRejected(await POST(post(body({ discount }), token)));
+      });
+
+      it('rejects a discount greater than the subtotal', async () => {
+        await expectRejected(
+          await POST(post(body({ discount: 10001 }), token)),
+          'El descuento no puede superar el subtotal.'
+        );
+      });
+
+      it.each([
+        ['""', ''],
+        ['undefined', undefined],
+        ['0', 0],
+        ['null', null],
+      ])('accepts discount %s as 0', async (_label, discount) => {
+        const order = await expectAccepted(await POST(post(body({ discount }), token)));
+        expect(order?.discount).toBe(0);
+        expect(order?.total).toBe(10000);
+      });
+
+      it('accepts a discount equal to the subtotal', async () => {
+        const order = await expectAccepted(await POST(post(body({ discount: 10000 }), token)));
+        expect(order?.total).toBe(0);
+      });
+
+      it.each([
+        ['name number', { ...guest, name: 123 }],
+        ['lastName object', { ...guest, lastName: { $ne: null } }],
+        ['phone array', { ...guest, phone: ['1'] }],
+        ['name only whitespace', { ...guest, name: '   ' }],
+      ])('rejects guest %s', async (_label, g) => {
+        await expectRejected(await POST(post(body({ guest: g }), token)));
+      });
+
+      it('guest whitespace-only keeps the missing-data message', async () => {
+        await expectRejected(
+          await POST(post(body({ guest: { ...guest, phone: '  ' } }), token)),
+          'Los datos del cliente son obligatorios.'
+        );
+      });
+
+      it.each([
+        ['discountNote', { discountNote: 5 }, {}],
+        ['discountNote object', { discountNote: { a: 1 } }, {}],
+        ['variantName', {}, { variantName: 7 }],
+        ['sku', {}, { sku: { $gt: '' } }],
+        ['variantLabel', {}, { variantLabel: ['x'] }],
+      ])('rejects a non-string %s', async (_label, over, lineOver) => {
+        await expectRejected(await POST(post(body(over, lineOver), token)));
+      });
+
+      it('trims discountNote before storing it', async () => {
+        const order = await expectAccepted(await POST(post(body({ discountNote: '  promo  ' }), token)));
+        expect(order?.notes).toBe('promo');
+      });
+
+      it('rejects malformed JSON', async () => {
+        await expectRejected(await POST(rawPost('{"guest": ')));
+      });
+
+      it('rejects an empty body', async () => {
+        await expectRejected(await POST(rawPost('')));
+      });
+
+      it('rejects a null body', async () => {
+        await expectRejected(await POST(rawPost('null')));
+      });
+
+      it('rejects items that is not an array', async () => {
+        await expectRejected(await POST(post(body({ items: { 0: line() } }), token)));
+      });
+
+      it.each([
+        ['null', null],
+        ['string', 'x'],
+        ['number', 1],
+        ['array', [1]],
+      ])('rejects an item that is %s', async (_label, item) => {
+        await expectRejected(await POST(post(body({ items: [line(), item] }), token)));
+      });
+
+      it('an invalid second line rejects the whole sale', async () => {
+        await expectRejected(
+          await POST(
+            post(body({ items: [line(), { productId: otherProductId, variantId: otherVariantId, qty: 0 }] }), token)
+          )
+        );
+      });
     });
   });
 }

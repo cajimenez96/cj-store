@@ -46,6 +46,145 @@ function badRequest(error: string, message: string) {
   return NextResponse.json({ ok: false, error, message }, { status: 400 });
 }
 
+const PAYMENT_METHODS = ['transferencia', 'efectivo', 'tarjeta', 'otro'] as const;
+
+/** Largest quantity accepted on one line. */
+const MAX_LINE_QTY = 10000;
+
+interface SaleInputItem {
+  productId: string;
+  variantId?: string;
+  variantName?: string;
+  sku?: string;
+  variantLabel?: string;
+  qty: number;
+  /** Custom price; undefined when the client sent none (null/undefined). */
+  unitPrice?: number;
+}
+
+interface SaleInput {
+  guest: { name: string; lastName: string; phone: string };
+  items: SaleInputItem[];
+  paymentMethod: unknown;
+  discount: number;
+  discountNote: string;
+}
+
+type Parsed<T> = { ok: true; value: T } | { ok: false; response: NextResponse };
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/** Numbers, or strings holding one (the POS historically accepted "2"); anything else is NaN. */
+function toNumber(v: unknown): number {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string' && v.trim() !== '') return Number(v);
+  return NaN;
+}
+
+/** Only a 24-hex string is an id; objects such as {"$ne": null} never reach a query. */
+function isObjectIdString(v: unknown): v is string {
+  return typeof v === 'string' && /^[0-9a-fA-F]{24}$/.test(v) && mongoose.isValidObjectId(v);
+}
+
+function optionalString(v: unknown): { ok: boolean; value?: string } {
+  if (v === undefined || v === null) return { ok: true };
+  return typeof v === 'string' ? { ok: true, value: v } : { ok: false };
+}
+
+function parseItem(item: unknown, n: number): Parsed<SaleInputItem> {
+  const fail = (message: string): Parsed<SaleInputItem> => ({ ok: false, response: badRequest('BAD_REQUEST', message) });
+  if (!isPlainObject(item)) return fail(`La línea ${n} de la venta no es válida.`);
+
+  if (!isObjectIdString(item.productId)) return fail(`Producto inválido en la línea ${n}.`);
+
+  let variantId: string | undefined;
+  if (item.variantId !== undefined && item.variantId !== null) {
+    if (!isObjectIdString(item.variantId)) return fail(`Variante inválida en la línea ${n}.`);
+    variantId = String(item.variantId);
+  }
+
+  const variantName = optionalString(item.variantName);
+  const sku = optionalString(item.sku);
+  const variantLabel = optionalString(item.variantLabel);
+  if (!variantName.ok || !sku.ok || !variantLabel.ok) return fail(`Datos inválidos en la línea ${n}.`);
+
+  const qty = toNumber(item.qty);
+  if (!Number.isInteger(qty) || qty < 1 || qty > MAX_LINE_QTY) {
+    return fail(`Cantidad inválida en la línea ${n}: debe ser un número entero entre 1 y ${MAX_LINE_QTY}.`);
+  }
+
+  let unitPrice: number | undefined;
+  if (item.unitPrice !== undefined && item.unitPrice !== null) {
+    unitPrice = toNumber(item.unitPrice);
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      return fail(`Precio inválido en la línea ${n}: debe ser un número mayor o igual a 0.`);
+    }
+  }
+
+  return {
+    ok: true,
+    value: {
+      productId: String(item.productId),
+      variantId,
+      variantName: variantName.value,
+      sku: sku.value,
+      variantLabel: variantLabel.value,
+      qty,
+      unitPrice,
+    },
+  };
+}
+
+/**
+ * Validates and normalizes the request body (types, ids, quantities, prices,
+ * trimming). Runs before any stock or transaction work, so a malformed field
+ * can never fail after stock was taken. Messages never echo raw input.
+ */
+function parseSaleInput(body: unknown): Parsed<SaleInput> {
+  const fail = (message: string): Parsed<SaleInput> => ({ ok: false, response: badRequest('BAD_REQUEST', message) });
+  if (!isPlainObject(body)) return fail('El cuerpo de la solicitud no es válido.');
+
+  const g = body.guest;
+  if (!isPlainObject(g) || !g.name || !g.lastName || !g.phone) {
+    return fail('Los datos del cliente son obligatorios.');
+  }
+  if (typeof g.name !== 'string' || typeof g.lastName !== 'string' || typeof g.phone !== 'string') {
+    return fail('Los datos del cliente no son válidos.');
+  }
+  const guest = { name: g.name.trim(), lastName: g.lastName.trim(), phone: g.phone.trim() };
+  if (!guest.name || !guest.lastName || !guest.phone) {
+    return fail('Los datos del cliente son obligatorios.');
+  }
+
+  if (!Array.isArray(body.items) || body.items.length === 0) {
+    return fail('La venta debe incluir al menos un producto.');
+  }
+  const items: SaleInputItem[] = [];
+  for (let i = 0; i < body.items.length; i++) {
+    const parsed = parseItem(body.items[i], i + 1);
+    if (!parsed.ok) return parsed;
+    items.push(parsed.value);
+  }
+
+  let discount = 0;
+  if (body.discount !== undefined && body.discount !== null && body.discount !== '') {
+    discount = toNumber(body.discount);
+    if (!Number.isFinite(discount) || discount < 0) {
+      return fail('El descuento debe ser un número mayor o igual a 0.');
+    }
+  }
+
+  const note = optionalString(body.discountNote);
+  if (!note.ok) return fail('La nota de descuento no es válida.');
+
+  return {
+    ok: true,
+    value: { guest, items, paymentMethod: body.paymentMethod, discount, discountNote: (note.value ?? '').trim() },
+  };
+}
+
 /**
  * Sums the lines per stock target, so two lines of the same variant are
  * checked against the stock together.
@@ -89,23 +228,20 @@ export async function POST(req: NextRequest) {
 
   let deltas: SaleDelta[] = [];
 
+  // 1. Validate the whole body before any stock or transaction work.
+  let raw: unknown;
   try {
-    const body = await req.json();
-    const { guest, items, paymentMethod, discountNote, discount } = body;
+    raw = await req.json();
+  } catch {
+    return badRequest('BAD_REQUEST', 'El cuerpo de la solicitud no es válido.');
+  }
+  const parsed = parseSaleInput(raw);
+  if (!parsed.ok) return parsed.response;
+  const { guest, items, paymentMethod, discount: appliedDiscount, discountNote } = parsed.value;
 
-    // 1. Validate guest data
-    if (!guest || !guest.name || !guest.lastName || !guest.phone) {
-      return badRequest('BAD_REQUEST', 'Los datos del cliente son obligatorios.');
-    }
-
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return badRequest('BAD_REQUEST', 'La venta debe incluir al menos un producto.');
-    }
-
+  try {
     // 2. Server-side wholesale threshold evaluation
-    const totalPairs = items.reduce((sum: number, item: { qty: number }) => {
-      return sum + Math.max(1, Number(item.qty));
-    }, 0);
+    const totalPairs = items.reduce((sum, item) => sum + item.qty, 0);
     const isWholesale = totalPairs >= WHOLESALE_THRESHOLD;
 
     // 3. Build validated items resolving prices from DB (before any write; the
@@ -136,7 +272,7 @@ export async function POST(req: NextRequest) {
       } else {
         label = 'Stock general';
       }
-      const itemQty = Math.max(1, Number(item.qty));
+      const itemQty = item.qty;
 
       // A requested variant that does not exist has no stock (as before).
       if (variantRequested && !matchedVariant) {
@@ -158,8 +294,8 @@ export async function POST(req: NextRequest) {
       // Use custom price if explicitly set, otherwise the catalog / variant price.
       let unitPrice: number;
       let appliedPriceType: 'retail' | 'wholesale' | 'custom';
-      if (item.unitPrice !== undefined && item.unitPrice !== null) {
-        unitPrice = Number(item.unitPrice);
+      if (item.unitPrice !== undefined) {
+        unitPrice = item.unitPrice;
         appliedPriceType = 'custom';
       } else {
         unitPrice = listPrice;
@@ -191,11 +327,11 @@ export async function POST(req: NextRequest) {
 
     deltas = buildDeltas(lines);
 
-    const appliedDiscount = Math.max(0, Number(discount ?? 0));
+    if (appliedDiscount > calculatedSubtotal) {
+      return badRequest('BAD_REQUEST', 'El descuento no puede superar el subtotal.');
+    }
     const total = Math.max(0, calculatedSubtotal - appliedDiscount);
-    const recordedPaymentMethod = ['transferencia', 'efectivo', 'tarjeta', 'otro'].includes(paymentMethod)
-      ? paymentMethod
-      : 'efectivo';
+    const recordedPaymentMethod = PAYMENT_METHODS.find((m) => m === paymentMethod) ?? 'efectivo';
     const soldBy = { userId: new Types.ObjectId(user.id), username: user.username, name: user.name };
     const history = [createdEntry({ id: user.id, name: user.name }, total)];
     const storedItems = lines.map((line) => {
@@ -224,18 +360,14 @@ export async function POST(req: NextRequest) {
             {
               orderNumber,
               origin: 'admin_direct' as const,
-              guest: {
-                name: guest.name.trim(),
-                lastName: guest.lastName.trim(),
-                phone: guest.phone.trim(),
-              },
+              guest,
               items: storedItems,
               subtotal: calculatedSubtotal,
               discount: appliedDiscount,
               total,
               paymentMethod: recordedPaymentMethod,
               status: 'autorizado' as const,
-              notes: discountNote ? discountNote.trim() : '',
+              notes: discountNote,
               soldBy,
               history,
             },
@@ -250,7 +382,7 @@ export async function POST(req: NextRequest) {
               orderNumber: order.orderNumber,
               confirmationDate: new Date(),
               recordedPaymentMethod: order.paymentMethod,
-              appliedDiscountNote: discountNote ?? '',
+              appliedDiscountNote: discountNote,
               finalTotal: total,
               soldBy,
             },
@@ -306,9 +438,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Never expose driver/cast error text (ids, collection names) to the client.
     console.error('Error al registrar venta directa:', error);
-    const message = error instanceof Error && error.message ? error.message : 'Error al registrar la venta directa.';
-    return NextResponse.json({ ok: false, error: 'INTERNAL_SERVER_ERROR', message }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: 'INTERNAL_SERVER_ERROR', message: 'Error al registrar la venta directa.' },
+      { status: 500 }
+    );
   }
 }
 
