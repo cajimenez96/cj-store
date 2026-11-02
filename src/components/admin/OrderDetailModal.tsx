@@ -142,12 +142,13 @@ ${itemsList}
 
   const statusInfo = STATUS_COLORS[order.status] ?? STATUS_COLORS['pendiente'];
   const isPending = order.status === 'pendiente';
-  const isFinalized = ['autorizado', 'cancelado', 'completada', 'cancelada'].includes(order.status);
   const isAdminViewer = role === 'admin' || role === 'superadmin';
   // Mirrors the server rule: a seller may only edit/cancel an authorized order.
   const isSellerActionable = role === 'seller' && order.status === 'autorizado';
-  const showAdminActions = isAdminViewer && !isFinalized;
-  const showActions = showAdminActions || isSellerActionable;
+  // Admins may cancel any non-cancelled order (the API restocks once if it held stock);
+  // authorize/edit stay limited to pendiente below.
+  const isAdminCancellable = isAdminViewer && ['pendiente', 'autorizado', 'completada'].includes(order.status);
+  const showActions = isAdminCancellable || isSellerActionable;
   // Newest first. History is append-only, so equal/invalid timestamps fall back to
   // the original index (higher = newer).
   const historyTime = (at: string) => {

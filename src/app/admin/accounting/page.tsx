@@ -104,6 +104,10 @@ interface SellerRow {
 
 type ViewerRole = 'superadmin' | 'admin' | 'seller' | null;
 
+/** Prefixes a sign only when the amount is not zero. */
+const signed = (amount: number, sign: '+' | '-') =>
+  `${amount === 0 ? '' : sign}${formatPrice(amount)}`;
+
 export default function AdminAccountingPage() {
   const router = useRouter();
   // Bumped per request: only the latest accounting fetch may write state.
@@ -120,6 +124,8 @@ export default function AdminAccountingPage() {
   const isAdminViewer = role === 'admin' || role === 'superadmin';
   const [users, setUsers] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedUser, setSelectedUser] = useState<string>('');
+  // Expenses are business-wide, so net figures are only shown unfiltered.
+  const showNet = isAdminViewer && !selectedUser;
 
   // Filter for transactions table
   const [typeFilter, setTypeFilter] = useState<'all' | 'ingreso' | 'egreso'>('all');
@@ -422,56 +428,57 @@ export default function AdminAccountingPage() {
               </div>
 
               {isAdminViewer && (
-              <>
-              {/* 2. Egresos Totales */}
-              <div className="bg-white p-5 border border-[#e5e5e5] space-y-2 shadow-xs">
-                <div className="flex justify-between items-center text-[#707072]">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider">
-                    Total Egresos (Gastos)
-                  </span>
-                  <div className="p-1.5 bg-[#d30005]/10 text-[#d30005] rounded-full">
-                    <ArrowDownLeft className="w-4 h-4" />
+                <>
+                  {/* 2. Egresos Totales */}
+                  <div className="bg-white p-5 border border-[#e5e5e5] space-y-2 shadow-xs">
+                    <div className="flex justify-between items-center text-[#707072]">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider">
+                        Total Egresos (Gastos)
+                      </span>
+                      <div className="p-1.5 bg-[#d30005]/10 text-[#d30005] rounded-full">
+                        <ArrowDownLeft className="w-4 h-4" />
+                      </div>
+                    </div>
+                    <div className="text-2xl font-black text-[#d30005]">
+                      {formatPrice(expenseTotal)}
+                    </div>
+                    <p className="text-[11px] text-[#707072] font-semibold">
+                      Gastos operativos registrados
+                    </p>
                   </div>
-                </div>
-                <div className="text-2xl font-black text-[#d30005]">
-                  {formatPrice(expenseTotal)}
-                </div>
-                <p className="text-[11px] text-[#707072] font-semibold">
-                  Gastos operativos registrados
-                </p>
-              </div>
 
-              {/* 3. Balance Neto */}
-              <div
-                className={`p-5 border space-y-2 shadow-xs ${
-                  netBalance >= 0
-                    ? 'bg-[#007d48]/5 border-[#007d48]/30'
-                    : 'bg-[#d30005]/5 border-[#d30005]/30'
-                }`}
-              >
-                <div className="flex justify-between items-center text-[#707072]">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#111111]">
-                    Balance Neto Mensual
-                  </span>
-                  {netBalance >= 0 ? (
-                    <TrendingUp className="w-4 h-4 text-[#007d48]" />
-                  ) : (
-                    <TrendingDown className="w-4 h-4 text-[#d30005]" />
+                  {/* 3. Balance Neto (unfiltered view only) */}
+                  {showNet && (
+                    <div
+                      className={`p-5 border space-y-2 shadow-xs ${
+                        netBalance >= 0
+                          ? 'bg-[#007d48]/5 border-[#007d48]/30'
+                          : 'bg-[#d30005]/5 border-[#d30005]/30'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center text-[#707072]">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#111111]">
+                          Balance Neto Mensual
+                        </span>
+                        {netBalance >= 0 ? (
+                          <TrendingUp className="w-4 h-4 text-[#007d48]" />
+                        ) : (
+                          <TrendingDown className="w-4 h-4 text-[#d30005]" />
+                        )}
+                      </div>
+                      <div
+                        className={`text-2xl font-black ${
+                          netBalance >= 0 ? 'text-[#007d48]' : 'text-[#d30005]'
+                        }`}
+                      >
+                        {formatPrice(netBalance)}
+                      </div>
+                      <p className="text-[11px] font-bold text-[#707072]">
+                        {netBalance >= 0 ? '✓ Superávit operativo' : '⚠ Déficit en el mes'}
+                      </p>
+                    </div>
                   )}
-                </div>
-                <div
-                  className={`text-2xl font-black ${
-                    netBalance >= 0 ? 'text-[#007d48]' : 'text-[#d30005]'
-                  }`}
-                >
-                  {formatPrice(netBalance)}
-                </div>
-                <p className="text-[11px] font-bold text-[#707072]">
-                  {netBalance >= 0 ? '✓ Superávit operativo' : '⚠ Déficit en el mes'}
-                </p>
-              </div>
-
-              </>
+                </>
               )}
 
               {/* 4. Ticket Promedio */}
@@ -502,7 +509,7 @@ export default function AdminAccountingPage() {
                       Caja Efectivo (En Mano)
                     </h3>
                   </div>
-                  {isAdminViewer && (
+                  {showNet && (
                     <span
                       className={`text-sm font-black ${
                         netCash >= 0 ? 'text-[#007d48]' : 'text-[#d30005]'
@@ -523,14 +530,14 @@ export default function AdminAccountingPage() {
                     </span>
                   </div>
                   {isAdminViewer && (
-                  <div className="p-3 bg-[#f5f5f5] border border-[#e5e5e5]">
-                    <span className="text-[10px] text-[#707072] uppercase font-bold block">
-                      Egresos en Efectivo
-                    </span>
-                    <span className="font-extrabold text-[#d30005] text-base block mt-0.5">
-                      -{formatPrice(expenseCash)}
-                    </span>
-                  </div>
+                    <div className="p-3 bg-[#f5f5f5] border border-[#e5e5e5]">
+                      <span className="text-[10px] text-[#707072] uppercase font-bold block">
+                        Egresos en Efectivo
+                      </span>
+                      <span className="font-extrabold text-[#d30005] text-base block mt-0.5">
+                        -{formatPrice(expenseCash)}
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -544,7 +551,7 @@ export default function AdminAccountingPage() {
                       Caja Banco / Transferencias
                     </h3>
                   </div>
-                  {isAdminViewer && (
+                  {showNet && (
                     <span
                       className={`text-sm font-black ${
                         netTransfer >= 0 ? 'text-[#007d48]' : 'text-[#d30005]'
@@ -565,14 +572,14 @@ export default function AdminAccountingPage() {
                     </span>
                   </div>
                   {isAdminViewer && (
-                  <div className="p-3 bg-[#f5f5f5] border border-[#e5e5e5]">
-                    <span className="text-[10px] text-[#707072] uppercase font-bold block">
-                      Pagos por Transferencia
-                    </span>
-                    <span className="font-extrabold text-[#d30005] text-base block mt-0.5">
-                      -{formatPrice(expenseTransfer)}
-                    </span>
-                  </div>
+                    <div className="p-3 bg-[#f5f5f5] border border-[#e5e5e5]">
+                      <span className="text-[10px] text-[#707072] uppercase font-bold block">
+                        Pagos por Transferencia
+                      </span>
+                      <span className="font-extrabold text-[#d30005] text-base block mt-0.5">
+                        -{formatPrice(expenseTransfer)}
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -631,7 +638,7 @@ export default function AdminAccountingPage() {
                     Cobrado por encima de lista
                   </span>
                   <span className="font-extrabold text-[#007d48] text-base block mt-0.5">
-                    +{formatPrice(data.deviation?.above ?? 0)}
+                    {signed(data.deviation?.above ?? 0, '+')}
                   </span>
                 </div>
                 <div className="p-3 bg-[#f5f5f5] border border-[#e5e5e5]">
@@ -639,7 +646,7 @@ export default function AdminAccountingPage() {
                     Cobrado por debajo de lista
                   </span>
                   <span className="font-extrabold text-[#d30005] text-base block mt-0.5">
-                    -{formatPrice(data.deviation?.below ?? 0)}
+                    {signed(data.deviation?.below ?? 0, '-')}
                   </span>
                 </div>
               </div>
@@ -821,20 +828,20 @@ export default function AdminAccountingPage() {
                             </td>
 
                             {isAdminViewer && (
-                            <td className="py-3 px-4 text-center">
-                              {!isIncome ? (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteExpense(tx.id)}
-                                  className="p-1.5 text-[#707072] hover:text-[#d30005] hover:bg-[#d30005]/10 rounded-full transition-colors cursor-pointer"
-                                  title="Eliminar egreso"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              ) : (
-                                <span className="text-[11px] text-[#9e9ea0] font-mono">-</span>
-                              )}
-                            </td>
+                              <td className="py-3 px-4 text-center">
+                                {!isIncome ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteExpense(tx.id)}
+                                    className="p-1.5 text-[#707072] hover:text-[#d30005] hover:bg-[#d30005]/10 rounded-full transition-colors cursor-pointer"
+                                    title="Eliminar egreso"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                ) : (
+                                  <span className="text-[11px] text-[#9e9ea0] font-mono">-</span>
+                                )}
+                              </td>
                             )}
                           </tr>
                         );

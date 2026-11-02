@@ -11,7 +11,8 @@
 **Plataforma web e-commerce de perfumería y fragancias**, con un modelo de datos multirrubro: otros rubros (indumentaria, calzado, accesorios) se incorporan creando categorías y atributos desde el panel, sin cambios de código. Funciona como catálogo interactivo con checkout guiado y un panel de administración con punto de venta, donde:
 
 - **Clientes (Compradores):** navegan el catálogo por rubros y categorías, filtran por marca, categoría y género, eligen la variante de cada producto (por ejemplo volumen), arman su carrito con precio mayorista automático y completan un checkout en 3 pasos que registra el pedido y abre **WhatsApp** con el resumen de la compra.
-- **Administrador:** gestiona el catálogo (marcas, categorías, atributos, productos con variantes y ficha técnica, promociones), controla el stock por variante, atiende y **edita** solicitudes de venta pendientes, **autoriza o cancela** pedidos, **registra ventas directas** con descuento inmediato de stock, y consulta reportes, contabilidad y usuarios.
+- **Administrador:** gestiona el catálogo (marcas, categorías, atributos, productos con variantes y ficha técnica, promociones), controla el stock por variante, atiende y **edita** solicitudes de venta pendientes, **autoriza o cancela** pedidos (pendientes, autorizados o completados), **registra ventas directas** con descuento inmediato de stock, y consulta reportes, contabilidad y usuarios.
+- **Vendedor (`seller`):** usa el punto de venta para registrar ventas directas y gestiona solo sus propias ventas directas `autorizado` (las lista, ve, edita y cancela); consulta su contabilidad mensual (solo ingresos y desviación de precio) y el stock en solo lectura.
 
 ### Fuera de Alcance (Out of Scope)
 - Autenticación o registro de clientes.
@@ -140,9 +141,9 @@ Configuración única, editable desde el panel y expuesta a la tienda.
 4. **Control de Stock:** vista por producto y variante con ajuste rápido (+/−) y alertas de stock bajo según el umbral de ajustes.
 5. **Pedidos:**
    - Listado y detalle de pedidos.
-   - **Editar un pedido pendiente:** agregar o quitar productos y variantes, cambiar cantidades o precios finales; la edición conserva el vínculo con cada variante y no toca el stock.
+   - **Editar un pedido:** el panel permite editar pedidos `pendiente` (administrador) y las ventas directas `autorizado` propias (vendedor); la API acepta editar `pendiente` y `autorizado`. Se pueden agregar o quitar productos y variantes y cambiar cantidades o precios finales; la edición conserva el vínculo con cada variante. En un pedido `pendiente` no toca el stock; en uno `autorizado` el stock se ajusta por la diferencia.
    - **Autorizar:** pasa el pedido a `autorizado`, descuenta el stock de cada variante y crea el registro de venta.
-   - **Cancelar:** cancela un pedido; si estaba autorizado, repone su stock una sola vez. Un pedido cancelado es final.
+   - **Cancelar:** el administrador cancela pedidos `pendiente`, `autorizado` o `completada` desde el detalle; si el pedido retenía stock (`autorizado`, `completada`), lo repone una sola vez. Un pedido cancelado es final. El vendedor cancela solo sus ventas directas `autorizado`.
 6. **Punto de Venta (POS):** venta directa en mostrador. Se carga el cliente, se eligen productos y variantes, se aplica un descuento opcional y al guardar se crea un pedido `autorizado` con descuento inmediato de stock.
 7. **Promociones:** alta y orden de banners del carrusel.
 8. **Reportes:** ingresos, pedidos por estado, ventas por medio de pago y los 5 productos más vendidos.
@@ -161,7 +162,7 @@ Configuración única, editable desde el panel y expuesta a la tienda.
 2. **Stock asincrónico:** el stock no se reserva mientras el producto está en el carrito ni mientras el pedido web está `pendiente`. Se descuenta solo cuando el administrador **autoriza** el pedido; si en ese momento no hay stock suficiente, la autorización se rechaza.
 3. **Ventas directas (stock único real):** toda venta del POS pasa a `autorizado` y descuenta el stock en el acto.
 4. **Variantes como fuente de verdad:** el stock y el precio de venta se leen de la variante. Editar un producto conserva el identificador de sus variantes existentes.
-5. **Edición de pedidos pendientes:** solo los pedidos `pendiente` se pueden editar; los ajustes de stock se aplican en la autorización.
+5. **Edición de pedidos:** solo se pueden editar los pedidos `pendiente` y `autorizado` (nunca los cancelados ni los `completada`). Un vendedor solo edita sus propias ventas directas `autorizado`. El stock se mueve por la diferencia solo mientras el pedido lo retiene (`autorizado`, `completada`); en un pedido `pendiente` los ajustes se aplican en la autorización.
 6. **Categorías:** filtrar por una categoría padre incluye los productos de sus hijas. Una categoría con productos asociados no puede cambiar sus ejes de variantes ni eliminarse; al mover una categoría de lugar se actualizan los ancestros de sus productos.
 
 ---
@@ -176,7 +177,8 @@ Configuración única, editable desde el panel y expuesta a la tienda.
 **Perfumery and fragrance e-commerce web platform** with a multi-category data model: other lines (apparel, footwear, accessories) are added by creating categories and attributes in the admin panel, with no code changes. It works as an interactive catalog with a guided checkout and an admin panel with a point of sale:
 
 - **Customers:** browse by rubro and category, filter by brand, category and gender, pick a product variant (for example volume), build a cart with automatic wholesale pricing and complete a 3-step checkout that saves the order and opens **WhatsApp** with the summary.
-- **Administrator:** manages brands, categories, attributes, products with variants and spec sheets and promotions; controls stock per variant; edits pending sales requests; **authorizes or cancels** orders; **registers direct sales** with immediate stock deduction; and reviews reports, accounting and users.
+- **Administrator:** manages brands, categories, attributes, products with variants and spec sheets and promotions; controls stock per variant; edits pending sales requests; **authorizes or cancels** orders (pending, authorized or completed); **registers direct sales** with immediate stock deduction; and reviews reports, accounting and users.
+- **Seller (`seller`):** registers direct sales in the POS and manages only their own `autorizado` direct sales (list, view, edit, cancel); sees their own monthly accounting (income and price deviation only) and stock read-only.
 
 ### Out of Scope
 Customer accounts, mandatory customer email, automated payment gateways and shipment tracking.
@@ -214,7 +216,7 @@ Governed by [DESIGN.md](DESIGN.md). In the current implementation the storefront
 1. Login (7-day session).
 2. Catalog CRUD: brands, categories, attributes and products with generated variants.
 3. Stock control per variant with quick +/− adjustment and low-stock alerts.
-4. Orders: list and detail with user filter and change history; **edit pending orders** (variants preserved, stock untouched); **authorize** (decrements variant stock and creates the sales record); **cancel** (restocks once if the order was authorized; cancelled is final).
+4. Orders: list and detail with user filter and change history; **edit orders** (pending ones in the panel, variants preserved and stock untouched; authorized ones through the API, with stock adjusted by the difference); **authorize** (decrements variant stock and creates the sales record); **cancel** from the detail view (pending, authorized or completed; restocks once if the order held stock; cancelled is final).
 5. Direct POS: creates an `autorizado` order with immediate stock deduction.
 6. Promotions, reports (revenue, orders by status, sales by payment method, top 5 products), monthly accounting (income vs. expenses, per-user filter, per-seller breakdown, price deviation), users and settings.
 
@@ -224,5 +226,5 @@ Governed by [DESIGN.md](DESIGN.md). In the current implementation the storefront
 2. **Asynchronous stock:** nothing is reserved in the cart or while an order is `pendiente`; stock is decremented only on authorization, which is rejected if stock is insufficient.
 3. **Direct sales:** POS sales are saved as `autorizado` and decrement stock immediately.
 4. **Variants are the source of truth** for stock and sale prices, and their identifiers survive product edits.
-5. **Pending orders only** can be edited; stock adjustments happen at authorization.
+5. **Editing:** only `pendiente` and `autorizado` orders can be edited (never cancelled or `completada` ones); a seller edits only their own `autorizado` direct sales. Stock moves by the difference only while the order holds it (`autorizado`, `completada`); on a `pendiente` order, adjustments are applied at authorization.
 6. **Categories:** filtering by a parent category includes its children's products. A category with products cannot change its variant axes or be deleted; moving a category updates its products' ancestors.
