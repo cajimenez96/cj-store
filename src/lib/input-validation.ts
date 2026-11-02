@@ -26,3 +26,8 @@ export function optionalString(v: unknown): { ok: boolean; value?: string } {
   if (v === undefined || v === null) return { ok: true };
   return typeof v === 'string' ? { ok: true, value: v } : { ok: false };
 }
+
+/** Escapes regex metacharacters so user text is matched literally (no invalid pattern, no ReDoS). */
+export function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}

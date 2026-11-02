@@ -10,6 +10,7 @@ import { GENDER_ATTRIBUTE_KEY } from '@/lib/genderFilter';
 import { buildStockEntries, sumActiveStock } from '@/lib/stock';
 import { getSession, sessionError } from '@/lib/session';
 import { isAdminRole } from '@/lib/permissions';
+import { escapeRegex } from '@/lib/input-validation';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,7 +37,8 @@ export async function GET(req: NextRequest) {
     if (!isAdminRole(session.role)) query.active = true;
 
     if (search) {
-      query.name = { $regex: search, $options: 'i' };
+      // Literal, case-insensitive substring (metacharacters escaped).
+      query.name = { $regex: escapeRegex(search), $options: 'i' };
     }
 
     // Ensure models are registered for populate

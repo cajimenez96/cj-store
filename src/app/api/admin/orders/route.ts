@@ -5,7 +5,7 @@ import { isAdminRole } from '@/lib/permissions';
 import { isCancelledStatus, ordersScope } from '@/lib/order-access';
 import { diffOrder } from '@/lib/order-history';
 import { runInTransaction } from '@/lib/transaction';
-import { isObjectIdString, isPlainObject } from '@/lib/input-validation';
+import { escapeRegex, isObjectIdString, isPlainObject } from '@/lib/input-validation';
 import {
   applyThenWrite,
   jsonError,
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
 
     if (search) {
       // Plain, case-insensitive substring: metacharacters are escaped (no ReDoS, no invalid regex).
-      const pattern = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = escapeRegex(search);
       query.$or = [
         { orderNumber: { $regex: pattern, $options: 'i' } },
         { 'guest.name': { $regex: pattern, $options: 'i' } },

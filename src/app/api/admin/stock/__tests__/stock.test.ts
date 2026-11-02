@@ -445,4 +445,39 @@ describe('seller read-only stock and restricted product reads', () => {
       expect(saved!.retailPrice).toBe(3500);
     });
   });
+
+  describe('search is a literal, case-insensitive substring', () => {
+    it.each(['(', '[', '*', 'a)b', '\\'])('stock and products GET accept search=%s', async (term) => {
+      const q = encodeURIComponent(term);
+      for (const role of ['admin', 'seller'] as Role[]) {
+        const stock = await stockRoute.GET(req('GET', `/api/admin/stock?search=${q}`, tokens[role]));
+        expect(stock.status).toBe(200);
+        expect((await stock.json()).data.items).toHaveLength(0);
+        const products = await productsRoute.GET(req('GET', `/api/admin/products?search=${q}`, tokens[role]));
+        expect(products.status).toBe(200);
+        expect((await products.json()).data).toHaveLength(0);
+      }
+    });
+
+    it('a normal name search still matches (case, accents and spaces)', async () => {
+      await Product.create({
+        name: 'Botín Cuero (Edición)',
+        slug: 'botin-cuero',
+        images: [],
+        active: true,
+        variants: [{ sku: 'BC-1', options: [], retailPrice: 5000, stock: 1, active: true }],
+      });
+      for (const role of ['admin', 'seller'] as Role[]) {
+        for (const term of ['zapato act', 'ZAPATO ACTIVO']) {
+          const stock = await (await stockRoute.GET(req('GET', `/api/admin/stock?search=${encodeURIComponent(term)}`, tokens[role]))).json();
+          expect(stock.data.items.map((i: { name: string }) => i.name)).toEqual(['Zapato Activo']);
+        }
+        const term = encodeURIComponent('botín cuero (edición)');
+        const stock = await (await stockRoute.GET(req('GET', `/api/admin/stock?search=${term}`, tokens[role]))).json();
+        expect(stock.data.items.map((i: { name: string }) => i.name)).toEqual(['Botín Cuero (Edición)']);
+        const products = await (await productsRoute.GET(req('GET', `/api/admin/products?search=${term}`, tokens[role]))).json();
+        expect(products.data.map((p: { name: string }) => p.name)).toEqual(['Botín Cuero (Edición)']);
+      }
+    });
+  });
 });

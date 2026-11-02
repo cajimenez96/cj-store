@@ -5,6 +5,7 @@ import { calculateDerivedProductFields } from '@/lib/derived';
 import { buildGenderCondition } from '@/lib/genderFilter';
 import { getSession, sessionError } from '@/lib/session';
 import { isAdminRole } from '@/lib/permissions';
+import { escapeRegex } from '@/lib/input-validation';
 
 export const dynamic = 'force-dynamic';
 
@@ -110,7 +111,8 @@ export async function GET(req: NextRequest) {
       query.isClearance = isClearance === 'true';
     }
     if (search) {
-      query.name = { $regex: search, $options: 'i' };
+      // Literal, case-insensitive substring (metacharacters escaped).
+      query.name = { $regex: escapeRegex(search), $options: 'i' };
     }
 
     // Ensure models are registered
