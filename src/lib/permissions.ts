@@ -2,8 +2,8 @@
 
 export type Role = 'superadmin' | 'admin' | 'seller';
 
-/** While false, sellers are denied everywhere (they stay locked out). Flipped in the final task. */
-export const SELLER_ACCESS_ENABLED = false;
+/** Kill switch: set to false to deny every seller request (admins are unaffected). */
+export const SELLER_ACCESS_ENABLED = true;
 
 export function isAdminRole(role?: string): boolean {
   return role === 'admin' || role === 'superadmin';

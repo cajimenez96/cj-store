@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { canAccess, isAdminRole, SELLER_ACCESS_ENABLED } from '@/lib/permissions';
 
-const on = { sellerAccessEnabled: true };
-const seller = (method: string, path: string) => canAccess('seller', method, path, on);
+// Uses the real default flag: these tests assert the shipped seller policy.
+const seller = (method: string, path: string) => canAccess('seller', method, path);
+const off = { sellerAccessEnabled: false };
 
 describe('isAdminRole', () => {
   it('accepts admin and superadmin only', () => {
@@ -21,11 +22,31 @@ describe('canAccess', () => {
     }
   });
 
-  it('denies sellers everywhere with the default flag', () => {
-    expect(SELLER_ACCESS_ENABLED).toBe(false);
-    expect(canAccess('seller', 'GET', '/api/admin/orders')).toBe(false);
-    expect(canAccess('seller', 'GET', '/admin/pos')).toBe(false);
-    expect(canAccess('seller', 'GET', '/api/admin/auth/me')).toBe(false);
+  it('enables seller access by default', () => {
+    expect(SELLER_ACCESS_ENABLED).toBe(true);
+    expect(canAccess('seller', 'GET', '/api/admin/orders')).toBe(true);
+    expect(canAccess('seller', 'POST', '/api/admin/sales/create-direct')).toBe(true);
+    expect(canAccess('seller', 'GET', '/api/admin/accounting')).toBe(true);
+    expect(canAccess('seller', 'GET', '/api/admin/stock')).toBe(true);
+    expect(canAccess('seller', 'PUT', '/api/admin/stock')).toBe(false);
+    expect(canAccess('seller', 'GET', '/api/admin/users')).toBe(false);
+    expect(canAccess('seller', 'POST', '/api/admin/orders/abc123/authorize')).toBe(false);
+  });
+
+  it('kill switch: with the flag override off every seller request is denied', () => {
+    for (const [method, path] of [
+      ['GET', '/api/admin/orders'],
+      ['POST', '/api/admin/sales/create-direct'],
+      ['GET', '/api/admin/accounting'],
+      ['GET', '/api/admin/stock'],
+      ['GET', '/api/admin/auth/me'],
+      ['GET', '/admin/pos'],
+      ['GET', '/admin/orders'],
+    ]) {
+      expect(canAccess('seller', method, path, off)).toBe(false);
+    }
+    // Admin access is unaffected by the switch.
+    expect(canAccess('admin', 'GET', '/api/admin/users', off)).toBe(true);
   });
 
   it.each([
@@ -97,7 +118,7 @@ describe('canAccess hardening', () => {
   });
 
   it.each([undefined, '', 'Seller', 'user'])('denies invalid role %j', (role) => {
-    expect(canAccess(role as never, 'GET', '/api/admin/orders', on)).toBe(false);
+    expect(canAccess(role as never, 'GET', '/api/admin/orders')).toBe(false);
   });
 
   it('leaves admin and superadmin unchanged for traversal-looking paths', () => {

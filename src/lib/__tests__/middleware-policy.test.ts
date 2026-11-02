@@ -3,15 +3,16 @@ import { deniedPageRedirect } from '@/lib/permissions';
 import { verifySessionToken, signAdminToken } from '@/lib/jwt';
 
 describe('deniedPageRedirect', () => {
-  it('sends a seller (flag on) denied elsewhere to /admin/orders', () => {
-    expect(deniedPageRedirect('seller', '/admin/users', { sellerAccessEnabled: true })).toBe('/admin/orders');
+  it('sends a seller denied elsewhere to /admin/orders with the default flag', () => {
+    expect(deniedPageRedirect('seller', '/admin/users')).toBe('/admin/orders');
   });
-  it('sends sellers to login when /admin/orders itself is denied (flag off) to avoid a loop', () => {
-    expect(deniedPageRedirect('seller', '/admin/users')).toBe('/admin/login');
-    expect(deniedPageRedirect('seller', '/admin/orders')).toBe('/admin/login');
+  it('sends sellers to login when the kill switch is off, to avoid a loop', () => {
+    const off = { sellerAccessEnabled: false };
+    expect(deniedPageRedirect('seller', '/admin/users', off)).toBe('/admin/login');
+    expect(deniedPageRedirect('seller', '/admin/orders', off)).toBe('/admin/login');
   });
   it('never targets the current path', () => {
-    expect(deniedPageRedirect('seller', '/admin/orders', { sellerAccessEnabled: true })).toBe('/admin/login');
+    expect(deniedPageRedirect('seller', '/admin/orders')).toBe('/admin/login');
   });
 });
 
