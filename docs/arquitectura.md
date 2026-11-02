@@ -26,7 +26,7 @@ flowchart TD
     Storefront -->|POST /api/checkout/create-order| PublicAPI
     Storefront -->|Redirección wa.me| WhatsApp[WhatsApp del cliente]
     Admin[Panel /admin] -->|/api/admin/*| AdminAPI[API de administración]
-    Middleware[middleware.ts: valida cookie admin_token] --> AdminAPI
+    Middleware[middleware.ts: valida cookie admin_token y rol] --> AdminAPI
     PublicAPI --> Mongo[(MongoDB)]
     AdminAPI --> Mongo
     Admin -->|Subida y borrado| ImageKit[ImageKit CDN]
@@ -65,7 +65,7 @@ docs/                             Esta documentación
 
 ## 3. MODELO DE DATOS (MONGODB / MONGOOSE)
 
-Colecciones: `brands`, `categories`, `attributes`, `products`, `orders`, `salesrecords`, `promotions`, `expenses`, `users`, `settings` y `counters` (este último sin uso actual).
+Colecciones: `brands`, `categories`, `attributes`, `products`, `orders`, `salesrecords`, `promotions`, `expenses`, `users`, `settings` y `counters` (secuencia atómica anual del número de pedido).
 
 ### 3.1 `categories`
 ```typescript
@@ -152,13 +152,14 @@ interface IOrderItem {
   variantLabel?: string;
   variantName?: string;
   qty: number;
+  listPrice?: number;                    // precio de catálogo al vender (auditoría; ausente en pedidos viejos)
   appliedPriceType: 'retail' | 'wholesale' | 'custom';
   unitPrice: number;                     // foto del precio al momento de la venta
   subtotal: number;
 }
 
 interface IOrder {
-  orderNumber: string;                   // único, "PED-AAAA-NNNNxx"
+  orderNumber: string;                   // único; web "PED-AAAA-NNNNxx", ventas directas "PED-AAAA-N<secuencia>"
   origin: 'web' | 'admin_direct';
   guest: { name: string; lastName: string; phone: string };
   items: IOrderItem[];
@@ -170,8 +171,10 @@ interface IOrder {
         | 'confirmada' | 'completada' | 'cancelada';   // los tres últimos son heredados
   notes?: string;
   cancelReason?: string;
+  soldBy?: { userId: ObjectId; username: string; name: string };   // quién registró la venta (POS); ausente en pedidos web
+  history: Array<{ at: Date; byUserId?: ObjectId; byName: string; action: string; summary: string }>;   // auditoría de cambios
 }
-// Índices: { orderNumber } único, { status, createdAt }, { origin, createdAt }
+// Índices: { orderNumber } único, { status, createdAt }, { origin, createdAt }, { 'soldBy.userId' }
 ```
 
 ### 3.5 Otras colecciones
@@ -194,7 +197,12 @@ interface IOrder {
 | `categoryTree.ts` | Arma el árbol de categorías (rubros y sus categorías) y los enlaces `?categoryId=`. |
 | `categoryFilter.ts` | Condición de Mongo para filtrar por una categoría **y sus descendientes** (`categoryId` o `categoryAncestors`). |
 | `genderFilter.ts` | Condición de Mongo por la ficha técnica `genero` (acepta el slug o la etiqueta) y opciones activas del atributo. |
-| `pricing.ts` | Motor de precios puro (sin integrar todavía; ver deuda técnica). |
+| `pricing.ts` | Motor de carrito viejo, sin uso (ver deuda técnica); además exporta `resolveListPrice` (precio de catálogo de un ítem, usado para `items[].listPrice`). |
+| `permissions.ts` | Política de roles pura (apta para el edge): `canAccess(role, method, pathname)`, reglas de `seller` (`SELLER_RULES`) y el interruptor `SELLER_ACCESS_ENABLED`. |
+| `session.ts` | `getSession(req)`: verifica el JWT y revalida contra la base (usuario activo y rol actual). |
+| `order-access.ts` | `ordersScope` (qué pedidos ve cada rol) y `canMutateOrder` (qué puede editar o cancelar un vendedor). |
+| `order-mutation.ts` · `stock-ops.ts` · `transaction.ts` | Regla única de stock de pedidos, descuento atómico con guarda (`applyStockDeltas`), número de pedido (`nextOrderNumber`) y transacciones (`runInTransaction`). |
+| `order-history.ts` | Genera las entradas de `history` al editar o cancelar un pedido. |
 | `jwt.ts` · `auth.ts` | Firma y verificación de la sesión del panel y chequeo de rol. |
 | `db.ts` · `imagekit.ts` · `api-client.ts` | Conexión cacheada a MongoDB, cliente de ImageKit y cliente HTTP del frontend. |
 
@@ -236,27 +244,38 @@ El servidor ignora los precios del cliente y, para cada ítem: resuelve la varia
 | `auth/login`, `auth/logout`, `auth/me` | POST, POST, GET | Sesión por cookie `admin_token`. |
 | `products`, `products/[id]` | GET, POST, PUT, DELETE · GET | Alta y edición con variantes; el PUT conserva el `_id` de las variantes existentes. |
 | `products/[id]/stock` | PATCH | Ajuste de stock por variante (`variantId` o `sku`). |
-| `stock` | GET, PUT | Reporte por producto y variante, y ajuste de una variante (`productId`, `variantId`, `newStock`). |
+| `stock` | GET, PUT | Reporte por producto y variante (GET también para `seller`, solo productos activos y sin costos) y ajuste de una variante (PUT solo admin; `productId`, `variantId`, `newStock`). |
 | `categories`, `categories/[id]` | GET, POST · GET, PUT, DELETE | No permite cambiar los ejes de una categoría con productos ni eliminarla; al moverla actualiza los ancestros de sus productos. |
 | `attributes`, `attributes/[id]` | GET, POST · GET, PUT, DELETE | Atributos y opciones. No permite quitar una opción usada en variantes o en la ficha técnica de algún producto. |
 | `brands`, `promotions`, `expenses` | CRUD | Expenses: GET, POST, DELETE. |
-| `orders` | GET, PUT | El GET lista y filtra pedidos; el PUT (cambio de estado `completada`/`cancelada`) es un flujo heredado que el panel no usa. |
-| `orders/[id]` | GET, PUT, PATCH | PUT edita un pedido pendiente y conserva el vínculo con cada variante; PATCH con `{ action: "cancel" }` cancela. |
-| `orders/[id]/authorize` | POST | Autoriza: verifica stock, descuenta por variante, pasa a `autorizado` y crea el registro de venta. |
-| `sales/create-direct` | POST | Venta del POS: crea el pedido `autorizado` y descuenta el stock al instante. |
-| `reports`, `accounting` | GET | Métricas de ventas; libro mensual de ingresos y gastos (`month`, `year`). |
+| `orders` | GET, PUT | El GET lista y filtra pedidos (`userId`: un usuario o `web`, solo admin; un `seller` solo ve los suyos); el PUT (cambio de estado `completada`/`cancelada`) es un flujo heredado que el panel no usa. |
+| `orders/[id]` | GET, PUT, PATCH | PUT edita un pedido pendiente o autorizado y conserva el vínculo con cada variante; PATCH con `{ action: "cancel" }` cancela. Un `seller` solo opera sobre sus ventas directas `autorizado`. |
+| `orders/[id]/authorize` | POST | Solo admin. Autoriza: verifica stock, descuenta por variante, pasa a `autorizado` y crea el registro de venta. |
+| `sales/create-direct` | POST | Venta del POS (admin y `seller`): crea el pedido `autorizado` con `soldBy` y descuenta el stock al instante. |
+| `reports`, `accounting` | GET | Métricas de ventas; libro mensual (`month`, `year`). `accounting` también lo consulta el `seller`, solo con sus ingresos y la desviación de precio. El admin además recibe gastos, `deviation`, `bySeller` y puede filtrar con `userId`. |
 | `users`, `settings` | CRUD · GET, PUT | Gestión de usuarios (con reglas de `superadmin`) y de ajustes. |
 | `imagekit/upload`, `imagekit/delete` | POST · DELETE | Imágenes en el CDN. |
 
-**Autorización de pedidos.** Si MongoDB corre como *replica set*, el descuento de stock, el cambio de estado y el registro de venta se ejecutan en una transacción; en un servidor standalone se descuenta ítem por ítem y, ante un error, se revierte manualmente lo descontado.
+**Autorización de pedidos y stock.** Si MongoDB corre como *replica set*, el descuento de stock, el cambio de estado y el registro de venta se ejecutan en una transacción (`withTransaction`); en un servidor standalone se descuenta ítem por ítem y, ante un error, se revierte manualmente lo descontado (compensación de mejor esfuerzo).
+
+**Máquina de estados de stock** (`order-mutation.ts`). Un pedido *retiene* stock solo en `autorizado` y `completada`. Toda transición de estado mueve el stock por la diferencia: de no retener a retener descuenta las unidades (con guarda), de retener a no retener las repone una sola vez, y entre estados del mismo lado no mueve nada. `cancelado` es final: no se puede editar ni volver a cancelar. Las ediciones de ítems mueven stock solo mientras el pedido lo retiene. El movimiento usa `applyStockDeltas`, un `$inc` atómico con guarda de stock suficiente (`409 INSUFFICIENT_STOCK`) que, si un lote falla, deshace lo ya aplicado. El número de pedido de las ventas directas sale de `nextOrderNumber` (contador `order-number-<año>` en `counters`, formato `PED-<año>-N<secuencia>`).
 
 ---
 
 ## 6. SEGURIDAD Y SESIÓN
 
-- `middleware.ts` protege `/admin/*` (redirige al login) y `/api/admin/*` (responde `401`), excepto el login y el logout.
+- `middleware.ts` protege `/admin/*` (redirige al login) y `/api/admin/*` (responde `401`), excepto el login y el logout. Con sesión válida aplica además la lista de permisos por rol `canAccess` (`src/lib/permissions.ts`): `403` en la API y redirección en las páginas.
 - El login valida usuario y contraseña (`bcryptjs`) y emite un JWT HS256 de 7 días en la cookie `admin_token` (`httpOnly`, `sameSite: lax`, `secure` en producción).
-- Solo los roles `superadmin` y `admin` son aceptados; el rol `seller` existe en el modelo pero no tiene acceso.
+- Roles: `superadmin` y `admin` tienen acceso completo. `seller` solo accede a lo que permite `SELLER_RULES` (matriz abajo); todo lo no listado se deniega. El interruptor `SELLER_ACCESS_ENABLED` (en `permissions.ts`) deniega a todos los vendedores si se pone en `false`.
+- Defensa en capas: (1) el middleware aplica `canAccess` por método y ruta; (2) cada handler vuelve a chequear el rol y acota los datos (`ordersScope`, `canMutateOrder`); (3) `getSession` revalida contra la base que el usuario siga activo y su rol actual, por lo que un cambio de rol o una baja rige de inmediato aunque el JWT siga vigente.
+
+| Capacidad | `seller` | `admin` / `superadmin` |
+| --- | --- | --- |
+| POS (`sales/create-direct`) | Sí | Sí |
+| Pedidos | Lista, ve, edita y cancela solo sus ventas directas `autorizado` (no puede pasarlas a `completada`) | Todos; filtro por usuario o `web`; autorizar |
+| Contabilidad | Solo sus ingresos del mes y desviación de precio | Ingresos, gastos, balance, filtro por usuario, desglose por vendedor y desviación de precio |
+| Stock | Solo lectura, productos activos, sin costos | Lectura y ajuste |
+| Costos, ventas de otros, pedidos web, gastos, productos (gestión), ajustes, usuarios | No | Sí |
 - Un `superadmin` es el único que crea o edita a otro `superadmin`, y se protege al último `superadmin` activo.
 - `pnpm seed` crea un `superadmin` inicial: **cambiá sus credenciales** antes de exponer el sistema.
 
@@ -307,16 +326,17 @@ Críticos
 Inconsistencias de negocio
 2. **Umbral mayorista global fijo:** la constante `5` está repetida en `CartContext`, `CartDrawer`, `create-order`, `create-direct` y el POS. El ajuste `wholesaleMinPairs` se guarda pero no se aplica.
 3. **`minQty` y `minUnits`:** el producto guarda `wholesale.minQty`, pero el carrito del cliente lee `wholesale.minUnits` (siempre vacío), por lo que ignora el umbral por producto; el servidor sí lo respeta.
-4. **Cancelación sin validación de estado:** `PATCH /api/admin/orders/[id]` no verifica que el pedido esté pendiente ni repone stock si estaba autorizado. El panel solo ofrece cancelar pedidos pendientes.
+4. **Cancelación:** `PATCH /api/admin/orders/[id]` rechaza (`409`) un pedido ya cancelado y repone el stock una sola vez si estaba autorizado (ver máquina de estados). Un pedido cancelado es final.
 5. **Flujo heredado:** `PUT /api/admin/orders` (estados `completada`/`cancelada`) no lo usa el panel y ubica variantes solo por nombre.
 
 Código sin uso o redundante
-6. `src/lib/pricing.ts` (motor de precios puro) y el modelo `Counter` no están integrados; el número de pedido sale de la cantidad de pedidos más un sufijo aleatorio, que no garantiza unicidad.
+6. `src/lib/pricing.ts` conserva el motor de carrito viejo sin uso (solo se usa `resolveListPrice`). Los pedidos web (`create-order`) siguen sin usar el contador `Counter`; solo las ventas directas usan `nextOrderNumber`.
 7. Los campos a nivel producto `stock`, `retailPrice`, `wholesalePrice`, `price` y `totalStock` pueden quedar desfasados respecto de las variantes (las lecturas recalculan desde las variantes).
-8. El rol `seller` no tiene acceso al panel.
+8. `SalesRecord` solo se crea al autorizar o registrar una venta directa: no se actualiza al editar o cancelar el pedido y ningún código lo lee, por lo que puede quedar desfasado respecto de `orders` (la contabilidad lee `orders`).
+9. En MongoDB standalone no hay aislamiento: la reversión del stock ante un error es de mejor esfuerzo y puede rechazar espuriamente una venta concurrente (nunca sobrevende).
 
 Calidad
-9. ESLint reporta advertencias y errores previos (por ejemplo `setState` dentro de efectos y usos de `any`) y no hay pruebas automatizadas.
+10. ESLint reporta advertencias y errores previos (por ejemplo `setState` dentro de efectos y usos de `any`) y las pruebas automatizadas (`pnpm test`, Vitest) cubren solo `src/lib` y algunos handlers, no los componentes.
 
 ---
 ---
@@ -342,17 +362,17 @@ Calidad
 
 ## 3. DATA MODEL
 
-Collections: `brands`, `categories`, `attributes`, `products`, `orders`, `salesrecords`, `promotions`, `expenses`, `users`, `settings` and `counters` (currently unused).
+Collections: `brands`, `categories`, `attributes`, `products`, `orders`, `salesrecords`, `promotions`, `expenses`, `users`, `settings` and `counters` (atomic yearly sequence for order numbers).
 
 - **`categories`:** `name`, unique `slug`, `parentId` (null for rubros), derived `ancestors`, `variantAxes`, `imageAxis`, `specAttributes`, `order`, `active`.
 - **`attributes`:** immutable unique `key`, `label`, `type`, `options { value, label, order, hex, active }`, `unit`, `filterable`. Gender is the `genero` attribute; there are no gender or type models.
 - **`products`:** `name`, `slug`, `description`, `categoryId` and derived `categoryAncestors`, `brandId`, `active`, `isClearance`, `specs`, `wholesale { enabled, minQty }`, `images`, `variants` and derived `priceRange`, `totalStock`, `hasWholesale`. A variant has `_id` (stable across edits), `sku`, optional `name`, `options`, `retailPrice`, optional `wholesalePrice`, `stock` and `active`. Product-level `price`, `retailPrice`, `wholesalePrice` and `stock` are compatibility fields.
-- **`orders`:** `orderNumber` (`PED-YYYY-NNNNxx`), `origin`, `guest`, `items` (`productId`, `variantId`, `sku`, `variantLabel`, `qty`, `appliedPriceType`, `unitPrice`, `subtotal`), `subtotal`, `discount`, `total`, `paymentMethod`, `status` (`pendiente` | `autorizado` | `cancelado`; `confirmada`, `completada` and `cancelada` are legacy), `notes`.
+- **`orders`:** `orderNumber` (web `PED-YYYY-NNNNxx`; direct sales `PED-YYYY-N<sequence>`), `origin`, `guest`, `items` (`productId`, `variantId`, `sku`, `variantLabel`, `qty`, `listPrice` (catalog price at sale time, audit), `appliedPriceType`, `unitPrice`, `subtotal`), `subtotal`, `discount`, `total`, `paymentMethod`, `status` (`pendiente` | `autorizado` | `cancelado`; `confirmada`, `completada` and `cancelada` are legacy), `notes`, `soldBy` (user who registered the POS sale; absent on web orders) and `history[]` (audit entries: `at`, `byUserId`, `byName`, `action`, `summary`).
 - **Others:** `salesrecords`, `brands`, `promotions`, `expenses`, `users` (roles `superadmin` | `admin` | `seller`) and a single `settings` document.
 
 ## 4. DOMAIN LOGIC (`src/lib`)
 
-`derived.ts` (price range, total stock and wholesale flag from active variants), `variants.ts` (variant combinations, SKUs, labels), `stock.ts` (stock rows from variants), `categoryTree.ts` (category tree and links), `categoryFilter.ts` (category and descendants filter), `genderFilter.ts` (`genero` spec filter and active options), `pricing.ts` (pure pricing engine, not wired yet), `jwt.ts` and `auth.ts` (session), plus `db.ts`, `imagekit.ts` and `api-client.ts`.
+`derived.ts` (price range, total stock and wholesale flag from active variants), `variants.ts` (variant combinations, SKUs, labels), `stock.ts` (stock rows from variants), `categoryTree.ts` (category tree and links), `categoryFilter.ts` (category and descendants filter), `genderFilter.ts` (`genero` spec filter and active options), `pricing.ts` (old cart engine, unused; `resolveListPrice` is used for `items[].listPrice`), `permissions.ts` (pure role policy, `canAccess`, `SELLER_RULES`, `SELLER_ACCESS_ENABLED`), `session.ts` (`getSession`), `order-access.ts` (`ordersScope`, `canMutateOrder`), `order-mutation.ts`, `stock-ops.ts` and `transaction.ts` (stock rule, guarded atomic stock, order numbers, transactions), `order-history.ts`, `jwt.ts` and `auth.ts` (session), plus `db.ts`, `imagekit.ts` and `api-client.ts`.
 
 ## 5. API ENDPOINTS
 
@@ -362,14 +382,16 @@ Collections: `brands`, `categories`, `attributes`, `products`, `orders`, `salesr
 
 **Admin (`/api/admin/*`, session required):** auth (`login`, `logout`, `me`), `products` (+ `[id]` and `[id]/stock`), `stock`, `categories`, `attributes`, `brands`, `promotions`, `expenses`, `orders` (list; `[id]` GET/PUT/PATCH; `[id]/authorize`), `sales/create-direct`, `reports`, `accounting`, `users`, `settings` and `imagekit/upload|delete`.
 
-- `PUT /api/admin/orders/:id` edits a pending order and **keeps the link to each variant**; it does not touch stock.
+- `PUT /api/admin/orders/:id` edits a pending or authorized order and **keeps the link to each variant**; stock moves only while the order holds it (see the stock state machine below).
 - `POST /api/admin/orders/:id/authorize` verifies stock, decrements it per variant, sets `autorizado` and creates the sales record. On a MongoDB replica set it runs in a transaction; on a standalone server it decrements item by item and rolls back manually on error.
-- `POST /api/admin/sales/create-direct` creates an `autorizado` order and decrements stock immediately.
+- `POST /api/admin/sales/create-direct` (admins and sellers) creates an `autorizado` order with `soldBy` set from the session and decrements stock immediately.
+- `GET /api/admin/accounting` is also available to sellers, who receive only `period`, income `summary`, `deviation` and their own `transactions`. Admins also get expenses, net figures, `bySeller` and may filter with `userId` (a user id or `web`). `GET /api/admin/stock` is read-only for sellers (active products, no costs); `GET /api/admin/users` and `POST /api/admin/orders/:id/authorize` are admin-only.
+- **Stock state machine** (`order-mutation.ts`): an order holds stock only in `autorizado` and `completada`. Every status transition moves stock by the difference: not-holding to holding takes the units (guarded), holding to not-holding restocks them once, same-side transitions move nothing. `cancelado` is final (no further edits or cancellations). Item edits move stock only while the order holds it. Stock moves through `applyStockDeltas`, an atomic `$inc` guarded against insufficient stock (`409 INSUFFICIENT_STOCK`) that undoes the already-applied part of a failed batch. On a replica set it runs inside `withTransaction`; on standalone MongoDB it relies on best-effort compensation. Direct-sale order numbers come from `nextOrderNumber` (`counters` entry `order-number-<year>`).
 - `PUT /api/admin/products` preserves the `_id` of existing variants.
 
 ## 6. SECURITY
 
-`middleware.ts` protects `/admin/*` (redirect) and `/api/admin/*` (`401`). Login issues a 7-day HS256 JWT in the `admin_token` cookie (`httpOnly`, `sameSite: lax`, `secure` in production). Only `superadmin` and `admin` are accepted; `seller` has no access. Only a `superadmin` manages other superadmins and the last active one is protected. `pnpm seed` creates an initial `superadmin`: **change its credentials** before exposing the system.
+`middleware.ts` protects `/admin/*` (redirect) and `/api/admin/*` (`401`). Login issues a 7-day HS256 JWT in the `admin_token` cookie (`httpOnly`, `sameSite: lax`, `secure` in production). `superadmin` and `admin` have full access; `seller` is limited by an allowlist (`SELLER_RULES` in `src/lib/permissions.ts`, evaluated by `canAccess` in the middleware: `403` on the API, redirect on pages) and the `SELLER_ACCESS_ENABLED` switch denies every seller when set to `false`. Each handler re-checks the role and scopes data (`ordersScope`, `canMutateOrder`), and `getSession` revalidates against the database that the user is active and has the current role, so role changes and deactivations apply immediately even with a valid JWT. Seller capabilities: POS; list, view, edit and cancel only their own `autorizado` direct sales; own monthly accounting (income and price deviation only); read-only stock of active products. Sellers cannot see costs, other users' sales, web orders, expenses, product management, settings or users. Admins also get the user filter, per-seller breakdown and price deviation. Only a `superadmin` manages other superadmins and the last active one is protected. `pnpm seed` creates an initial `superadmin`: **change its credentials** before exposing the system.
 
 ## 7. FRONTEND
 
@@ -384,8 +406,10 @@ Collections: `brands`, `categories`, `attributes`, `products`, `orders`, `salesr
 1. **Critical:** `src/lib/jwt.ts` falls back to a hardcoded secret when `NEXTAUTH_SECRET` is missing; a deployment without it lets anyone forge an admin token. It should fail at startup instead.
 2. The global wholesale threshold (`5`) is hardcoded in `CartContext`, `CartDrawer`, `create-order`, `create-direct` and the POS; the admin setting `wholesaleMinPairs` is stored but not applied.
 3. The product stores `wholesale.minQty` while the client cart reads `wholesale.minUnits`, so the per-product threshold is ignored in the cart (the server honors it).
-4. `PATCH /api/admin/orders/:id` (cancel) does not check that the order is pending and does not restore stock for authorized orders; the panel only offers it for pending orders.
+4. `PATCH /api/admin/orders/:id` (cancel) rejects an already cancelled order (`409`) and restocks once if the order held stock; cancelled is final.
 5. `PUT /api/admin/orders` (legacy `completada`/`cancelada` flow) is unused by the panel and matches variants by name only.
-6. `src/lib/pricing.ts` and the `Counter` model are unused; order numbers come from the order count plus a random suffix, which does not guarantee uniqueness.
-7. Product-level `stock`, prices and `totalStock` can drift from the variants (reads recompute from variants); the `seller` role has no panel access.
-8. ESLint reports pre-existing issues (for example `setState` inside effects and `any` usage) and there are no automated tests.
+6. `src/lib/pricing.ts` keeps the old unused cart engine (only `resolveListPrice` is used). Web orders (`create-order`) still build their number from the order count plus a random suffix, which does not guarantee uniqueness; only direct sales use the `Counter`-based `nextOrderNumber`.
+7. Product-level `stock`, prices and `totalStock` can drift from the variants (reads recompute from variants).
+8. `SalesRecord` is created on authorization or direct sale but is not updated on edit or cancel and nothing reads it, so it can drift from `orders` (accounting reads `orders`).
+9. On standalone MongoDB there is no isolation: stock compensation after a failure is best effort and can spuriously reject a concurrent sale (it never oversells).
+10. ESLint reports pre-existing issues (for example `setState` inside effects and `any` usage); automated tests (`pnpm test`, Vitest) cover `src/lib` and some handlers, not components.

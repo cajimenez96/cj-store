@@ -75,10 +75,11 @@ Banner del carrusel de la página principal, meramente visual.
 ### 2.8 Solicitud de Venta (Pedido)
 Registro de intención de compra generado desde la tienda o creado desde el panel.
 - **Atributos:**
-  - `orderNumber` (único, formato `PED-AAAA-NNNNxx`), `origen` (`web` | `admin_direct`), `fechaCreacion`.
+  - `orderNumber` (único; web `PED-AAAA-NNNNxx`, venta directa `PED-AAAA-N<secuencia>`), `origen` (`web` | `admin_direct`), `fechaCreacion`.
   - `cliente`: `nombre`, `apellido`, `telefono` (todos requeridos).
   - `estado`: `pendiente` | `autorizado` | `cancelado` (se leen también los estados heredados `confirmada`, `completada` y `cancelada`).
-  - `items`: `productId`, `variantId`, `sku`, `nombre`, `imagen`, `variantLabel`, `variantName`, `cantidad`, `tipoPrecioAplicado` (`retail` | `wholesale` | `custom`), `precioUnitario`, `subtotal`. Los precios son una **foto del momento** de la venta.
+  - `items`: `productId`, `variantId`, `sku`, `nombre`, `imagen`, `variantLabel`, `variantName`, `cantidad`, `tipoPrecioAplicado` (`retail` | `wholesale` | `custom`), `precioUnitario`, `precioLista` (precio de catálogo al vender, para medir la desviación), `subtotal`. Los precios son una **foto del momento** de la venta.
+  - `vendidoPor` (`soldBy`: usuario que registró la venta en el POS; ausente en pedidos web) e `historial` (`history`: entradas con fecha, usuario, acción y resumen de cada alta, edición y cancelación).
   - `subtotal`, `descuento`, `total`, `medioPago` (`transferencia` | `efectivo` | `tarjeta` | `otro`), `notas`, `motivoCancelacion`.
 
 ### 2.9 Registro de Venta
@@ -92,7 +93,7 @@ Egreso registrado en contabilidad.
 ### 2.11 Usuario
 Cuenta del panel de administración.
 - **Atributos:** `username` (único), `nombre`, `email` (opcional), `passwordHash`, `activo`, `rol` (`superadmin` | `admin` | `seller`).
-- **Acceso:** solo `superadmin` y `admin` pueden ingresar al panel. Solo un `superadmin` crea o edita a otro `superadmin`, y el último `superadmin` activo está protegido.
+- **Acceso:** `superadmin` y `admin` tienen acceso completo al panel. `seller` accede únicamente al POS, a sus propias ventas directas autorizadas (listar, ver, editar y cancelar), a su contabilidad mensual (solo ingresos y desviación de precio) y al stock en solo lectura (productos activos, sin costos); no ve costos, ventas de otros usuarios, pedidos web, gastos, gestión de productos, ajustes ni usuarios. Solo un `superadmin` crea o edita a otro `superadmin`, y el último `superadmin` activo está protegido.
 
 ### 2.12 Ajustes de la Tienda
 Configuración única, editable desde el panel y expuesta a la tienda.
@@ -141,11 +142,11 @@ Configuración única, editable desde el panel y expuesta a la tienda.
    - Listado y detalle de pedidos.
    - **Editar un pedido pendiente:** agregar o quitar productos y variantes, cambiar cantidades o precios finales; la edición conserva el vínculo con cada variante y no toca el stock.
    - **Autorizar:** pasa el pedido a `autorizado`, descuenta el stock de cada variante y crea el registro de venta.
-   - **Cancelar:** cancela un pedido pendiente sin tocar el inventario.
+   - **Cancelar:** cancela un pedido; si estaba autorizado, repone su stock una sola vez. Un pedido cancelado es final.
 6. **Punto de Venta (POS):** venta directa en mostrador. Se carga el cliente, se eligen productos y variantes, se aplica un descuento opcional y al guardar se crea un pedido `autorizado` con descuento inmediato de stock.
 7. **Promociones:** alta y orden de banners del carrusel.
 8. **Reportes:** ingresos, pedidos por estado, ventas por medio de pago y los 5 productos más vendidos.
-9. **Contabilidad:** libro mensual de ingresos (ventas autorizadas) y gastos.
+9. **Contabilidad:** libro mensual de ingresos (ventas autorizadas) y gastos, con filtro por vendedor (usuario o Web), desglose de ventas por vendedor y desviación de precio (cobrado por encima o por debajo del precio de lista).
 10. **Usuarios y Ajustes:** gestión de cuentas del panel y configuración de la tienda.
 
 ---
@@ -193,10 +194,10 @@ Governed by [DESIGN.md](DESIGN.md). In the current implementation the storefront
 - **Product:** `name`, `slug`, `description`, `active`, `isClearance`, `images`, `specs`, `wholesale { enabled, minQty }`, a Brand, a Category and its **variants**. Derived fields (`priceRange`, `totalStock`, `hasWholesale`) are recomputed on save; **variants are the source of truth** for stock and sale prices.
 - **Variant:** sellable combination (e.g. *100 ml*). Fields: `sku`, optional `name`, `options` (axis key/value pairs), `retailPrice`, optional `wholesalePrice`, `stock`, `active`. A simple product has a single option-less variant. A variant's `_id` is stable across product edits because carts and pending orders reference it.
 - **Promotion:** carousel banner (`imageUrl`, `active`, `order`, optional dates).
-- **Order:** `orderNumber` (`PED-YYYY-NNNNxx`), `origin` (`web` | `admin_direct`), `guest { name, lastName, phone }`, `status` (`pendiente` | `autorizado` | `cancelado`; legacy `confirmada`, `completada`, `cancelada` are still read), `items` (`productId`, `variantId`, `sku`, `variantLabel`, `qty`, `appliedPriceType`, `unitPrice`, `subtotal`), `subtotal`, `discount`, `total`, `paymentMethod`, `notes`.
+- **Order:** `orderNumber` (web `PED-YYYY-NNNNxx`, direct sale `PED-YYYY-N<sequence>`), `origin` (`web` | `admin_direct`), `guest { name, lastName, phone }`, `status` (`pendiente` | `autorizado` | `cancelado`; legacy `confirmada`, `completada`, `cancelada` are still read), `items` (`productId`, `variantId`, `sku`, `variantLabel`, `qty`, `appliedPriceType`, `unitPrice`, `listPrice`, `subtotal`), `subtotal`, `discount`, `total`, `paymentMethod`, `notes`, `soldBy` (user who registered the POS sale) and `history` (audit entries for creation, edits and cancellation).
 - **Sales record:** created on authorization or direct sale (`orderId`, `orderNumber`, `confirmationDate`, `recordedPaymentMethod`, `appliedDiscountNote`, `finalTotal`).
 - **Expense:** `concept`, `category`, `amount`, `paymentMethod`, `date`, `notes`.
-- **User:** `username`, `name`, optional `email`, `passwordHash`, `active`, `role` (`superadmin` | `admin` | `seller`). Only `superadmin` and `admin` can enter the panel; only a `superadmin` manages other superadmins.
+- **User:** `username`, `name`, optional `email`, `passwordHash`, `active`, `role` (`superadmin` | `admin` | `seller`). `superadmin` and `admin` have full panel access. A `seller` can use the POS, list, view, edit and cancel only their own authorized direct sales, see their own monthly accounting (income and price deviation only) and view stock read-only (active products, no costs); sellers cannot see costs, other users' sales, web orders, expenses, product management, settings or users. Admins additionally get the per-user filter, the per-seller breakdown and the price deviation in accounting. Only a `superadmin` manages other superadmins.
 - **Settings:** single document with identity and contact data, SEO, bank data, minimum stock alert, commercial rules and the gender filter switch.
 
 ---
@@ -213,9 +214,9 @@ Governed by [DESIGN.md](DESIGN.md). In the current implementation the storefront
 1. Login (7-day session).
 2. Catalog CRUD: brands, categories, attributes and products with generated variants.
 3. Stock control per variant with quick +/− adjustment and low-stock alerts.
-4. Orders: list and detail; **edit pending orders** (variants preserved, stock untouched); **authorize** (decrements variant stock and creates the sales record); **cancel** pending orders.
+4. Orders: list and detail with user filter and change history; **edit pending orders** (variants preserved, stock untouched); **authorize** (decrements variant stock and creates the sales record); **cancel** (restocks once if the order was authorized; cancelled is final).
 5. Direct POS: creates an `autorizado` order with immediate stock deduction.
-6. Promotions, reports (revenue, orders by status, sales by payment method, top 5 products), monthly accounting (income vs. expenses), users and settings.
+6. Promotions, reports (revenue, orders by status, sales by payment method, top 5 products), monthly accounting (income vs. expenses, per-user filter, per-seller breakdown, price deviation), users and settings.
 
 ## 5. BUSINESS RULES AND CONSTRAINTS
 
