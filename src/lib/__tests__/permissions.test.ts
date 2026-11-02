@@ -59,3 +59,51 @@ describe('canAccess', () => {
     expect(seller(method, path)).toBe(false);
   });
 });
+
+describe('canAccess hardening', () => {
+  it('handles trailing slashes, lowercase methods and sub-pages', () => {
+    expect(seller('GET', '/api/admin/orders/')).toBe(true);
+    expect(seller('GET', '/api/admin/orders/abc123/')).toBe(true);
+    expect(seller('get', '/api/admin/orders')).toBe(true);
+    expect(seller('GET', '/admin/orders/abc123')).toBe(true);
+    expect(seller('DELETE', '/api/admin/orders/abc123')).toBe(false);
+  });
+
+  it.each([
+    ['GET', '/admin/orders/../users'],
+    ['GET', '/admin/orders/../../api/admin/users'],
+    ['PUT', '/api/admin/orders/..'],
+    ['PUT', '/api/admin/orders/../'],
+    ['PUT', '/api/admin/orders/%2e%2e'],
+    ['PUT', '/api/admin/orders/%2E%2E'],
+    ['PUT', '/api/admin/orders/.'],
+    ['GET', '/admin/orders/./x'],
+    ['GET', '/api/admin/orders/a\nb'],
+    ['GET', '/api/admin/orders/%00'],
+    ['GET', '/api/admin/orders/a\u0000b'],
+    ['GET', '/api/admin/orders//abc'],
+    ['GET', '/api/admin/orders/%ZZ'],
+  ])('denies seller traversal/control input %s %s', (method, path) => {
+    expect(seller(method, path)).toBe(false);
+  });
+
+  it.each([
+    '/admin/orders-evil',
+    '/admin/ordersX',
+    '/api/admin/orders-export',
+    '/api/admin/stockx',
+  ])('denies near-miss prefix %s', (path) => {
+    expect(seller('GET', path)).toBe(false);
+  });
+
+  it.each([undefined, '', 'Seller', 'user'])('denies invalid role %j', (role) => {
+    expect(canAccess(role as never, 'GET', '/api/admin/orders', on)).toBe(false);
+  });
+
+  it('leaves admin and superadmin unchanged for traversal-looking paths', () => {
+    for (const role of ['admin', 'superadmin'] as const) {
+      expect(canAccess(role, 'GET', '/admin/orders/../users')).toBe(true);
+      expect(canAccess(role, 'PUT', '/api/admin/orders/%2e%2e')).toBe(true);
+    }
+  });
+});
