@@ -84,4 +84,54 @@ describe('diffOrder', () => {
     const a = JSON.parse(JSON.stringify(b)) as OrderSnapshot;
     expect(diffOrder(b, a, actor)).toEqual([]);
   });
+
+  const it1 = (v: string, qty: number, unitPrice = 100) => ({ variantId: v, productId: 'p', name: 'A', qty, unitPrice });
+  const snap = (items: OrderSnapshot['items'], extra: Partial<OrderSnapshot> = {}): OrderSnapshot => ({
+    items, discount: 0, paymentMethod: 'efectivo', status: 'pendiente', ...extra,
+  });
+
+  it('pairs duplicate keys by occurrence: [A2,A2] -> [A2,A5]', () => {
+    const r = diffOrder(snap([it1('a', 2), it1('a', 2)]), snap([it1('a', 2), it1('a', 5)]), actor);
+    expect(r.map((e) => e.action)).toEqual(['quantity_changed']);
+    expect(r[0].summary).toContain('2 → 5');
+  });
+  it('duplicate removed: [A2,A3] -> [A2]', () => {
+    const r = diffOrder(snap([it1('a', 2), it1('a', 3)]), snap([it1('a', 2)]), actor);
+    expect(r.map((e) => e.action)).toEqual(['item_removed']);
+  });
+  it('duplicate added: [A2] -> [A2,A3]', () => {
+    const r = diffOrder(snap([it1('a', 2)]), snap([it1('a', 2), it1('a', 3)]), actor);
+    expect(r.map((e) => e.action)).toEqual(['item_added']);
+  });
+  it('reordered items produce no entries', () => {
+    expect(diffOrder(snap([it1('a', 1), it1('b', 2)]), snap([it1('b', 2), it1('a', 1)]), actor)).toEqual([]);
+  });
+  it('qty and price change on same item emit both', () => {
+    const r = diffOrder(snap([it1('a', 1, 100)]), snap([it1('a', 2, 90)]), actor);
+    expect(r.map((e) => e.action).sort()).toEqual(['price_changed', 'quantity_changed']);
+  });
+  it('discount undefined <-> 0 is a no-op', () => {
+    const u = snap([it1('a', 1)], { discount: undefined as unknown as number });
+    expect(diffOrder(u, snap([it1('a', 1)]), actor)).toEqual([]);
+    expect(diffOrder(snap([it1('a', 1)]), u, actor)).toEqual([]);
+  });
+  it('NaN equals NaN', () => {
+    const n = () => snap([it1('a', NaN, NaN)], { discount: NaN });
+    expect(diffOrder(n(), n(), actor)).toEqual([]);
+  });
+  it('createdEntry with NaN total has no "NaN"', () => {
+    expect(createdEntry(actor, NaN).summary).not.toContain('NaN');
+  });
+  it('cancelado -> cancelada is a no-op', () => {
+    expect(diffOrder(snap([], { status: 'cancelado' }), snap([], { status: 'cancelada' }), actor)).toEqual([]);
+  });
+  it('cancelled -> non-cancelled emits status_changed', () => {
+    const r = diffOrder(snap([], { status: 'cancelado' }), snap([], { status: 'pendiente' }), actor);
+    expect(r.map((e) => e.action)).toEqual(['status_changed']);
+  });
+  it('undefined items do not throw', () => {
+    const u = { discount: 0, paymentMethod: 'efectivo', status: 'pendiente' } as unknown as OrderSnapshot;
+    expect(diffOrder(u, u, actor)).toEqual([]);
+    expect(diffOrder(u, snap([it1('a', 1)]), actor).map((e) => e.action)).toEqual(['item_added']);
+  });
 });

@@ -45,6 +45,7 @@ const CANCELLED_STATUSES = new Set(['cancelled', 'cancelado', 'cancelada']);
 /**
  * Item matching key: variantId when present; otherwise sku, otherwise
  * variantName, always scoped by productId (and name as last resort).
+ * Lines sharing a key are paired by occurrence index ("key#0", "key#1").
  */
 function itemKey(i: OrderSnapshotItem): string {
   const p = i.productId ?? '';
@@ -54,8 +55,30 @@ function itemKey(i: OrderSnapshotItem): string {
   return `p:${p}:${i.name}`;
 }
 
+function indexItems(items: OrderSnapshotItem[] | undefined): Map<string, OrderSnapshotItem> {
+  const seen = new Map<string, number>();
+  const out = new Map<string, OrderSnapshotItem>();
+  for (const i of items ?? []) {
+    const k = itemKey(i);
+    const n = seen.get(k) ?? 0;
+    seen.set(k, n + 1);
+    out.set(`${k}#${n}`, i);
+  }
+  return out;
+}
+
 function label(i: OrderSnapshotItem): string {
   return i.variantLabel ? `${i.name} (${i.variantLabel})` : i.name;
+}
+
+function num(v: unknown): number {
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Equality where NaN equals NaN. */
+function same(a: unknown, b: unknown): boolean {
+  return Object.is(a, b);
 }
 
 function entry(actor: Actor, action: HistoryAction, summary: string): HistoryEntry {
@@ -63,7 +86,11 @@ function entry(actor: Actor, action: HistoryAction, summary: string): HistoryEnt
 }
 
 export function createdEntry(actor: Actor, total: number): HistoryEntry {
-  return entry(actor, 'created', `Pedido creado por ${total}`);
+  return entry(
+    actor,
+    'created',
+    Number.isFinite(total) ? `Pedido creado por ${total}` : 'Pedido creado'
+  );
 }
 
 export function diffOrder(
@@ -73,8 +100,8 @@ export function diffOrder(
   reason?: string
 ): HistoryEntry[] {
   const out: HistoryEntry[] = [];
-  const beforeMap = new Map(before.items.map((i) => [itemKey(i), i]));
-  const afterMap = new Map(after.items.map((i) => [itemKey(i), i]));
+  const beforeMap = indexItems(before.items);
+  const afterMap = indexItems(after.items);
 
   for (const [key, a] of afterMap) {
     const b = beforeMap.get(key);
@@ -82,10 +109,10 @@ export function diffOrder(
       out.push(entry(actor, 'item_added', `Producto agregado: "${label(a)}" x${a.qty}`));
       continue;
     }
-    if (b.qty !== a.qty) {
+    if (!same(b.qty, a.qty)) {
       out.push(entry(actor, 'quantity_changed', `Cantidad de "${label(a)}": ${b.qty} → ${a.qty}`));
     }
-    if (b.unitPrice !== a.unitPrice) {
+    if (!same(b.unitPrice, a.unitPrice)) {
       out.push(entry(actor, 'price_changed', `Precio de "${label(a)}": ${b.unitPrice} → ${a.unitPrice}`));
     }
   }
@@ -95,16 +122,20 @@ export function diffOrder(
     }
   }
 
-  if (before.discount !== after.discount) {
-    out.push(entry(actor, 'discount_changed', `Descuento: ${before.discount} → ${after.discount}`));
+  const dBefore = num(before.discount);
+  const dAfter = num(after.discount);
+  if (dBefore !== dAfter) {
+    out.push(entry(actor, 'discount_changed', `Descuento: ${dBefore} → ${dAfter}`));
   }
   if (before.paymentMethod !== after.paymentMethod) {
     out.push(
       entry(actor, 'payment_changed', `Medio de pago: ${before.paymentMethod} → ${after.paymentMethod}`)
     );
   }
-  if (before.status !== after.status) {
-    if (CANCELLED_STATUSES.has(after.status)) {
+  const wasCancelled = CANCELLED_STATUSES.has(before.status);
+  const isCancelled = CANCELLED_STATUSES.has(after.status);
+  if (before.status !== after.status && !(wasCancelled && isCancelled)) {
+    if (isCancelled) {
       out.push(entry(actor, 'cancelled', `Pedido cancelado${reason ? `: ${reason}` : ''}`));
     } else {
       out.push(entry(actor, 'status_changed', `Estado: ${before.status} → ${after.status}`));
