@@ -4,6 +4,7 @@ import { applyStockDeltas, InsufficientStockError, type StockDelta } from '@/lib
 import type { HistoryEntry, OrderSnapshot } from '@/lib/order-history';
 import Order, { type IOrderDocument } from '@/models/Order';
 import Product from '@/models/Product';
+import { isObjectIdString } from '@/lib/input-validation';
 
 /**
  * Shared machinery for the admin order mutations (edit, cancel, status change,
@@ -94,9 +95,14 @@ function stockLabel(item: StockItem): string {
   return 'Stock general';
 }
 
+/** The line's product id as a string; '' when it is missing (never the string "undefined"). */
+function productIdOf(item: StockItem): string {
+  return item.productId == null ? '' : String(item.productId);
+}
+
 function targetKey(item: StockItem): string {
   const variant = item.variantId ? `id:${String(item.variantId)}` : item.variantName ? `name:${item.variantName}` : '';
-  return `${String(item.productId)}|${variant}`;
+  return `${productIdOf(item)}|${variant}`;
 }
 
 interface DeltaOptions {
@@ -138,17 +144,19 @@ export async function itemDeltas(
   const moving = [...net.values()].filter((e) => e.qty !== 0);
   if (moving.length === 0) return [];
 
-  const ids = [...new Set(moving.map((e) => String(e.item.productId)))];
+  // Legacy lines may hold an empty/invalid productId (Mongoose hydrates '' as undefined):
+  // only valid ids are queried; the others resolve to "missing product" below.
+  const ids = [...new Set(moving.map((e) => productIdOf(e.item)).filter(isObjectIdString))];
   const query = Product.find({ _id: { $in: ids } })
     .select('name stock variants._id variants.name')
     .lean();
-  const products = await (session ? query.session(session) : query);
+  const products = ids.length ? await (session ? query.session(session) : query) : [];
   const byId = new Map(products.map((p) => [String(p._id), p]));
 
   const out: ItemDelta[] = [];
   for (const { item, qty } of moving) {
-    const productId = String(item.productId);
-    const product = byId.get(productId);
+    const productId = productIdOf(item);
+    const product = isObjectIdString(productId) ? byId.get(productId) : undefined;
     const label = stockLabel(item);
     if (!product) {
       if (qty > 0 && !options.skipMissing) {

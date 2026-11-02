@@ -246,6 +246,60 @@ for (const topo of topologies) {
       });
     });
 
+    describe('orders with an empty productId line (legacy data)', () => {
+      /** Adds a raw `productId: ''` line next to the valid one (Mongoose would not store it). */
+      async function withEmptyLine(orderId: Types.ObjectId) {
+        await Order.collection.updateOne(
+          { _id: orderId },
+          {
+            $push: {
+              items: {
+                _id: new Types.ObjectId(),
+                productId: '',
+                name: 'Producto viejo',
+                qty: 1,
+                appliedPriceType: 'retail',
+                unitPrice: 5000,
+                subtotal: 5000,
+              },
+            } as never,
+          }
+        );
+      }
+
+      it('PATCH cancel returns 200 and restocks the valid line once', async () => {
+        const { token } = await makeUser('admin');
+        const p = await makeProduct(10);
+        const o = await makeOrder(p, { status: 'autorizado', qty: 2 });
+        await withEmptyLine(o._id);
+
+        const res = await detail.PATCH(req('PATCH', `/api/admin/orders/${o._id}`, token, { action: 'cancel' }), ctx(String(o._id)));
+        expect(res.status).toBe(200);
+        expect(await variantStock(p)).toBe(12);
+        expect((await Order.findById(o._id).lean())!.status).toBe('cancelado');
+
+        const again = await detail.PATCH(req('PATCH', `/api/admin/orders/${o._id}`, token, { action: 'cancel' }), ctx(String(o._id)));
+        expect(again.status).toBe(409);
+        expect(await variantStock(p)).toBe(12);
+      });
+
+      it('list PUT transitions return 200 and move only the valid line', async () => {
+        const { token } = await makeUser('admin');
+        const p = await makeProduct(10);
+        const o = await makeOrder(p, { origin: 'web', status: 'pendiente', qty: 3 });
+        await withEmptyLine(o._id);
+
+        const done = await list.PUT(req('PUT', '/api/admin/orders', token, { id: String(o._id), status: 'completada' }));
+        expect(done.status).toBe(200);
+        expect(await variantStock(p)).toBe(7);
+
+        const back = await list.PUT(req('PUT', '/api/admin/orders', token, { id: String(o._id), status: 'cancelada' }));
+        expect(back.status).toBe(200);
+        expect(await variantStock(p)).toBe(10);
+        expect((await Order.findById(o._id).lean())!.status).toBe('cancelada');
+      });
+    });
+
     describe('existing admin behaviour', () => {
       it('GET list returns every order with the same shape, status filter and pagination', async () => {
         const { token } = await makeUser('admin');
