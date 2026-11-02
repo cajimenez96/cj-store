@@ -19,8 +19,9 @@ export class InsufficientStockError extends Error {
   readonly item: StockDelta;
   readonly available: number;
 
-  constructor(item: StockDelta, available: number, productName?: string) {
-    const label = item.variantId || item.variantName ? `Variante ${item.variantName ?? item.variantId}` : 'Stock general';
+  constructor(item: StockDelta, available: number, productName?: string, variantName?: string) {
+    const label =
+      item.variantId || item.variantName ? `Variante ${item.variantName ?? variantName ?? item.variantId}` : 'Stock general';
     super(
       `Stock insuficiente para "${productName ?? item.productId}" (${label}). ` +
         `Disponible: ${available}, Requerido: ${item.qty}.`
@@ -128,7 +129,7 @@ async function failureFor(d: StockDelta, t: Target, session: ClientSession | nul
   if (!variant) {
     return new Error(`Variante "${describeVariant(d)}" no encontrada en el producto "${d.productId}"`);
   }
-  return new InsufficientStockError(d, Math.max(0, variant.stock ?? 0), product.name);
+  return new InsufficientStockError(d, Math.max(0, variant.stock ?? 0), product.name, variant.name);
 }
 
 /**

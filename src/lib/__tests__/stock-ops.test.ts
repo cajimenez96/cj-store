@@ -171,6 +171,19 @@ for (const topo of topologies) {
       expect(await variantStock(p._id, full._id)).toBe(5);
     });
 
+    it('the insufficient-stock message names the variant by its name when the caller gave only variantId', async () => {
+      const empty = variant({ name: 'Rojo 42', stock: 0 });
+      const p = await makeProduct([empty]);
+
+      const err = await run((s) =>
+        applyStockDeltas([{ productId: String(p._id), variantId: String(empty._id), qty: 1 }], s)
+      ).catch((e) => e);
+
+      expect(err).toBeInstanceOf(InsufficientStockError);
+      expect((err as Error).message).toContain('Variante Rojo 42');
+      expect((err as Error).message).not.toContain(String(empty._id));
+    });
+
     it('legacy product without variants uses product-level stock', async () => {
       const p = await makeProduct([], { stock: 4, totalStock: 4 });
 
