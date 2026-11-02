@@ -8,6 +8,8 @@ import Order from '@/models/Order';
 import Product from '@/models/Product';
 import SalesRecord from '@/models/SalesRecord';
 import mongoose, { Types, type ClientSession } from 'mongoose';
+import { isPlainObject, isObjectIdString, optionalString, toNumber } from '@/lib/input-validation';
+import { isReplicaSet } from '@/lib/transaction';
 
 /** Validated order line, ready to be stored on the Order. */
 interface SaleLine {
@@ -32,14 +34,6 @@ interface SaleDelta {
   delta: StockDelta;
   productName: string;
   label: string;
-}
-
-function isReplicaSet(): boolean {
-  const client = mongoose.connection?.getClient() as unknown as {
-    topology?: { description?: { type?: unknown } };
-  };
-  const topologyType = client?.topology?.description?.type;
-  return typeof topologyType === 'string' && topologyType.includes('ReplicaSet');
 }
 
 function badRequest(error: string, message: string) {
@@ -71,27 +65,6 @@ interface SaleInput {
 }
 
 type Parsed<T> = { ok: true; value: T } | { ok: false; response: NextResponse };
-
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v);
-}
-
-/** Numbers, or strings holding one (the POS historically accepted "2"); anything else is NaN. */
-function toNumber(v: unknown): number {
-  if (typeof v === 'number') return v;
-  if (typeof v === 'string' && v.trim() !== '') return Number(v);
-  return NaN;
-}
-
-/** Only a 24-hex string is an id; objects such as {"$ne": null} never reach a query. */
-function isObjectIdString(v: unknown): v is string {
-  return typeof v === 'string' && /^[0-9a-fA-F]{24}$/.test(v) && mongoose.isValidObjectId(v);
-}
-
-function optionalString(v: unknown): { ok: boolean; value?: string } {
-  if (v === undefined || v === null) return { ok: true };
-  return typeof v === 'string' ? { ok: true, value: v } : { ok: false };
-}
 
 function parseItem(item: unknown, n: number): Parsed<SaleInputItem> {
   const fail = (message: string): Parsed<SaleInputItem> => ({ ok: false, response: badRequest('BAD_REQUEST', message) });
