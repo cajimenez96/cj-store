@@ -527,7 +527,7 @@ export default function AdminAccountingPage() {
                       Ingresos en Efectivo
                     </span>
                     <span className="font-extrabold text-[#007d48] text-base block mt-0.5">
-                      +{formatPrice(data.summary.incomeCash)}
+                      {signed(data.summary.incomeCash, '+')}
                     </span>
                   </div>
                   {isAdminViewer && (
@@ -536,7 +536,7 @@ export default function AdminAccountingPage() {
                         Egresos en Efectivo
                       </span>
                       <span className="font-extrabold text-[#d30005] text-base block mt-0.5">
-                        -{formatPrice(expenseCash)}
+                        {signed(expenseCash, '-')}
                       </span>
                     </div>
                   )}
@@ -569,7 +569,7 @@ export default function AdminAccountingPage() {
                       Cobros por Transferencia
                     </span>
                     <span className="font-extrabold text-[#007d48] text-base block mt-0.5">
-                      +{formatPrice(data.summary.incomeTransfer)}
+                      {signed(data.summary.incomeTransfer, '+')}
                     </span>
                   </div>
                   {isAdminViewer && (
@@ -578,7 +578,7 @@ export default function AdminAccountingPage() {
                         Pagos por Transferencia
                       </span>
                       <span className="font-extrabold text-[#d30005] text-base block mt-0.5">
-                        -{formatPrice(expenseTransfer)}
+                        {signed(expenseTransfer, '-')}
                       </span>
                     </div>
                   )}
@@ -681,8 +681,8 @@ export default function AdminAccountingPage() {
                           <td className="py-3 px-4 text-right">{row.salesCount}</td>
                           <td className="py-3 px-4 text-right">{row.units}</td>
                           <td className="py-3 px-4 text-right font-black">{formatPrice(row.totalSold)}</td>
-                          <td className="py-3 px-4 text-right text-[#007d48]">+{formatPrice(row.above)}</td>
-                          <td className="py-3 px-4 text-right text-[#d30005]">-{formatPrice(row.below)}</td>
+                          <td className="py-3 px-4 text-right text-[#007d48]">{signed(row.above, '+')}</td>
+                          <td className="py-3 px-4 text-right text-[#d30005]">{signed(row.below, '-')}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -823,8 +823,7 @@ export default function AdminAccountingPage() {
                                   isIncome ? 'text-[#007d48]' : 'text-[#d30005]'
                                 }`}
                               >
-                                {isIncome ? '+' : '-'}
-                                {formatPrice(tx.amount)}
+                                {signed(tx.amount, isIncome ? '+' : '-')}
                               </span>
                             </td>
 
