@@ -23,6 +23,7 @@ import type { IProductImage } from '@/models/Product';
 import { ImageUploader } from './ImageUploader';
 import { toast } from '@/components/ui/sonner';
 import { generateVariantCombinations, generateSku, formatVariantLabel, formatOptionLabel } from '@/lib/variants';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 interface OptionItem {
   _id: string;
@@ -61,6 +62,7 @@ interface FormVariant {
   sku: string;
   options: { key: string; value: string }[];
   retailPrice: number | '';
+  listPrice?: number | '';
   wholesalePrice?: number | '';
   stock: number | '';
   active: boolean;
@@ -119,9 +121,9 @@ export const ProductForm: React.FC<ProductFormProps> = ({
   // Specs Fields { [key]: value }
   const [specsMap, setSpecsMap] = useState<Record<string, any>>({});
 
-  // Wholesale Fields
+  // Wholesale Fields (configurable per product via Block 3)
   const [wholesaleEnabled, setWholesaleEnabled] = useState<boolean>(
-    initialData?.wholesale?.enabled ?? Boolean(initialData?.wholesalePrice)
+    Boolean(initialData?.wholesale?.enabled)
   );
   const [wholesaleMinQty, setWholesaleMinQty] = useState<number>(
     initialData?.wholesale?.minQty || 5
@@ -146,6 +148,9 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       initialData?.priceRange?.min ??
       ''
   );
+  const [simpleListPrice, setSimpleListPrice] = useState<number | ''>(
+    initialData?.variants?.[0]?.listPrice ?? initialData?.listPrice ?? ''
+  );
   const [simpleWholesalePrice, setSimpleWholesalePrice] = useState<number | ''>(
     initialData?.variants?.[0]?.wholesalePrice ?? initialData?.wholesalePrice ?? ''
   );
@@ -156,6 +161,8 @@ export const ProductForm: React.FC<ProductFormProps> = ({
 
   // Mass action helpers
   const [bulkPriceInput, setBulkPriceInput] = useState<string>('');
+  const [bulkListPriceInput, setBulkListPriceInput] = useState<string>('');
+  const [bulkWholesalePriceInput, setBulkWholesalePriceInput] = useState<string>('');
   const [bulkStockInput, setBulkStockInput] = useState<string>('');
 
   // 1. Load initial reference data
@@ -189,6 +196,28 @@ export const ProductForm: React.FC<ProductFormProps> = ({
   // 2. Map initial specs and variants when initialData is present
   useEffect(() => {
     if (initialData) {
+      const resolvedSimplePrice =
+        initialData.variants?.[0]?.retailPrice ??
+        initialData.retailPrice ??
+        initialData.priceRange?.min ??
+        '';
+      const resolvedSimpleListPrice =
+        initialData.variants?.[0]?.listPrice ??
+        initialData.listPrice ??
+        '';
+      const resolvedSimpleWholesalePrice =
+        initialData.variants?.[0]?.wholesalePrice ??
+        initialData.wholesalePrice ??
+        '';
+
+      setSimplePrice(resolvedSimplePrice);
+      setSimpleListPrice(resolvedSimpleListPrice);
+      setSimpleWholesalePrice(resolvedSimpleWholesalePrice);
+      setWholesaleEnabled(Boolean(initialData.wholesale?.enabled));
+      if (initialData.wholesale?.minQty) {
+        setWholesaleMinQty(initialData.wholesale.minQty);
+      }
+
       // Specs
       if (Array.isArray(initialData.specs)) {
         const m: Record<string, any> = {};
@@ -206,7 +235,8 @@ export const ProductForm: React.FC<ProductFormProps> = ({
             sku: v.sku,
             options: v.options || [],
             retailPrice: v.retailPrice,
-            wholesalePrice: v.wholesalePrice,
+            listPrice: v.listPrice ?? '',
+            wholesalePrice: v.wholesalePrice ?? '',
             stock: v.stock,
             active: v.active !== false,
           }))
@@ -288,6 +318,12 @@ export const ProductForm: React.FC<ProductFormProps> = ({
     }
 
     const defaultPrice = Number(simplePrice) || (variants[0]?.retailPrice as number) || 0;
+    const defaultListPrice =
+      simpleListPrice !== ''
+        ? Number(simpleListPrice)
+        : variants[0]?.listPrice !== undefined && variants[0]?.listPrice !== ''
+          ? Number(variants[0].listPrice)
+          : undefined;
     const defaultWsPrice = wholesaleEnabled
       ? Number(simpleWholesalePrice) || (variants[0]?.wholesalePrice as number) || undefined
       : undefined;
@@ -296,7 +332,8 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       axesForGeneration,
       slug || name,
       defaultPrice,
-      defaultWsPrice
+      defaultWsPrice,
+      defaultListPrice
     );
 
     // Merge with existing variants to preserve stock and price if combination matches
@@ -321,6 +358,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
           _id: existing._id,
           sku: existing.sku || gen.sku,
           retailPrice: existing.retailPrice,
+          listPrice: existing.listPrice,
           wholesalePrice: existing.wholesalePrice,
           stock: existing.stock,
           active: existing.active,
@@ -329,6 +367,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       return {
         ...gen,
         retailPrice: defaultPrice,
+        listPrice: defaultListPrice,
         wholesalePrice: defaultWsPrice,
       };
     });
@@ -347,14 +386,41 @@ export const ProductForm: React.FC<ProductFormProps> = ({
   };
 
   const handleApplyBulkPrice = () => {
-    const num = Number(bulkPriceInput);
-    if (isNaN(num) || num < 0) {
+    const parsed = parsePriceInput(bulkPriceInput);
+    if (parsed === '' || isNaN(parsed) || parsed < 0) {
       toast.error('Ingresá un precio válido');
       return;
     }
-    setVariants((prev) => prev.map((v) => ({ ...v, retailPrice: num })));
+    setVariants((prev) => prev.map((v) => ({ ...v, retailPrice: parsed })));
     setBulkPriceInput('');
-    toast.success(`Precio minorista $${num} aplicado a todas las variantes`);
+    toast.success(`Precio $${formatPriceInput(parsed)} aplicado a todas las variantes`);
+  };
+
+  const handleApplyBulkListPrice = () => {
+    const parsed = parsePriceInput(bulkListPriceInput);
+    if (parsed === '') {
+      setVariants((prev) => prev.map((v) => ({ ...v, listPrice: '' })));
+      toast.success('Precio de lista limpiado en todas las variantes');
+      return;
+    }
+    if (isNaN(parsed) || parsed < 0) {
+      toast.error('Ingresá un precio de lista válido');
+      return;
+    }
+    setVariants((prev) => prev.map((v) => ({ ...v, listPrice: parsed })));
+    setBulkListPriceInput('');
+    toast.success(`Precio de lista $${formatPriceInput(parsed)} aplicado a todas las variantes`);
+  };
+
+  const handleApplyBulkWholesalePrice = () => {
+    const parsed = parsePriceInput(bulkWholesalePriceInput);
+    if (parsed === '' || isNaN(parsed) || parsed < 0) {
+      toast.error('Ingresá un precio mayorista válido');
+      return;
+    }
+    setVariants((prev) => prev.map((v) => ({ ...v, wholesalePrice: parsed })));
+    setBulkWholesalePriceInput('');
+    toast.success(`Precio mayorista $${formatPriceInput(parsed)} aplicado a todas las variantes`);
   };
 
   // Stored variants keep their live stock (the server ignores the form value for them),
@@ -392,6 +458,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
     // Verify variants or simple stock
     let finalVariants: any[] = [];
     let finalRetailPrice = 0;
+    let finalListPrice: number | undefined = undefined;
     let finalWholesalePrice: number | undefined = undefined;
 
     if (hasAxes) {
@@ -403,7 +470,11 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       // Check variant prices
       for (const v of variants) {
         if (v.retailPrice === '' || Number(v.retailPrice) <= 0) {
-          toast.error(`La variante ${v.sku} debe tener un precio minorista mayor a 0`);
+          toast.error(`La variante ${v.sku} debe tener un precio mayor a 0`);
+          return;
+        }
+        if (v.listPrice !== undefined && v.listPrice !== '' && Number(v.listPrice) < 0) {
+          toast.error(`El precio de lista de ${v.sku} no puede ser negativo`);
           return;
         }
         if (wholesaleEnabled && (v.wholesalePrice === '' || Number(v.wholesalePrice) <= 0)) {
@@ -411,7 +482,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
           return;
         }
         if (wholesaleEnabled && Number(v.wholesalePrice) >= Number(v.retailPrice)) {
-          toast.error(`El precio mayorista de ${v.sku} debe ser menor al minorista`);
+          toast.error(`El precio mayorista de ${v.sku} debe ser menor al precio base`);
           return;
         }
       }
@@ -419,16 +490,25 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       finalVariants = variants.map((v) => ({
         ...v,
         retailPrice: Number(v.retailPrice),
+        listPrice: v.listPrice !== undefined && v.listPrice !== '' ? Number(v.listPrice) : undefined,
         wholesalePrice: wholesaleEnabled && v.wholesalePrice !== '' ? Number(v.wholesalePrice) : undefined,
         stock: Math.max(0, Number(v.stock) || 0),
       }));
 
       finalRetailPrice = Number(variants[0].retailPrice);
+      finalListPrice =
+        variants[0].listPrice !== undefined && variants[0].listPrice !== ''
+          ? Number(variants[0].listPrice)
+          : undefined;
       finalWholesalePrice = wholesaleEnabled ? Number(variants[0].wholesalePrice) : undefined;
     } else {
       // Simple product without axes
       if (simplePrice === '' || Number(simplePrice) <= 0) {
-        toast.error('Ingresá un precio minorista válido para el producto');
+        toast.error('Ingresá un precio válido para el producto');
+        return;
+      }
+      if (simpleListPrice !== '' && Number(simpleListPrice) < 0) {
+        toast.error('El precio de lista no puede ser negativo');
         return;
       }
       if (wholesaleEnabled && (simpleWholesalePrice === '' || Number(simpleWholesalePrice) <= 0)) {
@@ -436,11 +516,12 @@ export const ProductForm: React.FC<ProductFormProps> = ({
         return;
       }
       if (wholesaleEnabled && Number(simpleWholesalePrice) >= Number(simplePrice)) {
-        toast.error('El precio mayorista debe ser menor al precio minorista');
+        toast.error('El precio mayorista debe ser menor al precio base');
         return;
       }
 
       finalRetailPrice = Number(simplePrice);
+      finalListPrice = simpleListPrice !== '' ? Number(simpleListPrice) : undefined;
       finalWholesalePrice = wholesaleEnabled ? Number(simpleWholesalePrice) : undefined;
 
       finalVariants = [
@@ -450,6 +531,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
           sku: simpleSku.trim() || generateSku(slug || name, []),
           options: [],
           retailPrice: finalRetailPrice,
+          listPrice: finalListPrice,
           wholesalePrice: finalWholesalePrice,
           stock: Math.max(0, Number(simpleStock) || 0),
           active: true,
@@ -473,6 +555,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
         brandId: brandId || undefined,
         active,
         isClearance,
+        showListPrice: Boolean(finalListPrice && finalListPrice > 0),
         images,
         specs: specsArray,
         wholesale: {
@@ -481,6 +564,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
         },
         variants: finalVariants,
         retailPrice: finalRetailPrice,
+        listPrice: finalListPrice,
         wholesalePrice: finalWholesalePrice,
         stock: finalVariants.reduce((acc, curr) => acc + curr.stock, 0),
       };
@@ -738,21 +822,32 @@ export const ProductForm: React.FC<ProductFormProps> = ({
             {/* CASO A: Sin ejes de variantes (Producto Simple: Crema, Gel, Accesorio Único) */}
             {!hasAxes ? (
               <div className="space-y-4 bg-[#fafafa] p-5 border border-[#e5e5e5]">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-xs font-bold uppercase text-[#111111] mb-1">
-                      Precio Minorista ($) *
+                      Precio ($) *
                     </label>
                     <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      placeholder="Ej: 15000"
-                      value={simplePrice}
-                      onChange={(e) =>
-                        setSimplePrice(e.target.value === '' ? '' : Number(e.target.value))
-                      }
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="Ej: 15.000"
+                      value={formatPriceInput(simplePrice)}
+                      onChange={(e) => setSimplePrice(parsePriceInput(e.target.value))}
                       required
+                      className="w-full bg-white text-[#111111] text-sm font-extrabold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-[#707072] mb-1">
+                      Precio de Lista ($)
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="Ej: 18.000 (opcional)"
+                      value={formatPriceInput(simpleListPrice)}
+                      onChange={(e) => setSimpleListPrice(parsePriceInput(e.target.value))}
                       className="w-full bg-white text-[#111111] text-sm font-extrabold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
                     />
                   </div>
@@ -763,16 +858,11 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                         Precio Mayorista ($) *
                       </label>
                       <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        placeholder="Ej: 11000"
-                        value={simpleWholesalePrice}
-                        onChange={(e) =>
-                          setSimpleWholesalePrice(
-                            e.target.value === '' ? '' : Number(e.target.value)
-                          )
-                        }
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="Ej: 11.000"
+                        value={formatPriceInput(simpleWholesalePrice)}
+                        onChange={(e) => setSimpleWholesalePrice(parsePriceInput(e.target.value))}
                         required
                         className="w-full bg-white text-[#007d48] text-sm font-extrabold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#007d48]"
                       />
@@ -892,10 +982,13 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                         {/* Apply Price Bulk */}
                         <div className="flex items-center gap-1">
                           <input
-                            type="number"
+                            type="text"
+                            inputMode="numeric"
                             placeholder="Precio común"
-                            value={bulkPriceInput}
-                            onChange={(e) => setBulkPriceInput(e.target.value)}
+                            value={formatPriceInput(bulkPriceInput)}
+                            onChange={(e) =>
+                              setBulkPriceInput(String(parsePriceInput(e.target.value)))
+                            }
                             className="w-28 bg-white text-xs p-1.5 border border-[#e5e5e5]"
                           />
                           <button
@@ -906,6 +999,50 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                             Aplicar $
                           </button>
                         </div>
+
+                        {/* Apply List Price Bulk */}
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="Precio lista común"
+                            value={formatPriceInput(bulkListPriceInput)}
+                            onChange={(e) =>
+                              setBulkListPriceInput(String(parsePriceInput(e.target.value)))
+                            }
+                            className="w-32 bg-white text-xs p-1.5 border border-[#e5e5e5]"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleApplyBulkListPrice}
+                            className="px-2.5 py-1.5 bg-[#111111] text-white text-[11px] font-bold uppercase cursor-pointer"
+                          >
+                            Aplicar Lista
+                          </button>
+                        </div>
+
+                        {/* Apply Wholesale Price Bulk */}
+                        {wholesaleEnabled && (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="Mayorista común"
+                              value={formatPriceInput(bulkWholesalePriceInput)}
+                              onChange={(e) =>
+                                setBulkWholesalePriceInput(String(parsePriceInput(e.target.value)))
+                              }
+                              className="w-28 bg-white text-xs p-1.5 border border-[#e5e5e5]"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleApplyBulkWholesalePrice}
+                              className="px-2.5 py-1.5 bg-[#007d48] text-white text-[11px] font-bold uppercase cursor-pointer"
+                            >
+                              Aplicar May.
+                            </button>
+                          </div>
+                        )}
 
                         {/* Apply Stock Bulk */}
                         <div className="flex items-center gap-1">
@@ -934,7 +1071,8 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                           <tr>
                             <th className="p-3">Variante</th>
                             <th className="p-3">SKU</th>
-                            <th className="p-3">Precio Minorista *</th>
+                            <th className="p-3">Precio *</th>
+                            <th className="p-3">Precio de Lista</th>
                             {wholesaleEnabled && <th className="p-3">Precio Mayorista *</th>}
                             <th className="p-3">Stock *</th>
                             <th className="p-3 text-center">Activa</th>
@@ -956,30 +1094,46 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                               </td>
                               <td className="p-2">
                                 <input
-                                  type="number"
-                                  min="0"
-                                  value={v.retailPrice}
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={formatPriceInput(v.retailPrice)}
                                   onChange={(e) =>
                                     handleVariantChange(
                                       idx,
                                       'retailPrice',
-                                      e.target.value === '' ? '' : Number(e.target.value)
+                                      parsePriceInput(e.target.value)
                                     )
                                   }
                                   className="w-28 bg-white font-bold p-1.5 border border-[#e5e5e5] text-[#111111]"
                                 />
                               </td>
+                              <td className="p-2">
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  placeholder="Opcional"
+                                  value={formatPriceInput(v.listPrice)}
+                                  onChange={(e) =>
+                                    handleVariantChange(
+                                      idx,
+                                      'listPrice',
+                                      parsePriceInput(e.target.value)
+                                    )
+                                  }
+                                  className="w-28 bg-white font-bold p-1.5 border border-[#e5e5e5] text-[#707072]"
+                                />
+                              </td>
                               {wholesaleEnabled && (
                                 <td className="p-2">
                                   <input
-                                    type="number"
-                                    min="0"
-                                    value={v.wholesalePrice ?? ''}
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={formatPriceInput(v.wholesalePrice)}
                                     onChange={(e) =>
                                       handleVariantChange(
                                         idx,
                                         'wholesalePrice',
-                                        e.target.value === '' ? '' : Number(e.target.value)
+                                        parsePriceInput(e.target.value)
                                       )
                                     }
                                     className="w-28 bg-white font-bold p-1.5 border border-[#e5e5e5] text-[#007d48]"
@@ -1033,7 +1187,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
 
         {/* Right Column (1 Col): Mayorista, Imágenes & Estado */}
         <div className="space-y-8">
-          {/* BLOQUE 3: Reglas Mayoristas */}
+          {/* BLOQUE 3: Configuración Mayorista (opcional por producto) */}
           <div className="bg-white border border-[#e5e5e5] p-6 space-y-4 shadow-sm">
             <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#111111] flex items-center gap-2">
               <Percent className="w-4 h-4 text-[#007d48]" />
@@ -1047,7 +1201,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                     Venta Mayorista
                   </span>
                   <p className="text-[11px] text-[#707072]">
-                    Permite precios diferenciales por volumen
+                    Habilita precio mayorista opcional para este producto
                   </p>
                 </div>
                 <input

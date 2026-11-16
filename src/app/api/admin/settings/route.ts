@@ -52,6 +52,7 @@ export async function PUT(req: NextRequest) {
       bankName,
       minStockAlert,
       wholesaleMinPairs,
+      showWholesaleInCart,
       shippingInfo,
       enableGenders,
     } = body;
@@ -102,6 +103,7 @@ export async function PUT(req: NextRequest) {
     // Update Inventory & Commercial
     if (minStockAlert !== undefined) settings.minStockAlert = Math.max(0, Number(minStockAlert));
     if (wholesaleMinPairs !== undefined) settings.wholesaleMinPairs = Math.max(1, Number(wholesaleMinPairs));
+    if (showWholesaleInCart !== undefined) settings.showWholesaleInCart = Boolean(showWholesaleInCart);
     if (shippingInfo !== undefined) settings.shippingInfo = shippingInfo.trim();
     if (enableGenders !== undefined) settings.enableGenders = Boolean(enableGenders);
 

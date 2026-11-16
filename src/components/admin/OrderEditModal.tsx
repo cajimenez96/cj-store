@@ -422,7 +422,10 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, 
                           <p className="text-[10px] text-[#707072]">{brandName}</p>
                         )}
                         <p className="text-[#707072] text-[10px] mt-0.5">
-                          Min: {formatPrice(prod.retailPrice)} • May: {formatPrice(prod.wholesalePrice)}
+                          Precio: {formatPrice(prod.retailPrice)}
+                          {((prod as any).listPrice ?? (prod.variants?.[0] as any)?.listPrice) > 0 && (
+                            <> • Lista: {formatPrice((prod as any).listPrice ?? (prod.variants?.[0] as any)?.listPrice)}</>
+                          )}
                         </p>
                       </div>
                     </div>

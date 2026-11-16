@@ -28,6 +28,7 @@ export interface ISettings {
 
   // Commercial Rules
   wholesaleMinPairs: number;
+  showWholesaleInCart: boolean;
   shippingInfo: string;
   enableGenders: boolean;
 
@@ -137,6 +138,10 @@ const SettingsSchema: Schema<ISettingsDocument> = new Schema(
       default: 5,
       min: 1,
     },
+    showWholesaleInCart: {
+      type: Boolean,
+      default: false,
+    },
     shippingInfo: {
       type: String,
       default: "Envíos a todo el país en 24/48hs",
@@ -151,6 +156,13 @@ const SettingsSchema: Schema<ISettingsDocument> = new Schema(
     timestamps: true,
   },
 );
+
+if (
+  mongoose.models.Settings &&
+  !mongoose.models.Settings.schema.path("showWholesaleInCart")
+) {
+  delete mongoose.models.Settings;
+}
 
 const Settings: Model<ISettingsDocument> =
   mongoose.models.Settings ||

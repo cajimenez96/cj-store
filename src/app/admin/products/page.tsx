@@ -25,7 +25,10 @@ interface AdminProductItem {
   name: string;
   price?: number;
   retailPrice?: number;
+  listPrice?: number;
   wholesalePrice?: number;
+  wholesale?: { enabled: boolean; minQty?: number };
+  variants?: Array<{ retailPrice?: number; listPrice?: number; wholesalePrice?: number }>;
   active: boolean;
   brandId: { _id: string; name: string } | string;
   categoryId?: { _id: string; name: string } | string;
@@ -402,12 +405,31 @@ export default function AdminProductsPage() {
                               <div className="font-extrabold text-sm text-[#111111]">
                                 {formatPrice(prod.retailPrice ?? prod.price)}
                               </div>
-                              {prod.wholesalePrice !== undefined &&
-                                prod.wholesalePrice !== null && (
-                                  <div className="text-[10px] font-bold text-[#007d48]">
-                                    May: {formatPrice(prod.wholesalePrice)}
-                                  </div>
-                                )}
+                              {(() => {
+                                const displayListPrice =
+                                  prod.listPrice ?? prod.variants?.[0]?.listPrice;
+                                const displayWholesalePrice =
+                                  prod.wholesalePrice ?? prod.variants?.[0]?.wholesalePrice;
+                                return (
+                                  <>
+                                    {displayListPrice !== undefined &&
+                                      displayListPrice !== null &&
+                                      Number(displayListPrice) > 0 && (
+                                        <div className="text-[10px] font-bold text-[#707072]">
+                                          Lista: {formatPrice(Number(displayListPrice))}
+                                        </div>
+                                      )}
+                                    {prod.wholesale?.enabled &&
+                                      displayWholesalePrice !== undefined &&
+                                      displayWholesalePrice !== null &&
+                                      Number(displayWholesalePrice) > 0 && (
+                                        <div className="text-[10px] font-bold text-[#007d48]">
+                                          May: {formatPrice(Number(displayWholesalePrice))}
+                                        </div>
+                                      )}
+                                  </>
+                                );
+                              })()}
                             </>
                           )}
                         </td>

@@ -1,13 +1,27 @@
-'use client';
+"use client";
 
-import React from 'react';
-import Image from 'next/image';
-import { ShoppingBag, Plus, Minus, Trash2, ArrowRight, Tag, Zap } from 'lucide-react';
-import { useCart } from '@/context/CartContext';
-import { formatPrice } from '@/utils/formatCurrency';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import React from "react";
+import Image from "next/image";
+import {
+  ShoppingBag,
+  Plus,
+  Minus,
+  Trash2,
+  ArrowRight,
+  Tag,
+  Zap,
+} from "lucide-react";
+import { useCart } from "@/context/CartContext";
+import { useSettings } from "@/context/SettingsContext";
+import { formatPrice } from "@/utils/formatCurrency";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
-const WHOLESALE_THRESHOLD = 5;
+const DEFAULT_WHOLESALE_THRESHOLD = 5;
 
 interface CartDrawerProps {
   onStartCheckout: () => void;
@@ -26,14 +40,22 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onStartCheckout }) => {
     subtotal,
     getEffectivePrice,
   } = useCart();
+  const { settings } = useSettings();
 
-
-  const pairsToWholesale = Math.max(0, WHOLESALE_THRESHOLD - totalPairs);
-  const wholesaleProgressPct = Math.min(100, (totalPairs / WHOLESALE_THRESHOLD) * 100);
+  const wholesaleThreshold =
+    settings.wholesaleMinPairs || DEFAULT_WHOLESALE_THRESHOLD;
+  const pairsToWholesale = Math.max(0, wholesaleThreshold - totalPairs);
+  const wholesaleProgressPct = Math.min(
+    100,
+    (totalPairs / wholesaleThreshold) * 100,
+  );
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && closeCart()}>
-      <SheetContent side="right" className="w-screen max-w-md sm:max-w-md gap-0 p-0 flex flex-col">
+      <SheetContent
+        side="right"
+        className="w-screen max-w-md sm:max-w-md gap-0 p-0 flex flex-col"
+      >
         <SheetHeader className="sr-only">
           <SheetTitle>Tu Carrito ({totalItems})</SheetTitle>
         </SheetHeader>
@@ -45,22 +67,35 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onStartCheckout }) => {
           </h2>
         </div>
 
-        {/* 2. Wholesale Progress Banner */}
-        {items.length > 0 && (
-          <div className={`shrink-0 px-6 py-3 border-b border-[#e5e5e5] ${isWholesale ? 'bg-[#007d48]/10' : 'bg-[#f5f5f5]'}`}>
+        {/* 2. Wholesale Progress Banner (configurable by superadmin) */}
+        {settings.showWholesaleInCart && items.length > 0 && (
+          <div
+            className={`shrink-0 px-6 py-3 border-b border-[#e5e5e5] ${isWholesale ? "bg-[#007d48]/10" : "bg-[#f5f5f5]"}`}
+          >
             <div className="flex items-center justify-between mb-1.5">
-              <span className={`text-[11px] font-bold flex items-center gap-1 ${isWholesale ? 'text-[#007d48]' : 'text-[#707072]'}`}>
+              <span
+                className={`text-[11px] font-bold flex items-center gap-1 ${isWholesale ? "text-[#007d48]" : "text-[#707072]"}`}
+              >
                 {isWholesale ? (
-                  <><Zap className="w-3 h-3 fill-current" /> ¡Precio mayorista activo en todos los productos!</>
+                  <>
+                    <Zap className="w-3 h-3 fill-current" /> ¡Precio mayorista
+                    activo en todos los productos!
+                  </>
                 ) : (
-                  <><Tag className="w-3 h-3" /> {pairsToWholesale} unidad{pairsToWholesale !== 1 ? 'es' : ''} más para precio mayorista</>
+                  <>
+                    <Tag className="w-3 h-3" /> {pairsToWholesale} unidad
+                    {pairsToWholesale !== 1 ? "es" : ""} más para precio
+                    mayorista
+                  </>
                 )}
               </span>
-              <span className="text-[10px] text-[#707072] font-semibold">{totalPairs}/{WHOLESALE_THRESHOLD}</span>
+              <span className="text-[10px] text-[#707072] font-semibold">
+                {totalPairs}/{wholesaleThreshold}
+              </span>
             </div>
             <div className="w-full bg-[#e5e5e5] rounded-full h-1.5">
               <div
-                className={`h-1.5 rounded-full transition-all duration-500 ${isWholesale ? 'bg-[#007d48]' : 'bg-[#111111]'}`}
+                className={`h-1.5 rounded-full transition-all duration-500 ${isWholesale ? "bg-[#007d48]" : "bg-[#111111]"}`}
                 style={{ width: `${wholesaleProgressPct}%` }}
               />
             </div>
@@ -76,7 +111,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onStartCheckout }) => {
                 Tu carrito está vacío
               </p>
               <p className="text-xs text-[#707072] max-w-xs mx-auto">
-                Explorá nuestro catálogo y elegí tus modelos favoritos para agregarlos.
+                Explorá nuestro catálogo y elegí tus modelos favoritos para
+                agregarlos.
               </p>
               <button
                 onClick={closeCart}
@@ -88,9 +124,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onStartCheckout }) => {
           ) : (
             items.map((item) => {
               const effectivePrice = getEffectivePrice(item);
-              const isDiscounted = item.wholesalePrice > 0 && effectivePrice < item.retailPrice;
-              const itemKey = `${item.productId}-${item.variantId || item.variantName || 'default'}`;
-              const variantIdentifier = item.variantId ? { variantId: item.variantId } : item.variantName;
+              const isDiscounted =
+                item.wholesalePrice > 0 && effectivePrice < item.retailPrice;
+              const itemKey = `${item.productId}-${item.variantId || item.variantName || "default"}`;
+              const variantIdentifier = item.variantId
+                ? { variantId: item.variantId }
+                : item.variantName;
 
               return (
                 <div
@@ -119,7 +158,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onStartCheckout }) => {
                         {item.name}
                       </h3>
                       <button
-                        onClick={() => removeFromCart(item.productId, variantIdentifier)}
+                        onClick={() =>
+                          removeFromCart(item.productId, variantIdentifier)
+                        }
                         className="text-[#707072] hover:text-[#d30005] transition-colors p-1 cursor-pointer"
                         title="Eliminar producto"
                       >
@@ -129,7 +170,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onStartCheckout }) => {
 
                     {(item.variantLabel || item.variantName) && (
                       <p className="text-[11px] font-semibold text-[#707072]">
-                        Variante: <strong className="text-[#111111]">{item.variantLabel || item.variantName}</strong>
+                        Variante:{" "}
+                        <strong className="text-[#111111]">
+                          {item.variantLabel || item.variantName}
+                        </strong>
                       </p>
                     )}
 
@@ -137,7 +181,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onStartCheckout }) => {
                       {/* Qty Counter */}
                       <div className="flex items-center border border-[#e5e5e5]">
                         <button
-                          onClick={() => updateQuantity(item.productId, variantIdentifier, item.qty - 1)}
+                          onClick={() =>
+                            updateQuantity(
+                              item.productId,
+                              variantIdentifier,
+                              item.qty - 1,
+                            )
+                          }
                           className="px-2 py-0.5 text-xs font-bold text-[#111111] hover:bg-[#f5f5f5] cursor-pointer"
                         >
                           <Minus className="w-3 h-3" />
@@ -146,7 +196,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onStartCheckout }) => {
                           {item.qty}
                         </span>
                         <button
-                          onClick={() => updateQuantity(item.productId, variantIdentifier, item.qty + 1)}
+                          onClick={() =>
+                            updateQuantity(
+                              item.productId,
+                              variantIdentifier,
+                              item.qty + 1,
+                            )
+                          }
                           disabled={item.qty >= item.maxStock}
                           className="px-2 py-0.5 text-xs font-bold text-[#111111] hover:bg-[#f5f5f5] cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                         >
@@ -156,7 +212,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onStartCheckout }) => {
 
                       {/* Subtotal with optional wholesale highlight */}
                       <div className="text-right">
-                        <span className={`font-extrabold text-sm ${isDiscounted ? 'text-[#007d48]' : 'text-[#111111]'}`}>
+                        <span
+                          className={`font-extrabold text-sm ${isDiscounted ? "text-[#007d48]" : "text-[#111111]"}`}
+                        >
                           {formatPrice(effectivePrice * item.qty)}
                         </span>
                         {isDiscounted && (
@@ -181,15 +239,19 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onStartCheckout }) => {
                 <span>Subtotal</span>
                 <span>{formatPrice(subtotal)}</span>
               </div>
-              {isWholesale && (
+              {settings.showWholesaleInCart && isWholesale && (
                 <div className="flex justify-between text-[#007d48] font-semibold">
-                  <span className="flex items-center gap-1"><Tag className="w-3 h-3" /> Precio mayorista aplicado</span>
+                  <span className="flex items-center gap-1">
+                    <Tag className="w-3 h-3" /> Precio mayorista aplicado
+                  </span>
                   <span>✓</span>
                 </div>
               )}
               <div className="flex justify-between text-[#707072]">
                 <span>Envío</span>
-                <span className="font-semibold text-[#007d48]">A coordinar por WhatsApp</span>
+                <span className="font-semibold text-[#007d48]">
+                  A coordinar por WhatsApp
+                </span>
               </div>
               <div className="flex justify-between font-extrabold text-base text-[#111111] pt-2 border-t border-[#e5e5e5]">
                 <span>Total estimado</span>

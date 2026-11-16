@@ -118,11 +118,21 @@ export async function GET(req: NextRequest) {
         };
       }
 
+      const resolvedListPrice =
+        prod.listPrice ??
+        prod.variants?.[0]?.listPrice;
+
+      const resolvedWholesalePrice =
+        prod.wholesalePrice ??
+        prod.variants?.[0]?.wholesalePrice;
+
       return {
         ...prod,
+        listPrice: resolvedListPrice,
+        wholesalePrice: resolvedWholesalePrice,
         priceRange: prod.priceRange || derived.priceRange,
         totalStock: derived.totalStock,
-        hasWholesale: prod.hasWholesale ?? derived.hasWholesale,
+        hasWholesale: derived.hasWholesale,
         isOutOfStock: derived.totalStock === 0,
       };
     });

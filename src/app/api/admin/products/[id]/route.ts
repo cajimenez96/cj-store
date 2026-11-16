@@ -33,7 +33,22 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ ok: true, data: product });
+    const resolvedListPrice =
+      (product as any).listPrice ??
+      (product as any).variants?.[0]?.listPrice;
+
+    const resolvedWholesalePrice =
+      (product as any).wholesalePrice ??
+      (product as any).variants?.[0]?.wholesalePrice;
+
+    return NextResponse.json({
+      ok: true,
+      data: {
+        ...product,
+        listPrice: resolvedListPrice,
+        wholesalePrice: resolvedWholesalePrice,
+      },
+    });
   } catch (error) {
     console.error('Error al consultar producto:', error);
     return NextResponse.json(

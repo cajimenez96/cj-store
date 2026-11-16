@@ -52,6 +52,7 @@ export default function AdminSettingsPage() {
   // Inventory & Business Rules
   const [minStockAlert, setMinStockAlert] = useState<number | "">(3);
   const [wholesaleMinPairs, setWholesaleMinPairs] = useState<number | "">(5);
+  const [showWholesaleInCart, setShowWholesaleInCart] = useState<boolean>(false);
   const [shippingInfo, setShippingInfo] = useState("");
   const [enableGenders, setEnableGenders] = useState<boolean>(true);
 
@@ -86,6 +87,7 @@ export default function AdminSettingsPage() {
 
           setMinStockAlert(s.minStockAlert ?? 3);
           setWholesaleMinPairs(s.wholesaleMinPairs ?? 5);
+          setShowWholesaleInCart(Boolean(s.showWholesaleInCart));
           setShippingInfo(s.shippingInfo || "");
           setEnableGenders(s.enableGenders ?? true);
         }
@@ -126,6 +128,7 @@ export default function AdminSettingsPage() {
           minStockAlert: minStockAlert === "" ? 3 : Number(minStockAlert),
           wholesaleMinPairs:
             wholesaleMinPairs === "" ? 5 : Number(wholesaleMinPairs),
+          showWholesaleInCart,
           shippingInfo,
           enableGenders,
         }),
@@ -432,6 +435,26 @@ export default function AdminSettingsPage() {
                     Condiciones de compra y promociones activas.
                   </p>
                 </div>
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-[#f9f9f9] border border-[#e5e5e5]">
+                <div className="space-y-1 pr-4">
+                  <h3 className="text-sm font-extrabold text-[#111111]">
+                    Mostrar información mayorista en el carrito
+                  </h3>
+                  <p className="text-xs text-[#707072]">
+                    Si se activa, el carrito mostrará la barra de progreso con la cantidad de unidades necesarias para acceder al precio mayorista.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={showWholesaleInCart}
+                    onChange={(e) => setShowWholesaleInCart(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-[#e5e5e5] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#111111]"></div>
+                </label>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

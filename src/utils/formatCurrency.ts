@@ -35,3 +35,29 @@ export function formatAmount(value: number | string | undefined | null): string 
     maximumFractionDigits: 2,
   });
 }
+
+/**
+ * Formats an integer/numeric input value with Argentine thousands separators ('.'):
+ *   10000000 -> "10.000.000"
+ *   25000    -> "25.000"
+ *   ""       -> ""
+ */
+export function formatPriceInput(value: number | string | undefined | null): string {
+  if (value === undefined || value === null || value === '') return '';
+  const digits = String(value).replace(/\D/g, '');
+  if (!digits) return '';
+  const num = Number(digits);
+  if (isNaN(num)) return '';
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+/**
+ * Parses a dot-formatted price input string back into a number (or '' when empty):
+ *   "10.000.000" -> 10000000
+ *   ""           -> ""
+ */
+export function parsePriceInput(raw: string): number | '' {
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return '';
+  return Number(digits);
+}

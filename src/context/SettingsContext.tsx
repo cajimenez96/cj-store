@@ -31,6 +31,7 @@ export interface StoreSettings {
 
   minStockAlert: number;
   wholesaleMinPairs: number;
+  showWholesaleInCart: boolean;
   shippingInfo: string;
   enableGenders: boolean;
 }
@@ -60,6 +61,7 @@ const DEFAULT_SETTINGS: StoreSettings = {
 
   minStockAlert: 3,
   wholesaleMinPairs: 5,
+  showWholesaleInCart: false,
   shippingInfo: "Envíos a todo el país en 24/48hs",
   enableGenders: true,
 };

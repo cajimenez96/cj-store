@@ -40,7 +40,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose })
   };
 
   const handleConfirmOrder = async (
-    paymentMethod: 'transferencia' | 'efectivo',
+    paymentMethod: 'transferencia' | 'efectivo' | 'tarjeta',
     notes?: string
   ) => {
     setIsSubmittingOrder(true);

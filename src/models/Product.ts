@@ -20,6 +20,7 @@ export interface IVariant {
   name?: string;
   options: IVariantOption[];
   retailPrice: number;
+  listPrice?: number;
   wholesalePrice?: number;
   stock: number;
   active: boolean;
@@ -44,6 +45,7 @@ export interface IProduct {
   brandId?: Types.ObjectId;
   active: boolean;
   isClearance?: boolean;
+  showListPrice?: boolean;
   specs?: ISpecItem[];
   wholesale?: IWholesaleSettings;
   images: IProductImage[];
@@ -60,6 +62,7 @@ export interface IProduct {
   // Legacy fields
   price?: number;
   retailPrice?: number;
+  listPrice?: number;
   wholesalePrice?: number;
   stock?: number;
 
@@ -94,6 +97,7 @@ const VariantSchema = new Schema<IVariant>(
     name: { type: String, trim: true },
     options: { type: [VariantOptionSchema], default: [] },
     retailPrice: { type: Number, required: true, min: 0 },
+    listPrice: { type: Number, min: 0 },
     wholesalePrice: { type: Number, min: 0 },
     stock: { type: Number, required: true, min: 0, default: 0 },
     active: { type: Boolean, default: true },
@@ -147,6 +151,10 @@ const ProductSchema: Schema<IProductDocument> = new Schema(
       default: false,
       index: true,
     },
+    showListPrice: {
+      type: Boolean,
+      default: false,
+    },
     specs: {
       type: [SpecItemSchema],
       default: [],
@@ -179,6 +187,7 @@ const ProductSchema: Schema<IProductDocument> = new Schema(
     // Legacy fields for backward compatibility
     price: { type: Number, min: 0 },
     retailPrice: { type: Number, min: 0 },
+    listPrice: { type: Number, min: 0 },
     wholesalePrice: { type: Number, min: 0 },
     stock: { type: Number, min: 0, default: 0 },
   },
@@ -194,6 +203,14 @@ ProductSchema.index({ 'variants.sku': 1 });
 ProductSchema.index({ slug: 1 }, { unique: true, sparse: true });
 ProductSchema.index({ 'variants.options.key': 1, 'variants.options.value': 1 });
 ProductSchema.index({ name: 'text', description: 'text' });
+
+if (
+  mongoose.models.Product &&
+  (!mongoose.models.Product.schema.path('listPrice') ||
+    !mongoose.models.Product.schema.path('showListPrice'))
+) {
+  delete mongoose.models.Product;
+}
 
 const Product: Model<IProductDocument> =
   mongoose.models.Product || mongoose.model<IProductDocument>('Product', ProductSchema);

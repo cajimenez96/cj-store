@@ -16,15 +16,25 @@ export interface FormattedProduct {
   /** @deprecated Use retailPrice instead */
   price?: number;
   retailPrice: number;
+  listPrice?: number;
   wholesalePrice: number;
   brandId: { _id: string; name: string } | string;
-  categoryId?: { _id: string; name: string; slug?: string; variantAxes?: string[]; imageAxis?: string } | string;
+  categoryId?:
+    | {
+        _id: string;
+        name: string;
+        slug?: string;
+        variantAxes?: string[];
+        imageAxis?: string;
+      }
+    | string;
   images: IProductImage[];
   variants?: any[];
   stock?: number;
   totalStock: number;
   isOutOfStock: boolean;
   isClearance?: boolean;
+  showListPrice?: boolean;
   priceRange?: {
     min: number;
     max: number;
@@ -62,11 +72,27 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     product.priceRange!.min > 0 &&
     product.priceRange!.min !== product.priceRange!.max;
 
-  const minRetail = product.priceRange?.min || product.retailPrice || product.price || 0;
+  const minRetail =
+    product.priceRange?.min || product.retailPrice || product.price || 0;
   const retailPrice = product.retailPrice ?? product.price ?? minRetail;
-  const wholesalePrice = product.wholesalePrice ?? retailPrice;
-  const minWholesaleUnits = product.wholesale?.minUnits ?? 5;
-  const hasWholesale = Boolean(product.hasWholesale || product.wholesale?.enabled || wholesalePrice < retailPrice);
+  const listPrice =
+    product.listPrice ??
+    product.variants?.find(
+      (v) => v.active !== false && v.listPrice != null && v.listPrice > 0,
+    )?.listPrice;
+  const wholesalePrice =
+    product.wholesalePrice ??
+    product.variants?.find(
+      (v) => v.active !== false && v.wholesalePrice != null && v.wholesalePrice > 0,
+    )?.wholesalePrice ??
+    0;
+  const minWholesaleUnits =
+    product.wholesale?.minUnits ?? (product.wholesale as any)?.minQty ?? 5;
+  const hasWholesale = Boolean(
+    product.wholesale?.enabled &&
+    wholesalePrice > 0 &&
+    wholesalePrice < retailPrice,
+  );
 
   // Get primary image or first available
   const primaryImage =
@@ -77,14 +103,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   // Extract option labels for quick preview
   const availableOptions: string[] = [];
   if (Array.isArray(product.variants) && product.variants.length > 0) {
-    const activeVars = product.variants.filter((v) => (v.stock ?? 0) > 0 && v.active !== false);
+    const activeVars = product.variants.filter(
+      (v) => (v.stock ?? 0) > 0 && v.active !== false,
+    );
     const seen = new Set<string>();
     for (const v of activeVars) {
       if (Array.isArray(v.options) && v.options.length > 0) {
         for (const opt of v.options) {
           if (opt.value && !seen.has(opt.value)) {
             seen.add(opt.value);
-            availableOptions.push(formatOptionLabel(opt.label ?? opt.value, opt.unit));
+            availableOptions.push(
+              formatOptionLabel(opt.label ?? opt.value, opt.unit),
+            );
           }
         }
       } else if (v.name && !seen.has(v.name)) {
@@ -97,7 +127,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   // Simple products carry their measure in specs (e.g. volumen: 60 with unit ml)
   if (availableOptions.length === 0) {
     for (const spec of product.specs ?? []) {
-      if (spec.unit) availableOptions.push(formatOptionLabel(spec.label ?? String(spec.value), spec.unit));
+      if (spec.unit)
+        availableOptions.push(
+          formatOptionLabel(spec.label ?? String(spec.value), spec.unit),
+        );
     }
   }
 
@@ -169,7 +202,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               </span>
             ))
           ) : product.totalStock > 0 ? (
-            <span className="text-[10px] font-semibold text-[#007d48]">Disponible</span>
+            <span className="text-[10px] font-semibold text-[#007d48]">
+              Disponible
+            </span>
           ) : (
             <span className="text-[11px] text-[#707072] italic">Agotado</span>
           )}
@@ -192,10 +227,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </div>
         ) : (
           <>
-            <div className="flex items-baseline gap-2 mt-1 flex-wrap">
+            <div className="flex flex-col items-baseline mt-1">
               <span className="font-extrabold text-lg text-[#111111]">
-                {hasRange ? `Desde ${formatPrice(minRetail)}` : formatPrice(retailPrice)}
+                {hasRange
+                  ? `Desde ${formatPrice(minRetail)}`
+                  : formatPrice(retailPrice)}
               </span>
+              {listPrice != null && Number(listPrice) > 0 && (
+                <span className="text-[10px] font-semibold text-[#707072]">
+                  Precio de lista: {formatPrice(Number(listPrice))}
+                </span>
+              )}
               {hasWholesale && (
                 <span className="text-xs font-bold text-[#007d48] bg-[#007d48]/10 px-2 py-0.5 rounded-full">
                   Mayorista: {formatPrice(wholesalePrice)}

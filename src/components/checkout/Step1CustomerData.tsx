@@ -9,6 +9,23 @@ export interface CustomerFormData {
   phone: string;
 }
 
+/**
+ * Validates that a WhatsApp cell phone has exactly 10 numeric digits,
+ * with no spaces, '+', 'e', or special symbols.
+ */
+export function validateWhatsAppPhone(phone: string): string | undefined {
+  if (!phone || phone.length === 0) {
+    return "El teléfono de WhatsApp es obligatorio";
+  }
+  if (!/^\d+$/.test(phone)) {
+    return "Ingresá solo números (sin espacios, + ni símbolos especiales)";
+  }
+  if (phone.length !== 10) {
+    return "El teléfono debe tener exactamente 10 dígitos numéricos (sin 0 ni 15)";
+  }
+  return undefined;
+}
+
 interface Step1CustomerDataProps {
   initialData: CustomerFormData;
   onSubmit: (data: CustomerFormData) => void;
@@ -34,10 +51,9 @@ export const Step1CustomerData: React.FC<Step1CustomerDataProps> = ({
     if (!formData.lastName.trim()) {
       errs.lastName = "El apellido es obligatorio";
     }
-    if (!formData.phone.trim()) {
-      errs.phone = "El teléfono de WhatsApp es obligatorio";
-    } else if (formData.phone.trim().length < 6) {
-      errs.phone = "Ingresá un número de teléfono válido";
+    const phoneError = validateWhatsAppPhone(formData.phone);
+    if (phoneError) {
+      errs.phone = phoneError;
     }
 
     setErrors(errs);
@@ -52,7 +68,11 @@ export const Step1CustomerData: React.FC<Step1CustomerDataProps> = ({
   };
 
   return (
-    <form id="checkout-step1-form" onSubmit={handleSubmit} className="space-y-6">
+    <form
+      id="checkout-step1-form"
+      onSubmit={handleSubmit}
+      className="space-y-6 p-0.5"
+    >
       <div className="space-y-1">
         <h3 className="text-xl font-extrabold uppercase tracking-tight text-[#111111]">
           Tus Datos de Contacto
@@ -123,11 +143,17 @@ export const Step1CustomerData: React.FC<Step1CustomerDataProps> = ({
           <div className="relative">
             <input
               type="tel"
-              placeholder="sin 0 ni 15"
+              inputMode="numeric"
+              placeholder="Ej: 3815218630 (10 dígitos, sin 0 ni 15)"
               value={formData.phone}
-              onChange={(e) =>
-                setFormData({ ...formData, phone: e.target.value })
-              }
+              onChange={(e) => {
+                const nextPhone = e.target.value;
+                setFormData({ ...formData, phone: nextPhone });
+                setErrors((prev) => ({
+                  ...prev,
+                  phone: validateWhatsAppPhone(nextPhone),
+                }));
+              }}
               className={`w-full bg-[#f5f5f5] text-[#111111] text-sm font-medium py-3 pl-10 pr-4 rounded-none border focus:outline-none focus:ring-2 focus:ring-[#111111] ${
                 errors.phone ? "border-[#d30005]" : "border-[#e5e5e5]"
               }`}
@@ -140,8 +166,7 @@ export const Step1CustomerData: React.FC<Step1CustomerDataProps> = ({
             </p>
           ) : (
             <p className="text-[11px] text-[#707072] mt-1">
-              Te servirá para enviar la orden y el comprobante directo por
-              WhatsApp.
+              Ingresá 10 números seguidos sin 0, sin 15 y sin símbolos ({formData.phone.length}/10 dígitos).
             </p>
           )}
         </div>

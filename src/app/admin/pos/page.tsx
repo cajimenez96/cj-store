@@ -42,6 +42,7 @@ interface ProductSearchResult {
   _id: string;
   name: string;
   retailPrice: number;
+  listPrice?: number;
   wholesalePrice: number;
   price?: number;
   variants?: any[];
@@ -354,11 +355,13 @@ export default function AdminPOSPage() {
                               </div>
                               <div className="text-right text-xs flex-shrink-0">
                                 <p className="font-extrabold text-[#111111]">
-                                  Min: {formatPrice(prod.retailPrice ?? prod.price)}
+                                  Precio: {formatPrice(prod.retailPrice ?? prod.price)}
                                 </p>
-                                <p className="text-[#007d48] font-bold">
-                                  May: {formatPrice(prod.wholesalePrice ?? prod.price)}
-                                </p>
+                                {(prod.listPrice ?? prod.variants?.[0]?.listPrice) > 0 && (
+                                  <p className="text-[#707072] font-bold">
+                                    Lista: {formatPrice(prod.listPrice ?? prod.variants?.[0]?.listPrice)}
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </div>

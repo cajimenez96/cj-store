@@ -51,8 +51,8 @@ function refPick(ref: unknown, keys: string[]) {
 function sanitizeProductForSeller(prod: any) {
   return {
     ...pick(prod, [
-      '_id', 'name', 'slug', 'active', 'isClearance', 'totalStock',
-      'hasWholesale', 'price', 'retailPrice', 'wholesalePrice', 'stock',
+      '_id', 'name', 'slug', 'active', 'isClearance', 'showListPrice', 'totalStock',
+      'hasWholesale', 'price', 'retailPrice', 'listPrice', 'wholesalePrice', 'stock',
     ]),
     // Nested objects are allowlisted key by key too (no whole-object pass-through).
     wholesale: prod.wholesale ? pick(prod.wholesale, ['enabled', 'minQty']) : prod.wholesale,
@@ -64,7 +64,7 @@ function sanitizeProductForSeller(prod: any) {
     ),
     variants: (prod.variants ?? []).map((v: Record<string, unknown>) =>
       ({
-        ...pick(v, ['_id', 'sku', 'name', 'retailPrice', 'wholesalePrice', 'stock', 'active']),
+        ...pick(v, ['_id', 'sku', 'name', 'retailPrice', 'listPrice', 'wholesalePrice', 'stock', 'active']),
         options: ((v.options as Record<string, unknown>[] | undefined) ?? []).map((o) =>
           pick(o, ['key', 'value'])
         ),
@@ -146,9 +146,24 @@ export async function GET(req: NextRequest) {
         totalStock = prod.stock;
       }
 
+      const resolvedListPrice =
+        prod.listPrice ??
+        prod.variants?.[0]?.listPrice;
+
+      const resolvedWholesalePrice =
+        prod.wholesalePrice ??
+        prod.variants?.[0]?.wholesalePrice;
+
+      const enriched = {
+        ...prod,
+        listPrice: resolvedListPrice,
+        wholesalePrice: resolvedWholesalePrice,
+        totalStock,
+      };
+
       return isAdmin
-        ? { ...prod, totalStock }
-        : sanitizeProductForSeller({ ...prod, totalStock });
+        ? enriched
+        : sanitizeProductForSeller(enriched);
     });
 
     return NextResponse.json({
@@ -184,11 +199,13 @@ export async function POST(req: NextRequest) {
       slug: userSlug,
       description,
       retailPrice,
+      listPrice,
       wholesalePrice,
       brandId,
       categoryId,
       active,
       isClearance,
+      showListPrice,
       images,
       variants,
       specs,
@@ -240,6 +257,7 @@ export async function POST(req: NextRequest) {
         sku: v.sku || `${productSlug.toUpperCase()}-${idx + 1}`,
         options: Array.isArray(v.options) ? v.options : [],
         retailPrice: Number(v.retailPrice) || Number(retailPrice) || 0,
+        listPrice: v.listPrice !== undefined && v.listPrice !== null && v.listPrice !== '' ? Number(v.listPrice) : undefined,
         wholesalePrice: v.wholesalePrice !== undefined && v.wholesalePrice !== null ? Number(v.wholesalePrice) : undefined,
         stock: Math.max(0, Number(v.stock) || 0),
         active: v.active !== undefined ? Boolean(v.active) : true,
@@ -251,6 +269,7 @@ export async function POST(req: NextRequest) {
           sku: `${productSlug.toUpperCase()}-01`,
           options: [],
           retailPrice: Number(retailPrice) || 0,
+          listPrice: listPrice !== undefined && listPrice !== null && listPrice !== '' ? Number(listPrice) : undefined,
           wholesalePrice: wholesalePrice ? Number(wholesalePrice) : undefined,
           stock: hasDirectStock ? Math.max(0, Number(stock)) : 0,
           active: true,
@@ -262,6 +281,11 @@ export async function POST(req: NextRequest) {
     const isWholesaleEnabled = Boolean(wholesale?.enabled);
     const derived = calculateDerivedProductFields(processedVariants, isWholesaleEnabled);
 
+    const resolvedListPrice =
+      listPrice !== undefined && listPrice !== null && listPrice !== ''
+        ? Number(listPrice)
+        : processedVariants[0]?.listPrice;
+
     const newProduct = await Product.create({
       name: cleanName,
       slug: productSlug,
@@ -271,6 +295,7 @@ export async function POST(req: NextRequest) {
       categoryAncestors,
       active: active !== undefined ? Boolean(active) : true,
       isClearance: isClearance !== undefined ? Boolean(isClearance) : false,
+      showListPrice: showListPrice !== undefined ? Boolean(showListPrice) : Boolean(resolvedListPrice && Number(resolvedListPrice) > 0),
       images,
       specs: Array.isArray(specs) ? specs : [],
       wholesale: {
@@ -284,6 +309,7 @@ export async function POST(req: NextRequest) {
 
       // Legacy fields
       retailPrice: Number(retailPrice) || derived.priceRange.min,
+      listPrice: resolvedListPrice,
       wholesalePrice: wholesalePrice ? Number(wholesalePrice) : undefined,
       stock: hasDirectStock ? Number(stock) : derived.totalStock,
     });
@@ -328,9 +354,11 @@ export async function PUT(req: NextRequest) {
       slug,
       description,
       retailPrice,
+      listPrice,
       wholesalePrice,
       active,
       isClearance,
+      showListPrice,
       images,
       variants,
       specs,
@@ -345,6 +373,7 @@ export async function PUT(req: NextRequest) {
     if (brandId !== undefined) product.brandId = brandId || undefined;
     if (active !== undefined) product.active = Boolean(active);
     if (isClearance !== undefined) product.isClearance = Boolean(isClearance);
+    if (showListPrice !== undefined) product.showListPrice = Boolean(showListPrice);
     if (images !== undefined) product.images = images;
     if (specs !== undefined) product.specs = specs;
 
@@ -383,6 +412,7 @@ export async function PUT(req: NextRequest) {
           name: v.name ?? existing?.name,
           options: Array.isArray(v.options) ? v.options : [],
           retailPrice: Number(v.retailPrice) || 0,
+          listPrice: v.listPrice !== undefined && v.listPrice !== null && v.listPrice !== '' ? Number(v.listPrice) : undefined,
           wholesalePrice: v.wholesalePrice !== undefined && v.wholesalePrice !== null ? Number(v.wholesalePrice) : undefined,
           // Stock of an existing variant only moves through guarded stock operations (sales,
           // orders, the Stock page): the form's value may be stale, so it is ignored here.
@@ -403,6 +433,11 @@ export async function PUT(req: NextRequest) {
 
     // Legacy fields
     if (retailPrice !== undefined) product.retailPrice = Number(retailPrice);
+    if (listPrice !== undefined) {
+      product.listPrice = listPrice !== null && listPrice !== '' ? Number(listPrice) : undefined;
+    } else if (product.variants && product.variants.length > 0) {
+      product.listPrice = product.variants[0].listPrice;
+    }
     if (wholesalePrice !== undefined) product.wholesalePrice = wholesalePrice ? Number(wholesalePrice) : undefined;
     // The legacy product-level `stock` is kept as stored: it is edited from the Stock page only.
 

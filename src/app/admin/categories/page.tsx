@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { AdminNav } from '@/components/admin/AdminNav';
+import React, { useState, useEffect } from "react";
+import { AdminNav } from "@/components/admin/AdminNav";
 import {
   Layers,
   Plus,
@@ -15,9 +15,9 @@ import {
   Info,
   CheckCircle2,
   Package,
-} from 'lucide-react';
-import { toast } from '@/components/ui/sonner';
-import { ResponsiveModal } from '@/components/ui/responsive-modal';
+} from "lucide-react";
+import { toast } from "@/components/ui/sonner";
+import { ResponsiveModal } from "@/components/ui/responsive-modal";
 
 interface AttributeSummary {
   _id: string;
@@ -51,29 +51,33 @@ function slugify(text: string): string {
     .toString()
     .toLowerCase()
     .trim()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/[^\w\-]+/g, '')
-    .replace(/\-\-+/g, '-');
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/[^\w\-]+/g, "")
+    .replace(/\-\-+/g, "-");
 }
 
 export default function AdminCategoriesPage() {
   const [categories, setCategories] = useState<CategoryItem[]>([]);
-  const [availableAttributes, setAvailableAttributes] = useState<AttributeSummary[]>([]);
+  const [availableAttributes, setAvailableAttributes] = useState<
+    AttributeSummary[]
+  >([]);
   const [loading, setLoading] = useState(true);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingCategory, setEditingCategory] = useState<CategoryItem | null>(null);
+  const [editingCategory, setEditingCategory] = useState<CategoryItem | null>(
+    null,
+  );
   const [saving, setSaving] = useState(false);
 
   // Form Fields
-  const [name, setName] = useState('');
-  const [slug, setSlug] = useState('');
-  const [parentId, setParentId] = useState<string>('');
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [parentId, setParentId] = useState<string>("");
   const [variantAxes, setVariantAxes] = useState<string[]>([]);
-  const [imageAxis, setImageAxis] = useState<string>('');
+  const [imageAxis, setImageAxis] = useState<string>("");
   const [specAttributes, setSpecAttributes] = useState<SpecAttributeDef[]>([]);
   const [order, setOrder] = useState<number>(0);
   const [active, setActive] = useState<boolean>(true);
@@ -82,8 +86,8 @@ export default function AdminCategoriesPage() {
     try {
       setLoading(true);
       const [catsRes, attrsRes] = await Promise.all([
-        fetch('/api/admin/categories'),
-        fetch('/api/admin/attributes'),
+        fetch("/api/admin/categories"),
+        fetch("/api/admin/attributes"),
       ]);
 
       const catsJson = await catsRes.json();
@@ -96,8 +100,8 @@ export default function AdminCategoriesPage() {
         setAvailableAttributes(attrsJson.data);
       }
     } catch (err) {
-      console.error('Error al cargar datos:', err);
-      toast.error('Error al cargar categorías y atributos');
+      console.error("Error al cargar datos:", err);
+      toast.error("Error al cargar categorías y atributos");
     } finally {
       setLoading(false);
     }
@@ -109,12 +113,12 @@ export default function AdminCategoriesPage() {
 
   const openCreateModal = (parent?: CategoryItem) => {
     setEditingCategory(null);
-    setName('');
-    setSlug('');
-    setParentId(parent ? parent._id : '');
+    setName("");
+    setSlug("");
+    setParentId(parent ? parent._id : "");
     // Pre-populate configuration from parent if creating a subcategory
     setVariantAxes(parent ? parent.variantAxes || [] : []);
-    setImageAxis(parent ? parent.imageAxis || '' : '');
+    setImageAxis(parent ? parent.imageAxis || "" : "");
     setSpecAttributes(parent ? parent.specAttributes || [] : []);
     setOrder(0);
     setActive(true);
@@ -125,9 +129,9 @@ export default function AdminCategoriesPage() {
     setEditingCategory(cat);
     setName(cat.name);
     setSlug(cat.slug);
-    setParentId(cat.parentId || '');
+    setParentId(cat.parentId || "");
     setVariantAxes(cat.variantAxes || []);
-    setImageAxis(cat.imageAxis || '');
+    setImageAxis(cat.imageAxis || "");
     setSpecAttributes(cat.specAttributes || []);
     setOrder(cat.order || 0);
     setActive(cat.active ?? true);
@@ -146,7 +150,7 @@ export default function AdminCategoriesPage() {
       const updated = variantAxes.filter((a) => a !== axisKey);
       setVariantAxes(updated);
       if (imageAxis === axisKey) {
-        setImageAxis('');
+        setImageAxis("");
       }
     } else {
       setVariantAxes([...variantAxes, axisKey]);
@@ -165,19 +169,19 @@ export default function AdminCategoriesPage() {
   const handleToggleSpecRequired = (specKey: string) => {
     setSpecAttributes(
       specAttributes.map((s) =>
-        s.key === specKey ? { ...s, required: !s.required } : s
-      )
+        s.key === specKey ? { ...s, required: !s.required } : s,
+      ),
     );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      toast.error('El nombre de la categoría es obligatorio');
+      toast.error("El nombre de la categoría es obligatorio");
       return;
     }
     if (!slug.trim()) {
-      toast.error('El slug es obligatorio');
+      toast.error("El slug es obligatorio");
       return;
     }
 
@@ -185,8 +189,8 @@ export default function AdminCategoriesPage() {
     try {
       const url = editingCategory
         ? `/api/admin/categories/${editingCategory._id}`
-        : '/api/admin/categories';
-      const method = editingCategory ? 'PUT' : 'POST';
+        : "/api/admin/categories";
+      const method = editingCategory ? "PUT" : "POST";
 
       const payload = {
         name: name.trim(),
@@ -201,47 +205,48 @@ export default function AdminCategoriesPage() {
 
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
       const json = await res.json();
       if (!json.ok) {
-        throw new Error(json.message || 'Error al guardar categoría');
+        throw new Error(json.message || "Error al guardar categoría");
       }
 
       toast.success(
         editingCategory
           ? `Categoría "${name}" actualizada`
-          : `Categoría "${name}" creada con éxito`
+          : `Categoría "${name}" creada con éxito`,
       );
 
       setIsModalOpen(false);
       await fetchData();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al guardar');
+      toast.error(err instanceof Error ? err.message : "Error al guardar");
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (cat: CategoryItem) => {
-    if (!confirm(`¿Estás seguro de eliminar la categoría "${cat.name}"?`)) return;
+    if (!confirm(`¿Estás seguro de eliminar la categoría "${cat.name}"?`))
+      return;
 
     try {
       const res = await fetch(`/api/admin/categories/${cat._id}`, {
-        method: 'DELETE',
+        method: "DELETE",
       });
       const json = await res.json();
 
       if (!json.ok) {
-        throw new Error(json.message || 'Error al eliminar categoría');
+        throw new Error(json.message || "Error al eliminar categoría");
       }
 
       toast.success(`Categoría "${cat.name}" eliminada`);
       await fetchData();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al eliminar');
+      toast.error(err instanceof Error ? err.message : "Error al eliminar");
     }
   };
 
@@ -251,7 +256,9 @@ export default function AdminCategoriesPage() {
     categories.filter((c) => c.parentId === parentCatId);
 
   // Available select attributes for variant axes
-  const selectAttributes = availableAttributes.filter((a) => a.type === 'select');
+  const selectAttributes = availableAttributes.filter(
+    (a) => a.type === "select",
+  );
 
   return (
     <div className="min-h-screen bg-[#f5f5f5]">
@@ -269,7 +276,8 @@ export default function AdminCategoriesPage() {
                 Categorías del Catálogo
               </h1>
               <p className="text-xs text-[#707072]">
-                Estructurá el árbol de categorías y configurá qué ejes de variantes (talles, colores, volumen) utilizará cada una.
+                Estructurá el árbol de categorías y configurá qué ejes de
+                variantes (talles, colores, volumen) utilizará cada una.
               </p>
             </div>
           </div>
@@ -285,7 +293,8 @@ export default function AdminCategoriesPage() {
         {/* Tree Container */}
         {loading ? (
           <div className="bg-white border border-[#e5e5e5] p-12 text-center text-xs text-[#707072] flex items-center justify-center gap-2">
-            <Loader2 className="w-5 h-5 animate-spin text-[#111111]" /> Cargando árbol de categorías...
+            <Loader2 className="w-5 h-5 animate-spin text-[#111111]" /> Cargando
+            árbol de categorías...
           </div>
         ) : rootCategories.length === 0 ? (
           <div className="bg-white border border-[#e5e5e5] p-12 text-center space-y-3">
@@ -294,7 +303,8 @@ export default function AdminCategoriesPage() {
               No hay categorías creadas
             </h3>
             <p className="text-xs text-[#707072] max-w-md mx-auto">
-              Empezá creando categorías principales como Calzado, Perfumería o Indumentaria.
+              Empezá creando categorías principales como Calzado, Perfumería o
+              Indumentaria.
             </p>
             <button
               onClick={() => openCreateModal()}
@@ -334,7 +344,7 @@ export default function AdminCategoriesPage() {
                       <div className="flex flex-wrap items-center gap-2 text-xs text-[#707072] pt-1">
                         {root.variantAxes && root.variantAxes.length > 0 ? (
                           <span className="inline-flex items-center gap-1 bg-[#111111] text-white text-[11px] font-bold px-2 py-0.5">
-                            Ejes: {root.variantAxes.join(', ')}
+                            Ejes: {root.variantAxes.join(", ")}
                           </span>
                         ) : (
                           <span className="text-[11px] italic text-[#707072]">
@@ -403,7 +413,8 @@ export default function AdminCategoriesPage() {
                               </div>
                               <div className="text-[11px] text-[#707072] flex items-center gap-2 mt-0.5">
                                 <span>
-                                  Ejes: {sub.variantAxes?.join(', ') || 'Heredados'}
+                                  Ejes:{" "}
+                                  {sub.variantAxes?.join(", ") || "Heredados"}
                                 </span>
                                 <span>• {sub.productCount || 0} productos</span>
                               </div>
@@ -441,7 +452,11 @@ export default function AdminCategoriesPage() {
           <ResponsiveModal
             open
             onOpenChange={(open) => !open && setIsModalOpen(false)}
-            title={editingCategory ? `Editar Categoría: ${editingCategory.name}` : 'Nueva Categoría'}
+            title={
+              editingCategory
+                ? `Editar Categoría: ${editingCategory.name}`
+                : "Nueva Categoría"
+            }
             hideTitle
             className="sm:max-w-2xl p-6 sm:p-8 gap-6"
             footer={
@@ -460,18 +475,24 @@ export default function AdminCategoriesPage() {
                   className="py-2.5 px-6 bg-[#111111] hover:bg-black text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
                 >
                   {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {editingCategory ? 'Guardar Cambios' : 'Crear Categoría'}
+                  {editingCategory ? "Guardar Cambios" : "Crear Categoría"}
                 </button>
-                </div>
+              </div>
             }
           >
             <div className="flex items-center justify-between border-b border-[#e5e5e5] pb-4">
               <h3 className="text-base font-extrabold uppercase tracking-wider text-[#111111]">
-                {editingCategory ? `Editar Categoría: ${editingCategory.name}` : 'Nueva Categoría'}
+                {editingCategory
+                  ? `Editar Categoría: ${editingCategory.name}`
+                  : "Nueva Categoría"}
               </h3>
             </div>
 
-            <form id="categories-form" onSubmit={handleSubmit} className="space-y-6">
+            <form
+              id="categories-form"
+              onSubmit={handleSubmit}
+              className="space-y-6 p-0.5"
+            >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Name */}
                 <div>
@@ -517,10 +538,14 @@ export default function AdminCategoriesPage() {
                   >
                     <option value="">Ninguna (Categoría Raíz)</option>
                     {categories
-                      .filter((c) => !editingCategory || c._id !== editingCategory._id)
+                      .filter(
+                        (c) =>
+                          !editingCategory || c._id !== editingCategory._id,
+                      )
                       .map((c) => (
                         <option key={c._id} value={c._id}>
-                          {c.ancestors.length > 0 ? '— ' : ''}{c.name}
+                          {c.ancestors.length > 0 ? "— " : ""}
+                          {c.name}
                         </option>
                       ))}
                   </select>
@@ -534,7 +559,9 @@ export default function AdminCategoriesPage() {
                   <input
                     type="number"
                     value={order}
-                    onChange={(e) => setOrder(parseInt(e.target.value, 10) || 0)}
+                    onChange={(e) =>
+                      setOrder(parseInt(e.target.value, 10) || 0)
+                    }
                     className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-medium p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
                   />
                 </div>
@@ -547,13 +574,16 @@ export default function AdminCategoriesPage() {
                     Ejes de Variantes (Combinaciones vendibles)
                   </h4>
                   <p className="text-[11px] text-[#707072]">
-                    Marcá qué atributos generan variantes en los productos de esta categoría (ej: Talle, Color, Volumen). Si no seleccionás ninguno, los productos serán simples.
+                    Marcá qué atributos generan variantes en los productos de
+                    esta categoría (ej: Talle, Color, Volumen). Si no
+                    seleccionás ninguno, los productos serán simples.
                   </p>
                 </div>
 
                 {selectAttributes.length === 0 ? (
                   <p className="text-xs text-[#9e9ea0] italic">
-                    No hay atributos de tipo 'Selección'. Creá atributos primero en la sección de Atributos.
+                    No hay atributos de tipo 'Selección'. Creá atributos primero
+                    en la sección de Atributos.
                   </p>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
@@ -564,8 +594,8 @@ export default function AdminCategoriesPage() {
                           key={attr.key}
                           className={`p-2.5 border text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors ${
                             isChecked
-                              ? 'bg-[#111111] text-white border-[#111111]'
-                              : 'bg-white text-[#111111] border-[#e5e5e5] hover:border-[#111111]'
+                              ? "bg-[#111111] text-white border-[#111111]"
+                              : "bg-white text-[#111111] border-[#e5e5e5] hover:border-[#111111]"
                           }`}
                         >
                           <input
@@ -595,12 +625,17 @@ export default function AdminCategoriesPage() {
                       onChange={(e) => setImageAxis(e.target.value)}
                       className="w-full bg-white text-[#111111] text-xs font-bold p-2.5 border border-[#e5e5e5] focus:outline-none focus:ring-1 focus:ring-[#111111] cursor-pointer"
                     >
-                      <option value="">Ninguno (Una sola galería general para el producto)</option>
+                      <option value="">
+                        Ninguno (Una sola galería general para el producto)
+                      </option>
                       {variantAxes.map((axisKey) => {
-                        const attr = selectAttributes.find((a) => a.key === axisKey);
+                        const attr = selectAttributes.find(
+                          (a) => a.key === axisKey,
+                        );
                         return (
                           <option key={axisKey} value={axisKey}>
-                            {attr?.label || axisKey} (ej: fotos específicas por {attr?.label || axisKey})
+                            {attr?.label || axisKey} (ej: fotos específicas por{" "}
+                            {attr?.label || axisKey})
                           </option>
                         );
                       })}
@@ -616,13 +651,16 @@ export default function AdminCategoriesPage() {
                     Especificaciones de Ficha Técnica
                   </h4>
                   <p className="text-[11px] text-[#707072]">
-                    Campos descriptivos que aparecerán en la ficha del producto (ej: Género, Material, Tipo de piel).
+                    Campos descriptivos que aparecerán en la ficha del producto
+                    (ej: Género, Material, Tipo de piel).
                   </p>
                 </div>
 
                 <div className="space-y-1.5 max-h-40 overflow-y-auto pt-1">
                   {availableAttributes.map((attr) => {
-                    const specEntry = specAttributes.find((s) => s.key === attr.key);
+                    const specEntry = specAttributes.find(
+                      (s) => s.key === attr.key,
+                    );
                     const isChecked = Boolean(specEntry);
 
                     return (
@@ -648,7 +686,9 @@ export default function AdminCategoriesPage() {
                             <input
                               type="checkbox"
                               checked={specEntry?.required || false}
-                              onChange={() => handleToggleSpecRequired(attr.key)}
+                              onChange={() =>
+                                handleToggleSpecRequired(attr.key)
+                              }
                               className="w-3.5 h-3.5"
                             />
                             <span>Obligatorio</span>
@@ -663,8 +703,12 @@ export default function AdminCategoriesPage() {
               {/* Active Toggle */}
               <div className="flex items-center justify-between p-3 bg-[#fafafa] border border-[#e5e5e5]">
                 <div>
-                  <h5 className="text-xs font-bold uppercase text-[#111111]">Categoría Activa</h5>
-                  <p className="text-[11px] text-[#707072]">Visible en la tienda pública y filtros de navegación</p>
+                  <h5 className="text-xs font-bold uppercase text-[#111111]">
+                    Categoría Activa
+                  </h5>
+                  <p className="text-[11px] text-[#707072]">
+                    Visible en la tienda pública y filtros de navegación
+                  </p>
                 </div>
                 <input
                   type="checkbox"
@@ -673,7 +717,6 @@ export default function AdminCategoriesPage() {
                   className="w-4 h-4 text-[#111111] focus:ring-[#111111] cursor-pointer"
                 />
               </div>
-
             </form>
           </ResponsiveModal>
         )}

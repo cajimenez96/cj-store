@@ -13,7 +13,7 @@ interface Step2OrderReviewProps {
   subtotal: number;
   onEditCustomer: () => void;
   onConfirmOrder: (
-    paymentMethod: "transferencia" | "efectivo",
+    paymentMethod: "transferencia" | "efectivo" | "tarjeta",
     notes?: string,
   ) => Promise<void>;
 }
@@ -27,7 +27,7 @@ export const Step2OrderReview: React.FC<Step2OrderReviewProps> = ({
 }) => {
   const { isWholesale, getEffectivePrice } = useCart();
   const [paymentMethod, setPaymentMethod] = useState<
-    "transferencia" | "efectivo"
+    "transferencia" | "efectivo" | "tarjeta"
   >("transferencia");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
@@ -153,11 +153,11 @@ export const Step2OrderReview: React.FC<Step2OrderReviewProps> = ({
         <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-2">
           Medio de pago preferido
         </label>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <button
             type="button"
             onClick={() => setPaymentMethod("transferencia")}
-            className={`p-3 text-left border font-semibold text-xs transition-all ${
+            className={`p-3 text-left border font-semibold text-xs transition-all cursor-pointer ${
               paymentMethod === "transferencia"
                 ? "border-[#111111] bg-[#111111] text-white"
                 : "border-[#e5e5e5] bg-white text-[#111111] hover:border-[#111111]"
@@ -172,7 +172,7 @@ export const Step2OrderReview: React.FC<Step2OrderReviewProps> = ({
           <button
             type="button"
             onClick={() => setPaymentMethod("efectivo")}
-            className={`p-3 text-left border font-semibold text-xs transition-all ${
+            className={`p-3 text-left border font-semibold text-xs transition-all cursor-pointer ${
               paymentMethod === "efectivo"
                 ? "border-[#111111] bg-[#111111] text-white"
                 : "border-[#e5e5e5] bg-white text-[#111111] hover:border-[#111111]"
@@ -181,6 +181,21 @@ export const Step2OrderReview: React.FC<Step2OrderReviewProps> = ({
             <div className="font-bold">Efectivo</div>
             <div className="text-[10px] opacity-80 mt-0.5">
               Pago en mano al retirar
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPaymentMethod("tarjeta")}
+            className={`p-3 text-left border font-semibold text-xs transition-all cursor-pointer ${
+              paymentMethod === "tarjeta"
+                ? "border-[#111111] bg-[#111111] text-white"
+                : "border-[#e5e5e5] bg-white text-[#111111] hover:border-[#111111]"
+            }`}
+          >
+            <div className="font-bold">Tarjeta</div>
+            <div className="text-[10px] opacity-80 mt-0.5">
+              Pago con tarjeta / Precio de lista
             </div>
           </button>
         </div>

@@ -7,6 +7,7 @@ export interface GeneratedVariantSkeleton {
   sku: string;
   options: OptionSelection[];
   retailPrice: number;
+  listPrice?: number;
   wholesalePrice?: number;
   stock: number;
   active: boolean;
@@ -25,7 +26,8 @@ export function generateVariantCombinations(
   axes: { key: string; values: string[] }[],
   productSlug: string = '',
   defaultRetailPrice: number = 0,
-  defaultWholesalePrice?: number
+  defaultWholesalePrice?: number,
+  defaultListPrice?: number
 ): GeneratedVariantSkeleton[] {
   if (axes.length === 0) {
     // Simple product without axes: single default variant
@@ -34,6 +36,7 @@ export function generateVariantCombinations(
         sku: generateSku(productSlug, []),
         options: [],
         retailPrice: defaultRetailPrice,
+        listPrice: defaultListPrice,
         wholesalePrice: defaultWholesalePrice,
         stock: 0,
         active: true,
@@ -61,6 +64,7 @@ export function generateVariantCombinations(
     sku: generateSku(productSlug, combo),
     options: combo,
     retailPrice: defaultRetailPrice,
+    listPrice: defaultListPrice,
     wholesalePrice: defaultWholesalePrice,
     stock: 0,
     active: true,

@@ -160,11 +160,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   // Resolve prices for active variant
   const retailPrice =
     matchedVariant?.retailPrice ?? product.retailPrice ?? product.price ?? 0;
+  const listPrice =
+    matchedVariant?.listPrice ?? product.listPrice;
   const wholesalePrice =
-    matchedVariant?.wholesalePrice ?? product.wholesalePrice ?? retailPrice;
-  const minWholesaleUnits = product.wholesale?.minUnits ?? 5;
+    matchedVariant?.wholesalePrice ?? product.wholesalePrice ?? 0;
+  const minWholesaleUnits = product.wholesale?.minUnits ?? (product.wholesale as any)?.minQty ?? 5;
   const hasWholesaleDiscount =
-    Boolean(product.hasWholesale || product.wholesale?.enabled) &&
+    Boolean(product.wholesale?.enabled) &&
+    wholesalePrice > 0 &&
     wholesalePrice < retailPrice;
 
   // Effective price based on current cart state
@@ -351,7 +354,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               ) : (
                 <>
                   {/* Active price */}
-                  <div className="flex items-baseline gap-3">
+                  <div className="flex items-baseline gap-3 flex-wrap">
                     <span className="text-2xl font-extrabold text-[#111111]">
                       {formatPrice(effectivePrice)}
                     </span>
@@ -361,6 +364,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                       </span>
                     )}
                   </div>
+                  {listPrice != null && Number(listPrice) > 0 && (
+                    <div className="text-xs font-semibold text-[#707072]">
+                      Precio de lista:{" "}
+                      <strong className="text-[#111111] font-bold">
+                        {formatPrice(Number(listPrice))}
+                      </strong>
+                    </div>
+                  )}
 
                   {/* Wholesale context */}
                   {hasWholesaleDiscount && (
