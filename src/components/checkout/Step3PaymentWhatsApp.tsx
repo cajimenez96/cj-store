@@ -1,51 +1,24 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CheckCircle2, Copy, Check, MessageSquare, Clock } from 'lucide-react';
-import { buildWhatsAppShareUrl } from '@/utils/whatsapp';
+import { CheckCircle2, Copy, Check, Clock } from 'lucide-react';
 import { useSettings } from '@/context/SettingsContext';
-import { formatPrice, formatAmount } from '@/utils/formatCurrency';
+import { formatPrice } from '@/utils/formatCurrency';
 
 interface Step3PaymentWhatsAppProps {
   orderNumber: string;
   total: number;
-  customer: {
-    name: string;
-    lastName: string;
-    phone: string;
-  };
-  items: Array<{
-    name: string;
-    variantName?: string;
-    size?: number;
-    qty: number;
-    price: number;
-    subtotal: number;
-  }>;
-  onFinish: () => void;
 }
 
 export const Step3PaymentWhatsApp: React.FC<Step3PaymentWhatsAppProps> = ({
   orderNumber,
   total,
-  customer,
-  items,
-  onFinish,
 }) => {
   const [copiedAlias, setCopiedAlias] = useState(false);
   const [copiedCbu, setCopiedCbu] = useState(false);
   const [copiedTotal, setCopiedTotal] = useState(false);
 
   const { settings } = useSettings();
-
-  const whatsappUrl = buildWhatsAppShareUrl({
-    orderNumber,
-    guest: customer,
-    items,
-    total,
-    storePhone: settings.storePhone,
-    bankAlias: settings.bankAlias,
-  });
 
   const handleCopyAlias = () => {
     navigator.clipboard.writeText(settings.bankAlias);
@@ -175,21 +148,6 @@ export const Step3PaymentWhatsApp: React.FC<Step3PaymentWhatsAppProps> = ({
         <Clock className="w-4 h-4 text-[#111111]" />
         <span>Horario de atención WhatsApp: <strong>{settings.businessHours}</strong>.</span>
       </div>
-
-      {/* GREEN BUTTON: Enviar resumen a WhatsApp */}
-      <a
-        href={whatsappUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={onFinish}
-        className="w-full py-4 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-white font-extrabold text-base tracking-tight flex items-center justify-center gap-3 transition-all active:scale-95 shadow-lg shadow-[#22c55e]/30 cursor-pointer"
-      >
-        <MessageSquare className="w-6 h-6 fill-current text-white" />
-        <div className="flex flex-col items-start leading-tight">
-          <span className="text-base font-extrabold">Enviar resumen del pedido</span>
-          <span className="text-xs font-medium opacity-90">Adjuntá tu comprobante de pago por WhatsApp</span>
-        </div>
-      </a>
     </div>
   );
 };

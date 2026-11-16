@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { User, Phone, ArrowRight, ShieldCheck } from "lucide-react";
+import { User, Phone, ShieldCheck } from "lucide-react";
 
 export interface CustomerFormData {
   name: string;
@@ -52,7 +52,7 @@ export const Step1CustomerData: React.FC<Step1CustomerDataProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form id="checkout-step1-form" onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-1">
         <h3 className="text-xl font-extrabold uppercase tracking-tight text-[#111111]">
           Tus Datos de Contacto
@@ -154,15 +154,6 @@ export const Step1CustomerData: React.FC<Step1CustomerDataProps> = ({
           Tus datos están protegidos. No requiere registro ni contraseña.
         </span>
       </div>
-
-      {/* Action Button */}
-      <button
-        type="submit"
-        className="w-full py-4 bg-[#111111] hover:bg-black text-white font-bold text-sm uppercase tracking-wider rounded-full flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md"
-      >
-        <span>Continuar a Tu Pedido</span>
-        <ArrowRight className="w-4 h-4" />
-      </button>
     </form>
   );
 };

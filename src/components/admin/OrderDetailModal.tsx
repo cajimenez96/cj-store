@@ -1,22 +1,31 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import Image from 'next/image';
-import { MessageSquare, Check, Ban, Clock, Loader2, ShieldCheck, Edit3, ShoppingBag, ZoomIn } from 'lucide-react';
-import type { OrderStatus } from '@/models/Order';
-import type { Role } from '@/lib/permissions';
-import { formatPrice } from '@/utils/formatCurrency';
-import { sellerLabel } from '@/lib/seller-label';
-import { useSettings } from '@/context/SettingsContext';
-import { ResponsiveModal } from '@/components/ui/responsive-modal';
+import React, { useState } from "react";
+import Image from "next/image";
+import {
+  MessageSquare,
+  Ban,
+  Clock,
+  Loader2,
+  ShieldCheck,
+  Edit3,
+  ShoppingBag,
+  ZoomIn,
+} from "lucide-react";
+import type { OrderStatus } from "@/models/Order";
+import type { Role } from "@/lib/permissions";
+import { formatPrice } from "@/utils/formatCurrency";
+import { sellerLabel } from "@/lib/seller-label";
+import { useSettings } from "@/context/SettingsContext";
+import { ResponsiveModal } from "@/components/ui/responsive-modal";
 
 export interface AdminOrderItem {
   _id: string;
   orderNumber: string;
   createdAt: string;
   status: OrderStatus;
-  origin?: 'web' | 'admin_direct';
-  paymentMethod: 'transferencia' | 'efectivo' | 'tarjeta' | 'otro';
+  origin?: "web" | "admin_direct";
+  paymentMethod: "transferencia" | "efectivo" | "tarjeta" | "otro";
   subtotal: number;
   discount: number;
   total: number;
@@ -35,7 +44,7 @@ export interface AdminOrderItem {
     variantLabel?: string;
     variantName?: string;
     qty: number;
-    appliedPriceType?: 'retail' | 'wholesale' | 'custom';
+    appliedPriceType?: "retail" | "wholesale" | "custom";
     /** Catalog price at order time (audit); absent on older orders. */
     listPrice?: number;
     unitPrice: number;
@@ -65,24 +74,30 @@ interface OrderDetailModalProps {
   role?: ViewerRole;
 }
 
-const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
-  pendiente: { bg: 'bg-[#f59e0b]', text: 'text-white', label: 'PENDIENTE' },
-  autorizado: { bg: 'bg-[#007d48]', text: 'text-white', label: 'AUTORIZADO' },
-  cancelado: { bg: 'bg-[#d30005]', text: 'text-white', label: 'CANCELADO' },
+const STATUS_COLORS: Record<
+  string,
+  { bg: string; text: string; label: string }
+> = {
+  pendiente: { bg: "bg-[#f59e0b]", text: "text-white", label: "PENDIENTE" },
+  autorizado: { bg: "bg-[#007d48]", text: "text-white", label: "AUTORIZADO" },
+  cancelado: { bg: "bg-[#d30005]", text: "text-white", label: "CANCELADO" },
   // Legacy statuses
-  completada: { bg: 'bg-[#007d48]', text: 'text-white', label: 'COMPLETADA' },
-  confirmada: { bg: 'bg-[#007d48]', text: 'text-white', label: 'CONFIRMADA' },
-  cancelada: { bg: 'bg-[#d30005]', text: 'text-white', label: 'CANCELADA' },
+  completada: { bg: "bg-[#007d48]", text: "text-white", label: "COMPLETADA" },
+  confirmada: { bg: "bg-[#007d48]", text: "text-white", label: "CONFIRMADA" },
+  cancelada: { bg: "bg-[#d30005]", text: "text-white", label: "CANCELADA" },
 };
 
 const PRICE_TYPE_LABELS: Record<string, string> = {
-  retail: 'Minorista',
-  wholesale: 'Mayorista',
-  custom: 'Precio acordado',
+  retail: "Minorista",
+  wholesale: "Mayorista",
+  custom: "Precio acordado",
 };
 
 /** Catalog vs charged price for one line; nothing to flag when they match. */
-const PriceAudit: React.FC<{ listPrice: number; unitPrice: number }> = ({ listPrice, unitPrice }) => {
+const PriceAudit: React.FC<{ listPrice: number; unitPrice: number }> = ({
+  listPrice,
+  unitPrice,
+}) => {
   if (!Number.isFinite(listPrice) || !Number.isFinite(unitPrice)) return null;
   if (listPrice === unitPrice) {
     return (
@@ -94,13 +109,16 @@ const PriceAudit: React.FC<{ listPrice: number; unitPrice: number }> = ({ listPr
   const over = unitPrice > listPrice;
   return (
     <span className="block text-[10px] font-medium text-[#707072] mt-0.5">
-      Precio de lista: {formatPrice(listPrice)} • Cobrado: {formatPrice(unitPrice)}{' '}
+      Precio de lista: {formatPrice(listPrice)} • Cobrado:{" "}
+      {formatPrice(unitPrice)}{" "}
       <span
         className={`ml-1 px-1.5 py-0.5 rounded font-bold ${
-          over ? 'bg-[#007d48]/10 text-[#007d48]' : 'bg-[#d30005]/10 text-[#d30005]'
+          over
+            ? "bg-[#007d48]/10 text-[#007d48]"
+            : "bg-[#d30005]/10 text-[#d30005]"
         }`}
       >
-        {over ? 'Cobró de más' : 'Cobró de menos'}
+        {over ? "Cobró de más" : "Cobró de menos"}
       </span>
     </span>
   );
@@ -125,20 +143,25 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     setConfirmingCancel(false);
     setUpdating(false);
   }
-  const [paymentMethod, setPaymentMethod] = useState('efectivo');
+  const [paymentMethod, setPaymentMethod] = useState("efectivo");
   const { settings } = useSettings();
-  const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
+  const [previewImage, setPreviewImage] = useState<{
+    url: string;
+    name: string;
+  } | null>(null);
 
   if (!order) return null;
 
-  const whatsappPhone = order.guest.phone.replace(/[^0-9]/g, '');
+  const whatsappPhone = order.guest.phone.replace(/[^0-9]/g, "");
   const itemsList = order.items
     .map((item) => {
       const variantDescription = item.variantLabel || item.variantName;
-      const variantText = variantDescription ? `\n   - Variante: ${variantDescription}` : '';
+      const variantText = variantDescription
+        ? `\n   - Variante: ${variantDescription}`
+        : "";
       return `• ${item.qty}x ${item.name}${variantText}\n   - Subtotal: ${formatPrice(item.subtotal)}`;
     })
-    .join('\n\n');
+    .join("\n\n");
 
   const whatsappMessage = `¡Hola ${order.guest.name}! Te escribimos de ${settings.storeName} respecto a tu solicitud #${order.orderNumber} ✨
 
@@ -147,18 +170,20 @@ ${itemsList}
 
 💰 *TOTAL:* ${formatPrice(order.total)}`;
 
-  const whatsappUrl = `https://wa.me/${whatsappPhone.startsWith('54') ? whatsappPhone : `54${whatsappPhone}`}?text=${encodeURIComponent(
-    whatsappMessage
+  const whatsappUrl = `https://wa.me/${whatsappPhone.startsWith("54") ? whatsappPhone : `54${whatsappPhone}`}?text=${encodeURIComponent(
+    whatsappMessage,
   )}`;
 
-  const statusInfo = STATUS_COLORS[order.status] ?? STATUS_COLORS['pendiente'];
-  const isPending = order.status === 'pendiente';
-  const isAdminViewer = role === 'admin' || role === 'superadmin';
+  const statusInfo = STATUS_COLORS[order.status] ?? STATUS_COLORS["pendiente"];
+  const isPending = order.status === "pendiente";
+  const isAdminViewer = role === "admin" || role === "superadmin";
   // Mirrors the server rule: a seller may only edit/cancel an authorized order.
-  const isSellerActionable = role === 'seller' && order.status === 'autorizado';
+  const isSellerActionable = role === "seller" && order.status === "autorizado";
   // Admins may cancel any non-cancelled order (the API restocks once if it held stock);
   // authorize/edit stay limited to pendiente below.
-  const isAdminCancellable = isAdminViewer && ['pendiente', 'autorizado', 'completada'].includes(order.status);
+  const isAdminCancellable =
+    isAdminViewer &&
+    ["pendiente", "autorizado", "completada"].includes(order.status);
   const showActions = isAdminCancellable || isSellerActionable;
   // Newest first. History is append-only, so equal/invalid timestamps fall back to
   // the original index (higher = newer).
@@ -197,6 +222,78 @@ ${itemsList}
     }
   };
 
+  const actionsFooter = showActions ? (
+    confirmingCancel ? (
+      <div
+        className="w-full p-3.5 bg-[#d30005]/5 border border-[#d30005]/30 space-y-2.5"
+        role="alertdialog"
+      >
+        <p className="text-xs font-bold text-[#111111]">
+          ¿Cancelar esta solicitud? El stock se devolverá y la acción no se
+          puede deshacer.
+        </p>
+        <div className="flex items-center justify-between sm:justify-end gap-2">
+          <button
+            onClick={() => setConfirmingCancel(false)}
+            disabled={updating}
+            className="flex-1 sm:flex-initial py-2.5 px-4 bg-[#f5f5f5] hover:bg-[#e5e5e5] text-[#111111] font-bold text-xs uppercase tracking-wider rounded-full transition-all disabled:opacity-50 cursor-pointer"
+          >
+            Volver
+          </button>
+          <button
+            onClick={handleCancel}
+            disabled={updating}
+            className="flex-1 sm:flex-initial py-2.5 px-4 bg-[#d30005] hover:bg-red-700 text-white font-bold text-xs uppercase tracking-wider rounded-full flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+          >
+            {updating ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+            ) : (
+              <Ban className="w-3.5 h-3.5 shrink-0" />
+            )}
+            <span>Sí, cancelar</span>
+          </button>
+        </div>
+      </div>
+    ) : (
+      <div className="flex items-center justify-between sm:justify-end gap-2">
+        {(isPending || isSellerActionable) && (
+          <button
+            onClick={() => onEdit(order)}
+            disabled={updating}
+            className="flex-1 sm:flex-initial py-2.5 px-3.5 sm:px-5 bg-[#f5f5f5] hover:bg-[#e5e5e5] text-[#111111] font-bold text-xs uppercase tracking-wider rounded-full flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+          >
+            <Edit3 className="w-3.5 h-3.5 shrink-0" />
+            <span>Editar</span>
+          </button>
+        )}
+
+        {isPending && isAdminViewer && (
+          <button
+            onClick={handleAuthorize}
+            disabled={updating}
+            className="flex-1 sm:flex-initial py-2.5 px-3.5 sm:px-5 bg-[#007d48] hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider rounded-full flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+          >
+            {updating ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+            ) : (
+              <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+            )}
+            <span>Aprobar</span>
+          </button>
+        )}
+
+        <button
+          onClick={() => setConfirmingCancel(true)}
+          disabled={updating}
+          className="flex-1 sm:flex-initial py-2.5 px-3.5 sm:px-5 bg-[#d30005] hover:bg-red-700 text-white font-bold text-xs uppercase tracking-wider rounded-full flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+        >
+          <Ban className="w-3.5 h-3.5 shrink-0" />
+          <span>Cancelar</span>
+        </button>
+      </div>
+    )
+  ) : undefined;
+
   return (
     <ResponsiveModal
       open
@@ -204,6 +301,7 @@ ${itemsList}
       title="Detalle del pedido"
       hideTitle
       className="sm:max-w-2xl p-6 sm:p-8 gap-6"
+      footer={actionsFooter}
     >
       {/* Header */}
       <div className="space-y-1 border-b border-[#e5e5e5] pb-4">
@@ -212,24 +310,31 @@ ${itemsList}
             Solicitud #{order.orderNumber}
           </h2>
 
-          <span className={`${statusInfo.bg} ${statusInfo.text} text-[10px] font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1`}>
-            {order.status === 'autorizado' ? <ShieldCheck className="w-3 h-3" /> :
-             order.status === 'pendiente' ? <Clock className="w-3 h-3" /> :
-             <Ban className="w-3 h-3" />}
+          <span
+            className={`${statusInfo.bg} ${statusInfo.text} text-[10px] font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1`}
+          >
+            {order.status === "autorizado" ? (
+              <ShieldCheck className="w-3 h-3" />
+            ) : order.status === "pendiente" ? (
+              <Clock className="w-3 h-3" />
+            ) : (
+              <Ban className="w-3 h-3" />
+            )}
             {statusInfo.label}
           </span>
 
-          {order.origin === 'admin_direct' && (
+          {order.origin === "admin_direct" && (
             <span className="bg-[#111111] text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full">
               VENTA DIRECTA
             </span>
           )}
         </div>
         <p className="text-xs text-[#707072]">
-          Fecha de emisión: {new Date(order.createdAt).toLocaleString('es-AR')}
+          Fecha de emisión: {new Date(order.createdAt).toLocaleString("es-AR")}
         </p>
         <p className="text-xs text-[#707072]">
-          Vendedor: <strong className="text-[#111111]">{sellerLabel(order)}</strong>
+          Vendedor:{" "}
+          <strong className="text-[#111111]">{sellerLabel(order)}</strong>
         </p>
       </div>
 
@@ -263,19 +368,25 @@ ${itemsList}
         </h3>
         <div className="border border-[#e5e5e5] bg-[#f5f5f5] divide-y divide-[#e5e5e5]">
           {order.items.map((item, idx) => (
-            <div key={idx} className="p-3 flex items-center justify-between gap-3 text-xs">
+            <div
+              key={idx}
+              className="p-3 flex items-center justify-between gap-3 text-xs"
+            >
               <div className="flex items-center gap-3 min-w-0">
                 {/* Product Image Thumbnail */}
                 <button
                   type="button"
-                  onClick={() => item.image && setPreviewImage({ url: item.image, name: item.name })}
+                  onClick={() =>
+                    item.image &&
+                    setPreviewImage({ url: item.image, name: item.name })
+                  }
                   disabled={!item.image}
                   className={`relative w-12 h-12 sm:w-14 sm:h-14 bg-white border border-[#e5e5e5] shrink-0 overflow-hidden flex items-center justify-center group ${
                     item.image
-                      ? 'cursor-zoom-in hover:border-[#111111] transition-all'
-                      : 'cursor-default'
+                      ? "cursor-zoom-in hover:border-[#111111] transition-all"
+                      : "cursor-default"
                   }`}
-                  title={item.image ? 'Ampliar foto del producto' : undefined}
+                  title={item.image ? "Ampliar foto del producto" : undefined}
                 >
                   {item.image ? (
                     <>
@@ -297,22 +408,29 @@ ${itemsList}
 
                 {/* Product Info */}
                 <div className="min-w-0">
-                  <h5 className="font-bold text-[#111111] truncate">{item.name}</h5>
+                  <h5 className="font-bold text-[#111111] truncate">
+                    {item.name}
+                  </h5>
                   <p className="text-[#707072] mt-0.5">
                     {(item.variantLabel || item.variantName) && (
                       <>
-                        Variante: <strong className="text-[#111111]">{item.variantLabel || item.variantName}</strong> •{' '}
+                        Variante:{" "}
+                        <strong className="text-[#111111]">
+                          {item.variantLabel || item.variantName}
+                        </strong>{" "}
+                        •{" "}
                       </>
                     )}
-                    Cantidad: <strong className="text-[#111111]">{item.qty}</strong>
+                    Cantidad:{" "}
+                    <strong className="text-[#111111]">{item.qty}</strong>
                     {item.appliedPriceType && (
                       <span
                         className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                          item.appliedPriceType === 'wholesale'
-                            ? 'bg-[#007d48]/10 text-[#007d48]'
-                            : item.appliedPriceType === 'custom'
-                            ? 'bg-[#f59e0b]/10 text-[#f59e0b]'
-                            : 'bg-[#f5f5f5] text-[#707072]'
+                          item.appliedPriceType === "wholesale"
+                            ? "bg-[#007d48]/10 text-[#007d48]"
+                            : item.appliedPriceType === "custom"
+                              ? "bg-[#f59e0b]/10 text-[#f59e0b]"
+                              : "bg-[#f5f5f5] text-[#707072]"
                         }`}
                       >
                         {PRICE_TYPE_LABELS[item.appliedPriceType]}
@@ -328,8 +446,11 @@ ${itemsList}
                 <span className="block text-[10px] font-medium text-[#707072]">
                   {formatPrice(item.unitPrice)} c/u
                 </span>
-                {typeof item.listPrice === 'number' && (
-                  <PriceAudit listPrice={item.listPrice} unitPrice={item.unitPrice} />
+                {typeof item.listPrice === "number" && (
+                  <PriceAudit
+                    listPrice={item.listPrice}
+                    unitPrice={item.unitPrice}
+                  />
                 )}
               </div>
             </div>
@@ -338,12 +459,14 @@ ${itemsList}
           <div className="p-4 bg-white space-y-1">
             {order.discount > 0 && (
               <div className="flex justify-between text-xs text-[#707072]">
-                <span>Subtotal</span><span>{formatPrice(order.subtotal)}</span>
+                <span>Subtotal</span>
+                <span>{formatPrice(order.subtotal)}</span>
               </div>
             )}
             {order.discount > 0 && (
               <div className="flex justify-between text-xs text-[#007d48] font-semibold">
-                <span>Descuento</span><span>-{formatPrice(order.discount)}</span>
+                <span>Descuento</span>
+                <span>-{formatPrice(order.discount)}</span>
               </div>
             )}
             <div className="flex justify-between items-center text-sm font-extrabold text-[#111111]">
@@ -370,20 +493,27 @@ ${itemsList}
             NOTAS ADICIONALES
           </span>
           <span className="font-medium text-[#111111]">
-            {order.notes || <span className="italic text-gray-400">Sin observaciones</span>}
+            {order.notes || (
+              <span className="italic text-gray-400">Sin observaciones</span>
+            )}
           </span>
         </div>
       </div>
 
       {history.length > 0 && (
         <section className="space-y-2" aria-label="Historial">
-          <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#111111]">Historial</h3>
+          <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#111111]">
+            Historial
+          </h3>
           <ul className="border border-[#e5e5e5] bg-[#f5f5f5] divide-y divide-[#e5e5e5] max-h-48 overflow-y-auto">
             {history.map((h, idx) => (
               <li key={idx} className="p-3 text-xs">
                 <p className="text-[#111111]">{h.summary}</p>
                 <p className="text-[10px] text-[#707072] mt-0.5">
-                  {historyTime(h.at) === null ? '—' : new Date(h.at).toLocaleString('es-AR')} • {h.byName}
+                  {historyTime(h.at) === null
+                    ? "—"
+                    : new Date(h.at).toLocaleString("es-AR")}{" "}
+                  • {h.byName}
                 </p>
               </li>
             ))}
@@ -410,82 +540,11 @@ ${itemsList}
         </div>
       )}
 
-      {/* Status Actions */}
-      {showActions && (
-        <div className="pt-4 border-t border-[#e5e5e5] flex flex-wrap gap-2 justify-end">
-          {(isPending || isSellerActionable) && (
-            <button
-              onClick={() => onEdit(order)}
-              disabled={updating}
-              className="py-3 px-5 bg-[#f5f5f5] hover:bg-[#e5e5e5] text-[#111111] font-bold text-xs uppercase tracking-wider rounded-full flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
-            >
-              <Edit3 className="w-4 h-4" />
-              <span>Editar Pedido</span>
-            </button>
-          )}
-
-          {isPending && isAdminViewer && (
-            <button
-              onClick={handleAuthorize}
-              disabled={updating}
-              className="py-3 px-5 bg-[#007d48] hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider rounded-full flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
-            >
-              {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-              <span>Autorizar Venta</span>
-            </button>
-          )}
-
-          {confirmingCancel ? (
-            <div className="w-full p-4 bg-[#d30005]/5 border border-[#d30005]/30 space-y-3" role="alertdialog">
-              <p className="text-xs font-bold text-[#111111]">
-                ¿Cancelar esta solicitud? El stock se devolverá y la acción no se puede deshacer.
-              </p>
-              <div className="flex flex-wrap gap-2 justify-end">
-                <button
-                  onClick={() => setConfirmingCancel(false)}
-                  disabled={updating}
-                  className="py-3 px-5 bg-[#f5f5f5] hover:bg-[#e5e5e5] text-[#111111] font-bold text-xs uppercase tracking-wider rounded-full transition-all disabled:opacity-50 cursor-pointer"
-                >
-                  Volver
-                </button>
-                <button
-                  onClick={handleCancel}
-                  disabled={updating}
-                  className="py-3 px-5 bg-[#d30005] hover:bg-red-700 text-white font-bold text-xs uppercase tracking-wider rounded-full flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
-                >
-                  {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}
-                  <span>Sí, cancelar</span>
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setConfirmingCancel(true)}
-              disabled={updating}
-              className="py-3 px-5 bg-[#d30005] hover:bg-red-700 text-white font-bold text-xs uppercase tracking-wider rounded-full flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
-            >
-              <Ban className="w-4 h-4" />
-              <span>Cancelar Solicitud</span>
-            </button>
-          )}
-        </div>
-      )}
-
-      {!showActions && (
-        <div className="pt-4 border-t border-[#e5e5e5] flex justify-end">
-          <button
-            onClick={onClose}
-            className="py-3 px-6 bg-[#f5f5f5] text-[#111111] font-bold text-xs uppercase tracking-wider rounded-full flex items-center gap-2 cursor-pointer hover:bg-[#e5e5e5]"
-          >
-            <Check className="w-4 h-4" /> Cerrar
-          </button>
-        </div>
-      )}
       {/* Image Preview Lightbox Modal */}
       <ResponsiveModal
         open={previewImage !== null}
         onOpenChange={(open) => !open && setPreviewImage(null)}
-        title={previewImage?.name ?? 'Vista previa'}
+        title={previewImage?.name ?? "Vista previa"}
         className="max-w-lg p-4 sm:p-6 gap-4"
       >
         {previewImage && (

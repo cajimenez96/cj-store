@@ -86,6 +86,16 @@ export const ProductForm: React.FC<ProductFormProps> = ({
   const [attributes, setAttributes] = useState<AttributeData[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showFloatingActions, setShowFloatingActions] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowFloatingActions(window.scrollY > 80);
+    };
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // General Fields
   const [name, setName] = useState(initialData?.name || '');
@@ -520,14 +530,14 @@ export const ProductForm: React.FC<ProductFormProps> = ({
     : images;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
-      {/* Top Header Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 border border-[#e5e5e5] shadow-sm sticky top-16 z-30">
+    <form onSubmit={handleSubmit} className="space-y-8 pb-24">
+      {/* Top Header Actions (scrolls naturally, no sticky overlap on mobile) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 border border-[#e5e5e5] shadow-sm">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => router.push('/admin/products')}
-            className="p-2 bg-[#f5f5f5] hover:bg-[#111111] text-[#111111] hover:text-white transition-colors cursor-pointer"
+            className="p-2 bg-[#f5f5f5] hover:bg-[#111111] text-[#111111] hover:text-white transition-colors cursor-pointer shrink-0"
             title="Volver"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -542,7 +552,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-3 self-end sm:self-auto">
+        <div className="hidden sm:flex items-center gap-3 self-end sm:self-auto">
           <button
             type="button"
             onClick={() => router.push('/admin/products')}
@@ -1175,6 +1185,34 @@ export const ProductForm: React.FC<ProductFormProps> = ({
               </label>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Floating Bottom Action Bar on Scroll */}
+      <div
+        aria-hidden={!showFloatingActions}
+        className={`fixed inset-x-0 bottom-0 z-40 border-t border-[#e5e5e5] bg-white/95 backdrop-blur-xs px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_rgba(0,0,0,0.06)] transition-all duration-200 ${
+          showFloatingActions
+            ? 'translate-y-0 opacity-100 pointer-events-auto'
+            : 'translate-y-full opacity-0 pointer-events-none'
+        }`}
+      >
+        <div className="max-w-7xl mx-auto flex items-center justify-between sm:justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => router.push('/admin/products')}
+            className="flex-1 sm:flex-initial py-2.5 px-5 bg-[#f5f5f5] hover:bg-[#e5e5e5] text-[#111111] text-xs font-bold uppercase tracking-wider rounded-full transition-colors cursor-pointer"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex-1 sm:flex-initial py-2.5 px-6 bg-[#111111] hover:bg-black text-white text-xs font-bold uppercase tracking-wider rounded-full flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin shrink-0" /> : <Save className="w-4 h-4 shrink-0" />}
+            <span>Guardar</span>
+          </button>
         </div>
       </div>
     </form>

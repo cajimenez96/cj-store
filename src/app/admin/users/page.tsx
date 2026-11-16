@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { AdminNav } from '@/components/admin/AdminNav';
+import React, { useState, useEffect, useCallback } from "react";
+import { AdminNav } from "@/components/admin/AdminNav";
 import {
   Users,
   UserPlus,
@@ -16,16 +16,16 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-} from 'lucide-react';
-import { toast } from '@/components/ui/sonner';
-import { ResponsiveModal } from '@/components/ui/responsive-modal';
+} from "lucide-react";
+import { toast } from "@/components/ui/sonner";
+import { ResponsiveModal } from "@/components/ui/responsive-modal";
 
 interface UserItem {
   _id: string;
   username: string;
   name: string;
   email?: string;
-  role: 'superadmin' | 'admin' | 'seller';
+  role: "superadmin" | "admin" | "seller";
   active: boolean;
   createdAt: string;
 }
@@ -47,17 +47,19 @@ export default function AdminUsersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserItem | null>(null);
 
-  const [formUsername, setFormUsername] = useState('');
-  const [formName, setFormName] = useState('');
-  const [formEmail, setFormEmail] = useState('');
-  const [formPassword, setFormPassword] = useState('');
-  const [formRole, setFormRole] = useState<'superadmin' | 'admin' | 'seller'>('admin');
+  const [formUsername, setFormUsername] = useState("");
+  const [formName, setFormName] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formPassword, setFormPassword] = useState("");
+  const [formRole, setFormRole] = useState<"superadmin" | "admin" | "seller">(
+    "admin",
+  );
   const [formActive, setFormActive] = useState(true);
 
   // Fetch Current Admin Info
   const fetchCurrentAdmin = async () => {
     try {
-      const res = await fetch('/api/admin/auth/me');
+      const res = await fetch("/api/admin/auth/me");
       const json = await res.json();
       if (json.ok && json.user) {
         setCurrentUser(json.user);
@@ -71,16 +73,16 @@ export default function AdminUsersPage() {
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/users');
+      const res = await fetch("/api/admin/users");
       const json = await res.json();
       if (json.ok) {
         setUsers(json.data);
       } else {
-        toast.error(json.message || 'Error al obtener usuarios');
+        toast.error(json.message || "Error al obtener usuarios");
       }
     } catch (err) {
-      console.error('Error fetching users:', err);
-      toast.error('Error al conectar con el servidor');
+      console.error("Error fetching users:", err);
+      toast.error("Error al conectar con el servidor");
     } finally {
       setLoading(false);
     }
@@ -93,11 +95,11 @@ export default function AdminUsersPage() {
 
   const openCreateModal = () => {
     setEditingUser(null);
-    setFormUsername('');
-    setFormName('');
-    setFormEmail('');
-    setFormPassword('');
-    setFormRole('admin');
+    setFormUsername("");
+    setFormName("");
+    setFormEmail("");
+    setFormPassword("");
+    setFormRole("admin");
     setFormActive(true);
     setIsModalOpen(true);
   };
@@ -106,8 +108,8 @@ export default function AdminUsersPage() {
     setEditingUser(user);
     setFormUsername(user.username);
     setFormName(user.name);
-    setFormEmail(user.email || '');
-    setFormPassword('');
+    setFormEmail(user.email || "");
+    setFormPassword("");
     setFormRole(user.role);
     setFormActive(user.active);
     setIsModalOpen(true);
@@ -123,32 +125,32 @@ export default function AdminUsersPage() {
 
     if (!editingUser) {
       if (!formUsername.trim() || !formPassword.trim() || !formName.trim()) {
-        toast.error('Usuario, contraseña y nombre son obligatorios');
+        toast.error("Usuario, contraseña y nombre son obligatorios");
         return;
       }
       if (formPassword.length < 6) {
-        toast.error('La contraseña debe tener al menos 6 caracteres');
+        toast.error("La contraseña debe tener al menos 6 caracteres");
         return;
       }
     } else {
       if (!formName.trim()) {
-        toast.error('El nombre es obligatorio');
+        toast.error("El nombre es obligatorio");
         return;
       }
       if (formPassword.trim() && formPassword.trim().length < 6) {
-        toast.error('La contraseña debe tener al menos 6 caracteres');
+        toast.error("La contraseña debe tener al menos 6 caracteres");
         return;
       }
     }
 
-    setActionLoading('saving');
+    setActionLoading("saving");
 
     try {
       if (!editingUser) {
         // Create
-        const res = await fetch('/api/admin/users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const res = await fetch("/api/admin/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             username: formUsername,
             password: formPassword,
@@ -160,9 +162,9 @@ export default function AdminUsersPage() {
         });
 
         const json = await res.json();
-        if (!json.ok) throw new Error(json.message || 'Error al crear usuario');
+        if (!json.ok) throw new Error(json.message || "Error al crear usuario");
 
-        toast.success('Usuario creado exitosamente');
+        toast.success("Usuario creado exitosamente");
       } else {
         // Update
         const payload: Record<string, unknown> = {
@@ -176,22 +178,25 @@ export default function AdminUsersPage() {
           payload.password = formPassword.trim();
         }
 
-        const res = await fetch('/api/admin/users', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+        const res = await fetch("/api/admin/users", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
 
         const json = await res.json();
-        if (!json.ok) throw new Error(json.message || 'Error al actualizar usuario');
+        if (!json.ok)
+          throw new Error(json.message || "Error al actualizar usuario");
 
-        toast.success('Usuario actualizado correctamente');
+        toast.success("Usuario actualizado correctamente");
       }
 
       closeModal();
       fetchUsers();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al procesar usuario');
+      toast.error(
+        err instanceof Error ? err.message : "Error al procesar usuario",
+      );
     } finally {
       setActionLoading(null);
     }
@@ -200,13 +205,13 @@ export default function AdminUsersPage() {
   // Toggle Active / Inactive (Dar de Alta / Baja)
   const handleToggleActive = async (user: UserItem) => {
     const nextState = !user.active;
-    const actionLabel = nextState ? 'dar de alta' : 'dar de baja';
+    const actionLabel = nextState ? "dar de alta" : "dar de baja";
 
     if (
       !confirm(
         `¿Estás seguro de que deseas ${actionLabel} a @${user.username}? ${
-          !nextState ? 'No podrá iniciar sesión en la plataforma.' : ''
-        }`
+          !nextState ? "No podrá iniciar sesión en la plataforma." : ""
+        }`,
       )
     ) {
       return;
@@ -214,9 +219,9 @@ export default function AdminUsersPage() {
 
     setActionLoading(user._id);
     try {
-      const res = await fetch('/api/admin/users', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/admin/users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: user._id,
           active: nextState,
@@ -224,16 +229,19 @@ export default function AdminUsersPage() {
       });
 
       const json = await res.json();
-      if (!json.ok) throw new Error(json.message || 'Error al modificar estado');
+      if (!json.ok)
+        throw new Error(json.message || "Error al modificar estado");
 
       toast.success(
         nextState
           ? `Usuario @${user.username} dado de alta`
-          : `Usuario @${user.username} dado de baja`
+          : `Usuario @${user.username} dado de baja`,
       );
       fetchUsers();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al cambiar estado');
+      toast.error(
+        err instanceof Error ? err.message : "Error al cambiar estado",
+      );
     } finally {
       setActionLoading(null);
     }
@@ -243,7 +251,7 @@ export default function AdminUsersPage() {
   const handleDelete = async (user: UserItem) => {
     if (
       !confirm(
-        `⚠️ ATENCIÓN: ¿Seguro que deseas ELIMINAR definitivamente al usuario @${user.username}? Esta acción no se puede deshacer.`
+        `⚠️ ATENCIÓN: ¿Seguro que deseas ELIMINAR definitivamente al usuario @${user.username}? Esta acción no se puede deshacer.`,
       )
     ) {
       return;
@@ -252,16 +260,19 @@ export default function AdminUsersPage() {
     setActionLoading(user._id);
     try {
       const res = await fetch(`/api/admin/users?id=${user._id}`, {
-        method: 'DELETE',
+        method: "DELETE",
       });
 
       const json = await res.json();
-      if (!json.ok) throw new Error(json.message || 'Error al eliminar usuario');
+      if (!json.ok)
+        throw new Error(json.message || "Error al eliminar usuario");
 
       toast.success(`Usuario @${user.username} eliminado`);
       fetchUsers();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al eliminar usuario');
+      toast.error(
+        err instanceof Error ? err.message : "Error al eliminar usuario",
+      );
     } finally {
       setActionLoading(null);
     }
@@ -284,7 +295,8 @@ export default function AdminUsersPage() {
                   Gestión de Usuarios
                 </h1>
                 <p className="text-sm text-[#707072]">
-                  Administración de accesos, roles y altas/bajas del panel de control
+                  Administración de accesos, roles y altas/bajas del panel de
+                  control
                 </p>
               </div>
             </div>
@@ -311,13 +323,19 @@ export default function AdminUsersPage() {
           {loading ? (
             <div className="py-20 flex flex-col items-center justify-center text-[#707072] gap-3">
               <Loader2 className="w-8 h-8 animate-spin text-[#111111]" />
-              <p className="text-xs font-medium uppercase tracking-wider">Cargando usuarios...</p>
+              <p className="text-xs font-medium uppercase tracking-wider">
+                Cargando usuarios...
+              </p>
             </div>
           ) : users.length === 0 ? (
             <div className="py-16 text-center text-[#707072]">
               <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p className="text-sm font-medium">No se encontraron usuarios registrados.</p>
-              <p className="text-xs text-[#9e9ea0] mt-1">Crea el primer administrador con el botón superior.</p>
+              <p className="text-sm font-medium">
+                No se encontraron usuarios registrados.
+              </p>
+              <p className="text-xs text-[#9e9ea0] mt-1">
+                Crea el primer administrador con el botón superior.
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -338,7 +356,10 @@ export default function AdminUsersPage() {
                     const isCurrentLoading = actionLoading === u._id;
 
                     return (
-                      <tr key={u._id} className="hover:bg-[#f8f9fa]/50 transition-colors">
+                      <tr
+                        key={u._id}
+                        className="hover:bg-[#f8f9fa]/50 transition-colors"
+                      >
                         {/* Usuario */}
                         <td className="py-4 px-6 font-semibold">
                           <div className="flex items-center gap-2">
@@ -360,17 +381,17 @@ export default function AdminUsersPage() {
 
                         {/* Email */}
                         <td className="py-4 px-6 text-[#707072] text-xs">
-                          {u.email || '-'}
+                          {u.email || "-"}
                         </td>
 
                         {/* Rol */}
                         <td className="py-4 px-6">
-                          {u.role === 'superadmin' ? (
+                          {u.role === "superadmin" ? (
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-purple-50 text-purple-700 border border-purple-200">
                               <Shield className="w-3 h-3" />
                               Superadmin
                             </span>
-                          ) : u.role === 'admin' ? (
+                          ) : u.role === "admin" ? (
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
                               <ShieldCheck className="w-3 h-3" />
                               Admin
@@ -404,11 +425,15 @@ export default function AdminUsersPage() {
                             <button
                               onClick={() => handleToggleActive(u)}
                               disabled={isCurrentLoading}
-                              title={u.active ? 'Dar de baja (desactivar)' : 'Dar de alta (activar)'}
+                              title={
+                                u.active
+                                  ? "Dar de baja (desactivar)"
+                                  : "Dar de alta (activar)"
+                              }
                               className={`p-2 rounded-lg border transition-all cursor-pointer ${
                                 u.active
-                                  ? 'border-[#e5e5e7] text-neutral-600 hover:text-amber-600 hover:bg-amber-50 hover:border-amber-200'
-                                  : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                  ? "border-[#e5e5e7] text-neutral-600 hover:text-amber-600 hover:bg-amber-50 hover:border-amber-200"
+                                  : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                               }`}
                             >
                               {u.active ? (
@@ -429,7 +454,7 @@ export default function AdminUsersPage() {
                             </button>
 
                             {/* Eliminar (solo superadmin) */}
-                            {currentUser?.role === 'superadmin' && !isSelf && (
+                            {currentUser?.role === "superadmin" && !isSelf && (
                               <button
                                 onClick={() => handleDelete(u)}
                                 disabled={isCurrentLoading}
@@ -456,11 +481,11 @@ export default function AdminUsersPage() {
         <ResponsiveModal
           open
           onOpenChange={(open) => !open && closeModal()}
-          title={editingUser ? 'Editar Usuario' : 'Crear Usuario'}
+          title={editingUser ? "Editar Usuario" : "Crear Usuario"}
           hideTitle
-          className="sm:max-w-md p-0 gap-0"
+          className="sm:max-w-md p-6 gap-6"
           footer={
-            <div className="flex items-center justify-end gap-3 px-6 pb-6">
+            <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={closeModal}
@@ -471,34 +496,42 @@ export default function AdminUsersPage() {
               <button
                 type="submit"
                 form="users-form"
-                disabled={actionLoading === 'saving'}
+                disabled={actionLoading === "saving"}
                 className="px-5 py-2.5 bg-[#111111] hover:bg-[#222224] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-xs active:scale-95 disabled:opacity-50"
               >
-                {actionLoading === 'saving' && <Loader2 className="w-4 h-4 animate-spin" />}
-                <span>{editingUser ? 'Guardar Cambios' : 'Crear Usuario'}</span>
+                {actionLoading === "saving" && (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                )}
+                <span>{editingUser ? "Guardar Cambios" : "Crear Usuario"}</span>
               </button>
             </div>
           }
         >
-          <div className="p-6 border-b border-[#e5e5e7] flex items-center justify-between">
+          <div className="pb-4 border-b border-[#e5e5e7] flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="p-2 bg-neutral-100 rounded-xl text-[#111111]">
-                {editingUser ? <Edit2 className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}
+                {editingUser ? (
+                  <Edit2 className="w-5 h-5" />
+                ) : (
+                  <UserPlus className="w-5 h-5" />
+                )}
               </div>
               <div>
                 <h3 className="font-bold text-base text-[#111111]">
-                  {editingUser ? `Editar @${editingUser.username}` : 'Nuevo Usuario'}
+                  {editingUser
+                    ? `Editar @${editingUser.username}`
+                    : "Nuevo Usuario"}
                 </h3>
                 <p className="text-xs text-[#707072]">
                   {editingUser
-                    ? 'Modifica los datos o actualiza su contraseña'
-                    : 'Crea una cuenta para acceder al panel de administración'}
+                    ? "Modifica los datos o actualiza su contraseña"
+                    : "Crea una cuenta para acceder al panel de administración"}
                 </p>
               </div>
             </div>
           </div>
 
-          <form id="users-form" onSubmit={handleSubmit} className="p-6 space-y-4">
+          <form id="users-form" onSubmit={handleSubmit} className="space-y-4">
             {/* Username */}
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-[#707072] mb-1.5">
@@ -509,12 +542,18 @@ export default function AdminUsersPage() {
                 required
                 disabled={Boolean(editingUser)}
                 value={formUsername}
-                onChange={(e) => setFormUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
+                onChange={(e) =>
+                  setFormUsername(
+                    e.target.value.toLowerCase().replace(/\s+/g, ""),
+                  )
+                }
                 placeholder="ej: analia, juan_admin"
                 className="w-full px-3.5 py-2.5 bg-[#f8f9fa] border border-[#e5e5e7] rounded-xl text-sm font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-black disabled:opacity-60"
               />
               {editingUser && (
-                <p className="text-[11px] text-[#707072] mt-1">El nombre de usuario no se puede cambiar.</p>
+                <p className="text-[11px] text-[#707072] mt-1">
+                  El nombre de usuario no se puede cambiar.
+                </p>
               )}
             </div>
 
@@ -550,7 +589,9 @@ export default function AdminUsersPage() {
             {/* Contraseña */}
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-[#707072] mb-1.5">
-                {editingUser ? 'Nueva Contraseña (dejar vacío para no cambiar)' : 'Contraseña *'}
+                {editingUser
+                  ? "Nueva Contraseña (dejar vacío para no cambiar)"
+                  : "Contraseña *"}
               </label>
               <div className="relative">
                 <input
@@ -558,7 +599,7 @@ export default function AdminUsersPage() {
                   required={!editingUser}
                   value={formPassword}
                   onChange={(e) => setFormPassword(e.target.value)}
-                  placeholder={editingUser ? '••••••••' : 'Mínimo 6 caracteres'}
+                  placeholder={editingUser ? "••••••••" : "Mínimo 6 caracteres"}
                   className="w-full px-3.5 py-2.5 bg-[#f8f9fa] border border-[#e5e5e7] rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-black"
                 />
                 <Key className="w-4 h-4 text-neutral-400 absolute right-3.5 top-3" />
@@ -572,14 +613,25 @@ export default function AdminUsersPage() {
               </label>
               <select
                 value={formRole}
-                onChange={(e) => setFormRole(e.target.value as 'superadmin' | 'admin' | 'seller')}
+                onChange={(e) =>
+                  setFormRole(
+                    e.target.value as "superadmin" | "admin" | "seller",
+                  )
+                }
                 className="w-full px-3.5 py-2.5 bg-[#f8f9fa] border border-[#e5e5e7] rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-black cursor-pointer"
               >
-                <option value="admin">Admin (Gestión completa de tienda)</option>
-                {currentUser?.role === 'superadmin' && (
-                  <option value="superadmin">Superadmin (Acceso total y gestión de usuarios)</option>
+                <option value="admin">
+                  Admin (Gestión completa de tienda)
+                </option>
+                {currentUser?.role === "superadmin" && (
+                  <option value="superadmin">
+                    Superadmin (Acceso total y gestión de usuarios)
+                  </option>
                 )}
-                <option value="seller">Vendedor (ventas por POS, sus solicitudes, su contabilidad y stock en solo lectura)</option>
+                <option value="seller">
+                  Vendedor (ventas por POS, sus solicitudes, su contabilidad y
+                  stock en solo lectura)
+                </option>
               </select>
             </div>
 
@@ -603,7 +655,6 @@ export default function AdminUsersPage() {
                 <div className="w-11 h-6 bg-neutral-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
               </label>
             </div>
-
           </form>
         </ResponsiveModal>
       )}

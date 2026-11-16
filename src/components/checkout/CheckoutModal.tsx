@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Check } from 'lucide-react';
+import { ArrowRight, Check, Loader2, MessageSquare } from 'lucide-react';
 import { Step1CustomerData, CustomerFormData } from './Step1CustomerData';
 import { Step2OrderReview } from './Step2OrderReview';
 import { Step3PaymentWhatsApp } from './Step3PaymentWhatsApp';
 import { useCart } from '@/context/CartContext';
+import { useSettings } from '@/context/SettingsContext';
+import { buildWhatsAppShareUrl } from '@/utils/whatsapp';
 import { ResponsiveModal } from '@/components/ui/responsive-modal';
 
 interface CheckoutModalProps {
@@ -15,8 +17,10 @@ interface CheckoutModalProps {
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose }) => {
   const { items, subtotal, clearCart, getEffectivePrice } = useCart();
+  const { settings } = useSettings();
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [customerData, setCustomerData] = useState<CustomerFormData>({
     name: '',
     lastName: '',
@@ -39,41 +43,46 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose })
     paymentMethod: 'transferencia' | 'efectivo',
     notes?: string
   ) => {
-    const payload = {
-      guest: customerData,
-      paymentMethod,
-      notes,
-      items: items.map((item) => ({
-        productId: item.productId,
-        variantId: item.variantId,
-        variantLabel: item.variantLabel,
-        variantName: item.variantName,
-        sku: item.sku,
-        qty: item.qty,
-      })),
-    };
+    setIsSubmittingOrder(true);
+    try {
+      const payload = {
+        guest: customerData,
+        paymentMethod,
+        notes,
+        items: items.map((item) => ({
+          productId: item.productId,
+          variantId: item.variantId,
+          variantLabel: item.variantLabel,
+          variantName: item.variantName,
+          sku: item.sku,
+          qty: item.qty,
+        })),
+      };
 
-    const res = await fetch('/api/checkout/create-order', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+      const res = await fetch('/api/checkout/create-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
 
-    const json = await res.json();
+      const json = await res.json();
 
-    if (!json.ok) {
-      throw new Error(json.message || 'Error al procesar el pedido');
+      if (!json.ok) {
+        throw new Error(json.message || 'Error al procesar el pedido');
+      }
+
+      setCreatedOrder({
+        orderId: json.orderId,
+        orderNumber: json.orderNumber,
+        total: json.total,
+      });
+
+      setStep(3);
+    } finally {
+      setIsSubmittingOrder(false);
     }
-
-    setCreatedOrder({
-      orderId: json.orderId,
-      orderNumber: json.orderNumber,
-      total: json.total,
-    });
-
-    setStep(3);
   };
 
   const handleFinishCheckout = () => {
@@ -94,6 +103,57 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose })
     };
   });
 
+  const whatsappUrl = createdOrder
+    ? buildWhatsAppShareUrl({
+        orderNumber: createdOrder.orderNumber,
+        guest: customerData,
+        items: formattedItemsForStep3,
+        total: createdOrder.total,
+        storePhone: settings.storePhone,
+        bankAlias: settings.bankAlias,
+      })
+    : '';
+
+  const checkoutFooter =
+    step === 1 ? (
+      <button
+        type="submit"
+        form="checkout-step1-form"
+        className="w-full py-4 bg-[#111111] hover:bg-black text-white font-bold text-sm uppercase tracking-wider rounded-full flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md cursor-pointer"
+      >
+        <span>Continuar a Tu Pedido</span>
+        <ArrowRight className="w-4 h-4" />
+      </button>
+    ) : step === 2 ? (
+      <button
+        type="submit"
+        form="checkout-step2-form"
+        disabled={isSubmittingOrder}
+        className="w-full py-4 bg-[#111111] hover:bg-black text-white font-bold text-sm uppercase tracking-wider rounded-full flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md disabled:opacity-50 cursor-pointer"
+      >
+        {isSubmittingOrder ? (
+          <Loader2 className="w-5 h-5 animate-spin" />
+        ) : (
+          <Check className="w-5 h-5" />
+        )}
+        Confirmar Pedido
+      </button>
+    ) : step === 3 && createdOrder ? (
+      <a
+        href={whatsappUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={handleFinishCheckout}
+        className="w-full py-4 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-white font-extrabold text-base tracking-tight flex items-center justify-center gap-3 transition-all active:scale-95 shadow-lg shadow-[#22c55e]/30 cursor-pointer"
+      >
+        <MessageSquare className="w-6 h-6 fill-current text-white" />
+        <div className="flex flex-col items-start leading-tight">
+          <span className="text-base font-extrabold">Enviar resumen del pedido</span>
+          <span className="text-xs font-medium opacity-90">Adjuntá tu comprobante de pago por WhatsApp</span>
+        </div>
+      </a>
+    ) : undefined;
+
   return (
     <ResponsiveModal
       open={isOpen}
@@ -101,6 +161,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose })
       title="Finalizar compra"
       hideTitle
       className="sm:max-w-2xl p-6 sm:p-8 gap-6"
+      footer={checkoutFooter}
     >
       {/* Stepper Indicator Header (Epicodes Style 1 - 2 - 3) */}
       <div className="flex items-center justify-between max-w-md mx-auto py-2 border-b border-[#f5f5f5]">
@@ -187,9 +248,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose })
         <Step3PaymentWhatsApp
           orderNumber={createdOrder.orderNumber}
           total={createdOrder.total}
-          customer={customerData}
-          items={formattedItemsForStep3}
-          onFinish={handleFinishCheckout}
         />
       )}
     </ResponsiveModal>

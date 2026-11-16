@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   Drawer,
-  DrawerClose,
   DrawerContent,
   DrawerDescription,
   DrawerHeader,
@@ -49,32 +48,37 @@ export function ResponsiveModal({
   children,
 }: ResponsiveModalProps) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
-  const headerClassName = cn(hideTitle && "sr-only");
+  const desktopHeaderClassName = cn(hideTitle && "sr-only");
+  const mobileHeaderClassName = cn(
+    hideTitle
+      ? "sr-only"
+      : "shrink-0 border-b border-[#e5e5e5] px-5 py-4 pr-12 text-left",
+  );
 
-  // With a footer, the body becomes its own scroll region so the footer never scrolls away.
-  const layoutClassName = (viewportUnit: "vh" | "dvh") =>
-    footer
-      ? `flex max-h-[90${viewportUnit}] flex-col overflow-hidden`
-      : `max-h-[90${viewportUnit}] overflow-y-auto`;
-  const bodyClassName = footer
-    ? "flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto"
-    : "";
+  const desktopBodyClassName =
+    "flex min-h-0 min-w-0 flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden overscroll-contain [&>*]:shrink-0";
+  const mobileBodyClassName =
+    "flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-y-auto overflow-x-hidden overscroll-contain p-5 pt-6 [&>*]:shrink-0";
 
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className={cn(surfaceClassName, layoutClassName("vh"), className)}
+          className={cn(
+            surfaceClassName,
+            "flex max-h-[90vh] flex-col overflow-hidden",
+            className,
+          )}
         >
-          <DialogHeader className={headerClassName}>
+          <DialogHeader className={desktopHeaderClassName}>
             <DialogTitle>{title}</DialogTitle>
             {description && (
               <DialogDescription>{description}</DialogDescription>
             )}
           </DialogHeader>
-          <div className={bodyClassName}>{children}</div>
+          <div className={desktopBodyClassName}>{children}</div>
           {footer && (
-            <div className="shrink-0 border-t border-[#e5e5e5] pt-4">
+            <div className="shrink-0 border-t border-[#e5e5e5] bg-white pt-4">
               {footer}
             </div>
           )}
@@ -84,23 +88,34 @@ export function ResponsiveModal({
   }
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
+    <Drawer
+      open={open}
+      onOpenChange={onOpenChange}
+      dismissible={false}
+      disablePreventScroll={false}
+    >
       <DrawerContent
-        className={cn(surfaceClassName, layoutClassName("dvh"), className)}
+        className={cn(
+          surfaceClassName,
+          className,
+          "flex max-h-[90dvh] w-full flex-col overflow-hidden p-0 gap-0",
+        )}
       >
-        <DrawerClose
+        <button
+          type="button"
+          onClick={() => onOpenChange(false)}
           aria-label="Cerrar ventana"
-          className="absolute top-3 right-3 z-10 rounded-full bg-[#f5f5f5] p-2 text-[#111111] hover:bg-[#111111] hover:text-white"
+          className="absolute top-3 right-3 z-20 rounded-full bg-[#f5f5f5] p-2 text-[#111111] transition-colors hover:bg-[#111111] hover:text-white cursor-pointer"
         >
           <XIcon className="size-4" />
-        </DrawerClose>
-        <DrawerHeader className={headerClassName}>
+        </button>
+        <DrawerHeader className={mobileHeaderClassName}>
           <DrawerTitle>{title}</DrawerTitle>
           {description && <DrawerDescription>{description}</DrawerDescription>}
         </DrawerHeader>
-        <div className={cn(bodyClassName)}>{children}</div>
+        <div className={mobileBodyClassName}>{children}</div>
         {footer && (
-          <div className="shrink-0 border-t border-[#e5e5e5] bg-white px-4 py-3">
+          <div className="shrink-0 border-t border-[#e5e5e5] bg-white px-5 py-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))]">
             {footer}
           </div>
         )}

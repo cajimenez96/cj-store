@@ -222,9 +222,9 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, 
       open
       onOpenChange={(open) => !open && onClose()}
       title={`Editar Pedido #${order.orderNumber}`}
-      className="sm:max-w-3xl gap-0 p-0"
+      className="sm:max-w-3xl p-6 sm:p-8 gap-6"
       footer={
-        <div className="flex justify-end gap-3 px-6 pb-6">
+        <div className="flex justify-end gap-3">
           <button
             onClick={onClose}
             className="py-3 px-5 bg-[#f5f5f5] text-[#111111] font-bold text-xs uppercase tracking-wider rounded-full hover:bg-[#e5e5e5] transition-all cursor-pointer"
@@ -242,7 +242,7 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, 
         </div>
       }
     >
-      <div className="p-6 space-y-6">
+      <div className="space-y-6 min-w-0">
 
         {hasInvalidLine && (
           <div role="alert" className="p-3 bg-[#d30005]/5 border border-[#d30005]/20 text-xs font-medium text-[#d30005]">
@@ -279,9 +279,12 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, 
             Productos ({items.length})
           </h3>
 
-          <div className="border border-[#e5e5e5] divide-y divide-[#e5e5e5]">
+          <div
+            className="border border-[#e5e5e5] divide-y divide-[#e5e5e5] overflow-x-auto touch-pan-x"
+            data-vaul-no-drag
+          >
             {items.map((item, idx) => (
-              <div key={idx} className="p-3 flex items-center gap-3 text-xs">
+              <div key={idx} className="p-3 flex items-center gap-3 text-xs min-w-[480px]">
                 {/* Thumbnail */}
                 <button
                   type="button"
@@ -312,7 +315,7 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({ order, onClose, 
                   )}
                 </button>
 
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-[120px]">
                   <p className="font-bold text-[#111111] truncate">{item.name}</p>
                   {(item.variantLabel || item.variantName) && (
                     <p className="text-[#707072]">{item.variantLabel || item.variantName}</p>

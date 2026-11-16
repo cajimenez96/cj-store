@@ -1,9 +1,13 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { AdminNav } from '@/components/admin/AdminNav';
-import { OrderDetailModal, AdminOrderItem, type ViewerRole } from '@/components/admin/OrderDetailModal';
-import { OrderEditModal } from '@/components/admin/OrderEditModal';
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { AdminNav } from "@/components/admin/AdminNav";
+import {
+  OrderDetailModal,
+  AdminOrderItem,
+  type ViewerRole,
+} from "@/components/admin/OrderDetailModal";
+import { OrderEditModal } from "@/components/admin/OrderEditModal";
 import {
   ShoppingBag,
   Search,
@@ -15,17 +19,17 @@ import {
   Ban,
   Plus,
   Loader2,
-} from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+} from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 const STATUS_STYLES: Record<string, string> = {
-  pendiente: 'bg-[#f59e0b] text-white border-[#f59e0b]',
-  autorizado: 'bg-[#007d48] text-white border-[#007d48]',
-  cancelado: 'bg-[#d30005] text-white border-[#d30005]',
-  completada: 'bg-[#007d48] text-white border-[#007d48]',
-  confirmada: 'bg-[#007d48] text-white border-[#007d48]',
-  cancelada: 'bg-[#d30005] text-white border-[#d30005]',
+  pendiente: "bg-[#f59e0b] text-white border-[#f59e0b]",
+  autorizado: "bg-[#007d48] text-white border-[#007d48]",
+  cancelado: "bg-[#d30005] text-white border-[#d30005]",
+  completada: "bg-[#007d48] text-white border-[#007d48]",
+  confirmada: "bg-[#007d48] text-white border-[#007d48]",
+  cancelada: "bg-[#d30005] text-white border-[#d30005]",
 };
 
 const STATUS_ICON: Record<string, React.ReactNode> = {
@@ -36,9 +40,9 @@ const STATUS_ICON: Record<string, React.ReactNode> = {
   cancelada: <Ban className="w-3 h-3" />,
 };
 
-import { formatPrice } from '@/utils/formatCurrency';
-import { sellerLabel } from '@/lib/seller-label';
-import { toast } from '@/components/ui/sonner';
+import { formatPrice } from "@/utils/formatCurrency";
+import { sellerLabel } from "@/lib/seller-label";
+import { toast } from "@/components/ui/sonner";
 
 export default function AdminOrdersPage() {
   const router = useRouter();
@@ -50,38 +54,50 @@ export default function AdminOrdersPage() {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState<string>('');
-  const [selectedSeller, setSelectedSeller] = useState<string>('');
-  const [sellers, setSellers] = useState<Array<{ id: string; name: string }>>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState<string>("");
+  const [selectedSeller, setSelectedSeller] = useState<string>("");
+  const [sellers, setSellers] = useState<Array<{ id: string; name: string }>>(
+    [],
+  );
 
   // null while loading or if it cannot be read: no admin-only controls either way.
   const [role, setRole] = useState<ViewerRole>(null);
-  const isAdminViewer = role === 'admin' || role === 'superadmin';
+  const isAdminViewer = role === "admin" || role === "superadmin";
 
-  const [selectedOrder, setSelectedOrder] = useState<AdminOrderItem | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<AdminOrderItem | null>(
+    null,
+  );
   const [editingOrder, setEditingOrder] = useState<AdminOrderItem | null>(null);
 
   const PAGE_SIZE = 25;
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const buildParams = useCallback((targetPage: number) => {
-    const params = new URLSearchParams();
-    if (searchTerm) params.append('search', searchTerm);
-    if (selectedStatus) params.append('status', selectedStatus);
-    if (isAdminViewer && selectedSeller) params.append('userId', selectedSeller);
-    params.append('page', targetPage.toString());
-    params.append('limit', PAGE_SIZE.toString());
-    return params;
-  }, [searchTerm, selectedStatus, selectedSeller, isAdminViewer]);
+  const buildParams = useCallback(
+    (targetPage: number) => {
+      const params = new URLSearchParams();
+      if (searchTerm) params.append("search", searchTerm);
+      if (selectedStatus) params.append("status", selectedStatus);
+      if (isAdminViewer && selectedSeller)
+        params.append("userId", selectedSeller);
+      params.append("page", targetPage.toString());
+      params.append("limit", PAGE_SIZE.toString());
+      return params;
+    },
+    [searchTerm, selectedStatus, selectedSeller, isAdminViewer],
+  );
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/admin/auth/me')
+    fetch("/api/admin/auth/me")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         const r = data?.user?.role;
-        if (!cancelled && (r === 'superadmin' || r === 'admin' || r === 'seller')) setRole(r);
+        if (
+          !cancelled &&
+          (r === "superadmin" || r === "admin" || r === "seller")
+        )
+          setRole(r);
       })
       .catch(() => {});
     return () => {
@@ -93,15 +109,17 @@ export default function AdminOrdersPage() {
   useEffect(() => {
     if (!isAdminViewer) return;
     let cancelled = false;
-    fetch('/api/admin/users')
+    fetch("/api/admin/users")
       .then((res) => (res.ok ? res.json() : null))
       .then((json) => {
         if (cancelled || !json?.ok || !Array.isArray(json.data)) return;
         setSellers(
-          json.data.map((u: { _id: string; name?: string; username: string }) => ({
-            id: String(u._id),
-            name: u.name || u.username,
-          }))
+          json.data.map(
+            (u: { _id: string; name?: string; username: string }) => ({
+              id: String(u._id),
+              name: u.name || u.username,
+            }),
+          ),
         );
       })
       .catch(() => {});
@@ -118,7 +136,7 @@ export default function AdminOrdersPage() {
       const res = await fetch(`/api/admin/orders?${params.toString()}`);
       if (requestId !== requestIdRef.current) return;
       if (res.status === 401) {
-        router.push('/admin/login');
+        router.push("/admin/login");
         return;
       }
       const json = await res.json();
@@ -130,8 +148,8 @@ export default function AdminOrdersPage() {
       }
     } catch (err) {
       if (requestId !== requestIdRef.current) return;
-      console.error('Error al cargar solicitudes de pedidos:', err);
-      toast.error('Error al cargar la lista de pedidos');
+      console.error("Error al cargar solicitudes de pedidos:", err);
+      toast.error("Error al cargar la lista de pedidos");
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
     }
@@ -148,7 +166,7 @@ export default function AdminOrdersPage() {
       const res = await fetch(`/api/admin/orders?${params.toString()}`);
       if (requestId !== requestIdRef.current) return;
       if (res.status === 401) {
-        router.push('/admin/login');
+        router.push("/admin/login");
         return;
       }
       const json = await res.json();
@@ -156,14 +174,16 @@ export default function AdminOrdersPage() {
       if (json.ok) {
         setOrders((prev) => {
           const existingIds = new Set(prev.map((o) => o._id));
-          const uniqueIncoming = (json.data || []).filter((o: AdminOrderItem) => !existingIds.has(o._id));
+          const uniqueIncoming = (json.data || []).filter(
+            (o: AdminOrderItem) => !existingIds.has(o._id),
+          );
           return [...prev, ...uniqueIncoming];
         });
         setPage(nextPage);
         setHasMore(json.pagination.page < json.pagination.totalPages);
       }
     } catch (err) {
-      console.error('Error al cargar más solicitudes de pedidos:', err);
+      console.error("Error al cargar más solicitudes de pedidos:", err);
     } finally {
       // A superseding fetchOrders resets the list; make sure paging is not stuck.
       setLoadingMore(false);
@@ -183,7 +203,7 @@ export default function AdminOrdersPage() {
           onLoadMoreRef.current?.();
         }
       },
-      { rootMargin: '300px' }
+      { rootMargin: "300px" },
     );
     const sentinel = sentinelRef.current;
     if (sentinel) observer.observe(sentinel);
@@ -199,42 +219,48 @@ export default function AdminOrdersPage() {
   const handleAuthorize = async (id: string, paymentMethod: string) => {
     try {
       const res = await fetch(`/api/admin/orders/${id}/authorize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ recordedPaymentMethod: paymentMethod }),
       });
 
       const json = await res.json();
-      if (!json.ok) throw new Error(json.message || 'Error al autorizar la orden');
+      if (!json.ok)
+        throw new Error(json.message || "Error al autorizar la orden");
 
       toast.success(`Venta #${json.orderNumber} autorizada con éxito`, {
-        description: 'El stock fue descontado automáticamente.',
+        description: "El stock fue descontado automáticamente.",
       });
       setSelectedOrder(null);
       fetchOrders();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al autorizar la orden');
+      toast.error(
+        err instanceof Error ? err.message : "Error al autorizar la orden",
+      );
     }
   };
 
   const handleCancel = async (id: string) => {
     try {
       const res = await fetch(`/api/admin/orders/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'cancel' }),
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel" }),
       });
 
       const json = await res.json();
-      if (!json.ok) throw new Error(json.message || 'Error al cancelar la orden');
+      if (!json.ok)
+        throw new Error(json.message || "Error al cancelar la orden");
 
       toast.warning(`Solicitud #${json.data.orderNumber} cancelada`, {
-        description: 'La orden quedó marcada como cancelada.',
+        description: "La orden quedó marcada como cancelada.",
       });
       setSelectedOrder(null);
       fetchOrders();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al cancelar la orden');
+      toast.error(
+        err instanceof Error ? err.message : "Error al cancelar la orden",
+      );
     }
   };
 
@@ -250,7 +276,8 @@ export default function AdminOrdersPage() {
               <ShoppingBag className="w-7 h-7" /> Solicitudes de Pedido
             </h1>
             <p className="text-xs text-[#707072] mt-1">
-              Gestioná los pedidos, autorizá ventas y descontá stock en tiempo real.
+              Gestioná los pedidos, autorizá ventas y descontá stock en tiempo
+              real.
             </p>
           </div>
 
@@ -296,18 +323,18 @@ export default function AdminOrdersPage() {
               </label>
             )}
             {[
-              { label: 'Todas', value: '' },
-              { label: 'Pendientes', value: 'pendiente' },
-              { label: 'Autorizadas', value: 'autorizado' },
-              { label: 'Canceladas', value: 'cancelado' },
+              { label: "Todas", value: "" },
+              { label: "Pendientes", value: "pendiente" },
+              { label: "Autorizadas", value: "autorizado" },
+              { label: "Canceladas", value: "cancelado" },
             ].map((st) => (
               <button
                 key={st.value}
                 onClick={() => setSelectedStatus(st.value)}
                 className={`py-2 px-3.5 text-xs font-bold uppercase tracking-wider rounded-full border transition-all ${
                   selectedStatus === st.value
-                    ? 'bg-[#111111] text-white border-[#111111]'
-                    : 'bg-[#f5f5f5] text-[#111111] border-[#e5e5e5] hover:border-[#111111]'
+                    ? "bg-[#111111] text-white border-[#111111]"
+                    : "bg-[#f5f5f5] text-[#111111] border-[#e5e5e5] hover:border-[#111111]"
                 }`}
               >
                 {st.label}
@@ -343,13 +370,16 @@ export default function AdminOrdersPage() {
                 </thead>
                 <tbody className="divide-y divide-[#e5e5e5]">
                   {orders.map((ord) => (
-                    <tr key={ord._id} className="hover:bg-[#f5f5f5]/50 transition-colors">
+                    <tr
+                      key={ord._id}
+                      className="hover:bg-[#f5f5f5]/50 transition-colors"
+                    >
                       <td className="py-3 px-4">
                         <span className="font-extrabold text-sm text-[#111111] block">
                           #{ord.orderNumber}
                         </span>
                         <span className="text-[10px] text-[#707072]">
-                          {new Date(ord.createdAt).toLocaleDateString('es-AR')}
+                          {new Date(ord.createdAt).toLocaleDateString("es-AR")}
                         </span>
                       </td>
 
@@ -363,16 +393,19 @@ export default function AdminOrdersPage() {
                       </td>
 
                       <td className="py-3 px-4 text-center font-bold text-[#111111]">
-                        {ord.items.reduce((acc, curr) => acc + curr.qty, 0)} unidades
+                        {ord.items.reduce((acc, curr) => acc + curr.qty, 0)}{" "}
+                        unidades
                       </td>
 
                       <td className="py-3 px-4 text-center">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          ord.origin === 'admin_direct'
-                            ? 'bg-[#111111] text-white'
-                            : 'bg-[#f5f5f5] text-[#707072] border border-[#e5e5e5]'
-                        }`}>
-                          {ord.origin === 'admin_direct' ? 'Directa' : 'Web'}
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            ord.origin === "admin_direct"
+                              ? "bg-[#111111] text-white"
+                              : "bg-[#f5f5f5] text-[#707072] border border-[#e5e5e5]"
+                          }`}
+                        >
+                          {ord.origin === "admin_direct" ? "Directa" : "Web"}
                         </span>
                       </td>
 
@@ -385,7 +418,9 @@ export default function AdminOrdersPage() {
                       </td>
 
                       <td className="py-3 px-4 text-center">
-                        <span className={`inline-flex items-center gap-1 text-[10px] font-extrabold py-1 px-2.5 rounded-full border ${STATUS_STYLES[ord.status] ?? STATUS_STYLES['pendiente']}`}>
+                        <span
+                          className={`inline-flex items-center gap-1 text-[10px] font-extrabold py-1 px-2.5 rounded-full border ${STATUS_STYLES[ord.status] ?? STATUS_STYLES["pendiente"]}`}
+                        >
                           {STATUS_ICON[ord.status]}
                           {ord.status.toUpperCase()}
                         </span>
@@ -396,7 +431,7 @@ export default function AdminOrdersPage() {
                           onClick={() => setSelectedOrder(ord)}
                           className="py-1.5 px-3 bg-[#f5f5f5] text-[#111111] hover:bg-[#111111] hover:text-white font-bold text-xs uppercase tracking-wider transition-colors inline-flex items-center gap-1"
                         >
-                          <Eye className="w-3.5 h-3.5" /> Ver Detalle
+                          <Eye className="w-3.5 h-3.5" /> Detalle
                         </button>
                       </td>
                     </tr>
@@ -405,7 +440,10 @@ export default function AdminOrdersPage() {
               </table>
 
               {hasMore && (
-                <div ref={sentinelRef} className="py-4 text-center border-t border-[#e5e5e5] bg-[#fafafa]">
+                <div
+                  ref={sentinelRef}
+                  className="py-4 text-center border-t border-[#e5e5e5] bg-[#fafafa]"
+                >
                   {loadingMore ? (
                     <div className="flex items-center justify-center gap-2 text-xs text-[#707072]">
                       <Loader2 className="w-4 h-4 animate-spin text-[#111111]" />
@@ -444,7 +482,7 @@ export default function AdminOrdersPage() {
         order={editingOrder}
         onClose={() => setEditingOrder(null)}
         onSaved={() => {
-          toast.success('Pedido actualizado correctamente.');
+          toast.success("Pedido actualizado correctamente.");
           fetchOrders();
         }}
       />

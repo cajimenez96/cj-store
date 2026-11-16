@@ -262,7 +262,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Left: Image Gallery */}
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           {/* Main Preview Image */}
           <div className="relative aspect-square w-full bg-[#f5f5f5] overflow-hidden">
             {selectedImage && (
@@ -284,7 +284,10 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
           {/* Image Thumbnails Rail */}
           {product.images.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto pb-2">
+            <div
+              className="flex w-full max-w-full gap-2 overflow-x-auto pb-2 touch-pan-x"
+              data-vaul-no-drag
+            >
               {product.images.map((img, idx) => (
                 <button
                   key={idx}
@@ -309,7 +312,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         </div>
 
         {/* Right: Product Metadata & Size Selector */}
-        <div className="flex flex-col justify-between space-y-6">
+        <div className="flex flex-col justify-between space-y-6 min-w-0">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-xs font-bold text-[#707072] uppercase tracking-wider">

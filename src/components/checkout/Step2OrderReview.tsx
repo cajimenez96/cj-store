@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Image from "next/image";
 import { CustomerFormData } from "./Step1CustomerData";
 import { useCart, CartItem } from "@/context/CartContext";
-import { Check, Edit, AlertCircle, Loader2, Zap } from "lucide-react";
+import { Edit, AlertCircle, Zap } from "lucide-react";
 import { formatPrice } from "@/utils/formatCurrency";
 
 interface Step2OrderReviewProps {
@@ -46,8 +46,14 @@ export const Step2OrderReview: React.FC<Step2OrderReviewProps> = ({
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loading) return;
+    await handleConfirm();
+  };
+
   return (
-    <div className="space-y-6">
+    <form id="checkout-step2-form" onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-1">
         <h3 className="text-xl font-extrabold uppercase tracking-tight text-[#111111]">
           Revisá tu pedido
@@ -201,22 +207,6 @@ export const Step2OrderReview: React.FC<Step2OrderReviewProps> = ({
           <span>{errorMsg}</span>
         </div>
       )}
-
-      {/* Confirm Button */}
-      <button
-        onClick={handleConfirm}
-        disabled={loading}
-        className="w-full py-4 bg-[#111111] hover:bg-black text-white font-bold text-sm uppercase tracking-wider rounded-full flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md disabled:opacity-50 cursor-pointer"
-      >
-        <>
-          {loading ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            <Check className="w-5 h-5" />
-          )}
-          Confirmar Pedido
-        </>
-      </button>
-    </div>
+    </form>
   );
 };

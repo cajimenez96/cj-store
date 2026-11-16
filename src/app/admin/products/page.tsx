@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
-import { AdminNav } from '@/components/admin/AdminNav';
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { AdminNav } from "@/components/admin/AdminNav";
 import {
   Plus,
   Edit2,
@@ -14,11 +14,11 @@ import {
   Trash2,
   AlertTriangle,
   Loader2,
-} from 'lucide-react';
+} from "lucide-react";
 
-import { formatPrice } from '@/utils/formatCurrency';
-import { toast } from '@/components/ui/sonner';
-import { ResponsiveModal } from '@/components/ui/responsive-modal';
+import { formatPrice } from "@/utils/formatCurrency";
+import { toast } from "@/components/ui/sonner";
+import { ResponsiveModal } from "@/components/ui/responsive-modal";
 
 interface AdminProductItem {
   _id: string;
@@ -43,41 +43,49 @@ export default function AdminProductsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
 
   // Filter & Search states
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedGender, setSelectedGender] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
-  const [genderOptions, setGenderOptions] = useState<{ value: string; label: string }[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedGender, setSelectedGender] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("");
+  const [genderOptions, setGenderOptions] = useState<
+    { value: string; label: string }[]
+  >([]);
 
   // Delete modal state
-  const [productToDelete, setProductToDelete] = useState<AdminProductItem | null>(null);
+  const [productToDelete, setProductToDelete] =
+    useState<AdminProductItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const PAGE_SIZE = 25;
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const buildParams = useCallback((targetPage: number) => {
-    const params = new URLSearchParams();
-    if (searchTerm) params.append('search', searchTerm);
-    if (selectedGender) params.append('gender', selectedGender);
-    if (selectedStatus) params.append('active', selectedStatus);
-    params.append('page', targetPage.toString());
-    params.append('limit', PAGE_SIZE.toString());
-    return params;
-  }, [searchTerm, selectedGender, selectedStatus]);
+  const buildParams = useCallback(
+    (targetPage: number) => {
+      const params = new URLSearchParams();
+      if (searchTerm) params.append("search", searchTerm);
+      if (selectedGender) params.append("gender", selectedGender);
+      if (selectedStatus) params.append("active", selectedStatus);
+      params.append("page", targetPage.toString());
+      params.append("limit", PAGE_SIZE.toString());
+      return params;
+    },
+    [searchTerm, selectedGender, selectedStatus],
+  );
 
   // Gender filter options come from the "genero" attribute
   useEffect(() => {
-    fetch('/api/admin/attributes')
+    fetch("/api/admin/attributes")
       .then((res) => res.json())
       .then((json) => {
         const genderAttr = json.ok
-          ? json.data.find((a: { key: string }) => a.key === 'genero')
+          ? json.data.find((a: { key: string }) => a.key === "genero")
           : null;
         setGenderOptions(
-          (genderAttr?.options ?? []).filter((o: { active: boolean }) => o.active)
+          (genderAttr?.options ?? []).filter(
+            (o: { active: boolean }) => o.active,
+          ),
         );
       })
-      .catch((err) => console.error('Error cargando opciones de género:', err));
+      .catch((err) => console.error("Error cargando opciones de género:", err));
   }, []);
 
   const fetchProducts = useCallback(async () => {
@@ -92,8 +100,8 @@ export default function AdminProductsPage() {
         setHasMore(json.pagination.page < json.pagination.totalPages);
       }
     } catch (err) {
-      console.error('Error cargando productos:', err);
-      toast.error('Error al cargar productos del catálogo');
+      console.error("Error cargando productos:", err);
+      toast.error("Error al cargar productos del catálogo");
     } finally {
       setLoading(false);
     }
@@ -110,14 +118,16 @@ export default function AdminProductsPage() {
       if (json.ok) {
         setProducts((prev) => {
           const existingIds = new Set(prev.map((p) => p._id));
-          const uniqueIncoming = (json.data || []).filter((p: AdminProductItem) => !existingIds.has(p._id));
+          const uniqueIncoming = (json.data || []).filter(
+            (p: AdminProductItem) => !existingIds.has(p._id),
+          );
           return [...prev, ...uniqueIncoming];
         });
         setPage(nextPage);
         setHasMore(json.pagination.page < json.pagination.totalPages);
       }
     } catch (err) {
-      console.error('Error al cargar más productos:', err);
+      console.error("Error al cargar más productos:", err);
     } finally {
       setLoadingMore(false);
     }
@@ -136,7 +146,7 @@ export default function AdminProductsPage() {
           onLoadMoreRef.current?.();
         }
       },
-      { rootMargin: '300px' }
+      { rootMargin: "300px" },
     );
     const sentinel = sentinelRef.current;
     if (sentinel) observer.observe(sentinel);
@@ -152,8 +162,8 @@ export default function AdminProductsPage() {
   const toggleStatus = async (product: AdminProductItem) => {
     try {
       const res = await fetch(`/api/admin/products`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           _id: product._id,
           active: !product.active,
@@ -166,14 +176,18 @@ export default function AdminProductsPage() {
           ? `Producto "${product.name}" activado`
           : `Producto "${product.name}" desactivado`;
         toast.success(msg, {
-          description: !product.active ? 'Visible en catálogo.' : 'Oculto del catálogo.',
+          description: !product.active
+            ? "Visible en catálogo."
+            : "Oculto del catálogo.",
         });
         fetchProducts();
       } else {
         throw new Error(json.message);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al cambiar estado');
+      toast.error(
+        err instanceof Error ? err.message : "Error al cambiar estado",
+      );
     }
   };
 
@@ -181,24 +195,29 @@ export default function AdminProductsPage() {
     if (!productToDelete) return;
     setIsDeleting(true);
     try {
-      const res = await fetch(`/api/admin/products?id=${productToDelete._id}&permanent=true`, {
-        method: 'DELETE',
-      });
+      const res = await fetch(
+        `/api/admin/products?id=${productToDelete._id}&permanent=true`,
+        {
+          method: "DELETE",
+        },
+      );
       const json = await res.json();
 
       if (json.ok) {
-        if (json.mode === 'deleted') {
-          toast.success('Producto eliminado permanentemente');
+        if (json.mode === "deleted") {
+          toast.success("Producto eliminado permanentemente");
         } else {
-          toast.info(json.message || 'Producto desactivado');
+          toast.info(json.message || "Producto desactivado");
         }
         setProductToDelete(null);
         fetchProducts();
       } else {
-        throw new Error(json.message || 'No se pudo eliminar el producto');
+        throw new Error(json.message || "No se pudo eliminar el producto");
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al eliminar producto');
+      toast.error(
+        err instanceof Error ? err.message : "Error al eliminar producto",
+      );
     } finally {
       setIsDeleting(false);
     }
@@ -290,32 +309,43 @@ export default function AdminProductsPage() {
                     <th className="py-3 px-4">Marca / Categoría</th>
                     <th className="py-3 px-4 text-center">Género</th>
                     <th className="py-3 px-4 text-right">Precio</th>
-                    <th className="py-3 px-4 text-center">Stock Total</th>
-                    <th className="py-3 px-4 text-center">Estado</th>
+                    <th className="py-3 px-4 text-center whitespace-nowrap">
+                      Stock Total
+                    </th>
+                    <th className="py-3 px-4 text-center whitespace-nowrap">
+                      Estado
+                    </th>
                     <th className="py-3 px-4 text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e5e5e5]">
                   {products.map((prod) => {
                     const brandName =
-                      typeof prod.brandId === 'object' && prod.brandId !== null
+                      typeof prod.brandId === "object" && prod.brandId !== null
                         ? prod.brandId.name
-                        : '-';
+                        : "-";
                     const categoryName =
-                      typeof prod.categoryId === 'object' && prod.categoryId !== null
+                      typeof prod.categoryId === "object" &&
+                      prod.categoryId !== null
                         ? prod.categoryId.name
-                        : '-';
-                    const genderValue = prod.specs?.find((s) => s.key === 'genero')?.value;
+                        : "-";
+                    const genderValue = prod.specs?.find(
+                      (s) => s.key === "genero",
+                    )?.value;
                     const genderLabel =
-                      genderOptions.find((o) => o.value === genderValue)?.label ??
-                      (typeof genderValue === 'string' ? genderValue : '-');
+                      genderOptions.find((o) => o.value === genderValue)
+                        ?.label ??
+                      (typeof genderValue === "string" ? genderValue : "-");
                     const mainImage =
                       prod.images.find((img) => img.isPrincipal)?.url ||
                       prod.images[0]?.url ||
-                      '';
+                      "";
 
                     return (
-                      <tr key={prod._id} className="hover:bg-[#f5f5f5]/50 transition-colors">
+                      <tr
+                        key={prod._id}
+                        className="hover:bg-[#f5f5f5]/50 transition-colors"
+                      >
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-3">
                             <div className="relative w-12 h-12 bg-[#f5f5f5] flex-shrink-0 border border-[#e5e5e5]">
@@ -344,7 +374,9 @@ export default function AdminProductsPage() {
 
                         <td className="py-3 px-4 text-[#707072] font-semibold">
                           <div>{brandName}</div>
-                          <div className="text-[10px] text-[#707072]">{categoryName}</div>
+                          <div className="text-[10px] text-[#707072]">
+                            {categoryName}
+                          </div>
                         </td>
 
                         <td className="py-3 px-4 text-center font-bold text-[#111111]">
@@ -355,7 +387,11 @@ export default function AdminProductsPage() {
                           {prod.isClearance ? (
                             <div>
                               <div className="font-extrabold text-sm text-[#d30005]">
-                                {formatPrice(prod.wholesalePrice ?? prod.retailPrice ?? prod.price)}
+                                {formatPrice(
+                                  prod.wholesalePrice ??
+                                    prod.retailPrice ??
+                                    prod.price,
+                                )}
                               </div>
                               <div className="text-[10px] font-extrabold text-[#d30005] uppercase">
                                 Liquidación
@@ -366,21 +402,22 @@ export default function AdminProductsPage() {
                               <div className="font-extrabold text-sm text-[#111111]">
                                 {formatPrice(prod.retailPrice ?? prod.price)}
                               </div>
-                              {(prod.wholesalePrice !== undefined && prod.wholesalePrice !== null) && (
-                                <div className="text-[10px] font-bold text-[#007d48]">
-                                  May: {formatPrice(prod.wholesalePrice)}
-                                </div>
-                              )}
+                              {prod.wholesalePrice !== undefined &&
+                                prod.wholesalePrice !== null && (
+                                  <div className="text-[10px] font-bold text-[#007d48]">
+                                    May: {formatPrice(prod.wholesalePrice)}
+                                  </div>
+                                )}
                             </>
                           )}
                         </td>
 
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-3 px-4 text-center whitespace-nowrap">
                           <span
-                            className={`font-extrabold px-2.5 py-1 rounded-full text-[11px] border ${
+                            className={`inline-flex items-center justify-center whitespace-nowrap font-extrabold px-2.5 py-1 rounded-full text-[11px] border ${
                               prod.totalStock > 0
-                                ? 'bg-[#f5f5f5] text-[#111111] border-[#e5e5e5]'
-                                : 'bg-[#d30005]/10 text-[#d30005] border-[#d30005]'
+                                ? "bg-[#f5f5f5] text-[#111111] border-[#e5e5e5]"
+                                : "bg-[#d30005]/10 text-[#d30005] border-[#d30005]"
                             }`}
                           >
                             {prod.totalStock} unidades
@@ -405,12 +442,20 @@ export default function AdminProductsPage() {
                               onClick={() => toggleStatus(prod)}
                               className={`p-1.5 rounded-full transition-colors ${
                                 prod.active
-                                  ? 'bg-[#007d48] text-white'
-                                  : 'bg-[#f5f5f5] text-[#707072] border border-[#e5e5e5]'
+                                  ? "bg-[#007d48] text-white"
+                                  : "bg-[#f5f5f5] text-[#707072] border border-[#e5e5e5]"
                               }`}
-                              title={prod.active ? 'Desactivar producto' : 'Activar producto'}
+                              title={
+                                prod.active
+                                  ? "Desactivar producto"
+                                  : "Activar producto"
+                              }
                             >
-                              {prod.active ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                              {prod.active ? (
+                                <Eye className="w-4 h-4" />
+                              ) : (
+                                <EyeOff className="w-4 h-4" />
+                              )}
                             </button>
 
                             <Link
@@ -437,7 +482,10 @@ export default function AdminProductsPage() {
               </table>
 
               {hasMore && (
-                <div ref={sentinelRef} className="py-4 text-center border-t border-[#e5e5e5] bg-[#fafafa]">
+                <div
+                  ref={sentinelRef}
+                  className="py-4 text-center border-t border-[#e5e5e5] bg-[#fafafa]"
+                >
                   {loadingMore ? (
                     <div className="flex items-center justify-center gap-2 text-xs text-[#707072]">
                       <Loader2 className="w-4 h-4 animate-spin text-[#111111]" />
@@ -466,6 +514,27 @@ export default function AdminProductsPage() {
           title="Eliminar producto"
           hideTitle
           className="sm:max-w-md p-6 gap-4"
+          footer={
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setProductToDelete(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 text-xs font-bold text-[#111111] bg-[#f5f5f5] hover:bg-[#e5e5e5] transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteProduct}
+                disabled={isDeleting}
+                className="px-4 py-2 text-xs font-bold text-white bg-[#d30005] hover:bg-[#b00004] transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {isDeleting ? "Eliminando..." : "Sí, Eliminar"}
+              </button>
+            </div>
+          }
         >
           <div className="flex items-center gap-3 text-[#d30005]">
             <div className="p-2 bg-[#d30005]/10 rounded-full">
@@ -478,33 +547,18 @@ export default function AdminProductsPage() {
 
           <div className="space-y-2 text-xs text-[#707072]">
             <p>
-              Estás a punto de eliminar{' '}
-              <strong className="text-[#111111] font-bold">{productToDelete.name}</strong>.
+              Estás a punto de eliminar{" "}
+              <strong className="text-[#111111] font-bold">
+                {productToDelete.name}
+              </strong>
+              .
             </p>
             <p>
-              Si este producto no tiene ventas registradas, se eliminará permanentemente de la base de datos.
-              Si ya cuenta con historial de pedidos, se desactivará automáticamente para preservar los reportes.
+              Si este producto no tiene ventas registradas, se eliminará
+              permanentemente de la base de datos. Si ya cuenta con historial de
+              pedidos, se desactivará automáticamente para preservar los
+              reportes.
             </p>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={() => setProductToDelete(null)}
-              disabled={isDeleting}
-              className="px-4 py-2 text-xs font-bold text-[#111111] bg-[#f5f5f5] hover:bg-[#e5e5e5] transition-colors cursor-pointer disabled:opacity-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={handleDeleteProduct}
-              disabled={isDeleting}
-              className="px-4 py-2 text-xs font-bold text-white bg-[#d30005] hover:bg-[#b00004] transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              {isDeleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {isDeleting ? 'Eliminando...' : 'Sí, Eliminar'}
-            </button>
           </div>
         </ResponsiveModal>
       )}
