@@ -84,7 +84,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange }) => {
           >
             <Image
               src="/logo-nav.png"
-              alt={settings.storeName || "The Point"}
+              alt={settings.storeName || "Alquimia Parfums"}
               width={180}
               height={32}
               priority

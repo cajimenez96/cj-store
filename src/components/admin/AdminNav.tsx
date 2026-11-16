@@ -96,7 +96,7 @@ export const AdminNav: React.FC = () => {
           >
             <Image
               src="/logo-nav.png"
-              alt="The Point Admin"
+              alt="Alquimia Parfums Admin"
               width={140}
               height={24}
               priority

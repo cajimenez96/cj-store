@@ -40,14 +40,14 @@ export const PromoCarousel: React.FC<PromoCarouselProps> = ({
       <div className="w-full bg-[#111111] text-white py-12 px-6 text-center my-4 rounded-none">
         <div className="max-w-2xl mx-auto space-y-3">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wider text-white">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" /> The Point
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Alquimia Parfums
           </span>
           <h2 className="text-3xl md:text-5xl font-extrabold tracking-tight uppercase">
             Fragancias & Perfumes Exclusivos
           </h2>
           <p className="text-sm text-[#cacacb]">
-            Elegí tus fragancias favoritas, consultá disponibilidad en tiempo real y
-            gestioná tu pedido por WhatsApp.
+            Elegí tus fragancias favoritas, consultá disponibilidad en tiempo
+            real y gestioná tu pedido por WhatsApp.
           </p>
         </div>
       </div>
@@ -55,7 +55,9 @@ export const PromoCarousel: React.FC<PromoCarouselProps> = ({
   }
 
   const currentPromo = promotions[currentIndex];
-  const hasText = Boolean(currentPromo.title?.trim() || currentPromo.description?.trim());
+  const hasText = Boolean(
+    currentPromo.title?.trim() || currentPromo.description?.trim(),
+  );
 
   return (
     <div

@@ -72,8 +72,8 @@ export const Footer: React.FC = () => {
         <div className="space-y-3">
           <Link href="/" className="inline-block mb-1">
             <Image
-              src="/logotipo.png"
-              alt={settings.storeName || "The Point"}
+              src="/logo-nav.png"
+              alt={settings.storeName || "Alquimia Parfums"}
               width={140}
               height={110}
               className="h-14 w-auto object-contain hover:opacity-85 transition-opacity"
@@ -132,7 +132,10 @@ export const Footer: React.FC = () => {
 
             {categoryTree.map((category) => (
               <li key={category._id}>
-                <Link href={categoryHref(category)} className={FOOTER_LINK_CLASS}>
+                <Link
+                  href={categoryHref(category)}
+                  className={FOOTER_LINK_CLASS}
+                >
                   {category.name}
                 </Link>
 
@@ -140,7 +143,10 @@ export const Footer: React.FC = () => {
                   <ul className="mt-2 ml-1 space-y-2 border-l border-[#27272a] pl-3">
                     {category.children.map((child) => (
                       <li key={child._id}>
-                        <Link href={categoryHref(child)} className={FOOTER_LINK_CLASS}>
+                        <Link
+                          href={categoryHref(child)}
+                          className={FOOTER_LINK_CLASS}
+                        >
                           {child.name}
                         </Link>
                       </li>
@@ -151,7 +157,10 @@ export const Footer: React.FC = () => {
             ))}
 
             <li>
-              <Link href="/?clearance=true#catalogo" className={FOOTER_LINK_CLASS}>
+              <Link
+                href="/?clearance=true#catalogo"
+                className={FOOTER_LINK_CLASS}
+              >
                 Ofertas
               </Link>
             </li>

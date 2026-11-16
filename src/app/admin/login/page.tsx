@@ -114,15 +114,15 @@ function LoginFormContent() {
 
       {/* Login Card matching mockup */}
       <div className="relative z-10 w-full max-w-[390px] bg-[#0c0c0e]/85 backdrop-blur-xl border border-white/[0.07] rounded-3xl px-8 py-10 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] flex flex-col items-center">
-        {/* Brand Logo (Shield emblem + THE POINT) */}
+        {/* Brand Logo (Shield emblem + Alquimia Parfums) */}
         <div className="mb-8 flex flex-col items-center">
           <Image
             src="/logotipo.png"
-            alt="The Point"
-            width={180}
-            height={142}
+            alt="Alquimia Parfums"
+            width={250}
+            height={200}
             priority
-            className="h-28 w-auto object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.6)]"
+            className="w-auto object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.6)]"
           />
         </div>
 

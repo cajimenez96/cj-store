@@ -1,4 +1,4 @@
-# The Point · E-commerce de perfumería
+# Alquimia Parfums · E-commerce de perfumería
 
 Tienda web de perfumería y fragancias con **catálogo por rubros y categorías**, productos con **variantes** (por ejemplo volumen), **precio mayorista automático**, checkout en 3 pasos que termina en **WhatsApp**, y un **panel de administración** con stock, pedidos, punto de venta, reportes y contabilidad. El modelo de datos es multirrubro: otros rubros se agregan creando categorías y atributos desde el panel.
 
@@ -42,13 +42,13 @@ La tienda queda en [http://localhost:3000](http://localhost:3000) y el panel en 
 
 ## Scripts
 
-| Comando | Acción |
-| --- | --- |
-| `pnpm dev` | Servidor de desarrollo. |
-| `pnpm build` · `pnpm start` | Compilación y ejecución en producción. |
-| `pnpm lint` | ESLint. |
+| Comando                        | Acción                                                                                                                                                             |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm dev`                     | Servidor de desarrollo.                                                                                                                                            |
+| `pnpm build` · `pnpm start`    | Compilación y ejecución en producción.                                                                                                                             |
+| `pnpm lint`                    | ESLint.                                                                                                                                                            |
 | `pnpm seed` · `pnpm seed:prod` | Crea el `superadmin` inicial si no existe (`seed:prod` usa `.env.prod`). No borra datos. Acepta `SEED_ADMIN_USERNAME`, `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD`. |
-| `pnpm wipe:data` | Vacía todas las colecciones excepto `users`. **Destructivo.** |
+| `pnpm wipe:data`               | Vacía todas las colecciones excepto `users`. **Destructivo.**                                                                                                      |
 
 ## Primeros pasos en el panel
 

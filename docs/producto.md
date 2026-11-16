@@ -1,4 +1,4 @@
-# Especificación de Producto: Catálogo E-Commerce The Point / Product Specification: The Point E-Commerce Catalog
+# Especificación de Producto: Catálogo E-Commerce Alquimia Parfums / Product Specification: Alquimia Parfums E-Commerce Catalog
 
 > Este documento describe el sistema **actual**. La versión original del proyecto era una tienda de calzado con tipos, géneros y talles fijos; ese modelo fue reemplazado por categorías, atributos y variantes. El plan de trabajo original se conserva como referencia histórica en [planificacion.md](planificacion.md).
 
@@ -15,42 +15,52 @@
 - **Vendedor (`seller`):** usa el punto de venta para registrar ventas directas y gestiona solo sus propias ventas directas `autorizado` (las lista, ve, edita y cancela); consulta su contabilidad mensual (solo ingresos y desviación de precio) y el stock en solo lectura.
 
 ### Fuera de Alcance (Out of Scope)
+
 - Autenticación o registro de clientes.
 - Campo obligatorio de correo electrónico (email) del cliente.
 - Pasarelas de pago automatizadas (MercadoPago, Stripe, etc.).
 - Rastreo automático de envíos.
 
 ### Sistema de Diseño UI
-La interfaz se rige por [DESIGN.md](DESIGN.md) (estilo deportivo-editorial, botones píldora, tipografía de alto contraste). En la implementación actual, el encabezado y el pie de la tienda usan el tema oscuro y el contenido principal mantiene el tema claro; ver la sección *Implementation Notes* de ese documento.
+
+La interfaz se rige por [DESIGN.md](DESIGN.md) (estilo deportivo-editorial, botones píldora, tipografía de alto contraste). En la implementación actual, el encabezado y el pie de la tienda usan el tema oscuro y el contenido principal mantiene el tema claro; ver la sección _Implementation Notes_ de ese documento.
 
 ---
 
 ## 2. ENTIDADES PRINCIPALES DEL NEGOCIO
 
 ### 2.1 Marca
+
 Fabricante o casa del producto (ej: Paco Rabanne, Dior).
+
 - **Atributos:** `nombre` (único, requerido).
 - **Relaciones:** 1 a N con Productos.
 
 ### 2.2 Categoría
-Árbol de clasificación del catálogo. Las categorías **raíz son los rubros** (ej: *Fragancias*) y sus hijas las categorías dentro del rubro (ej: *Fragancias hombre*, *Fragancia mujer*).
+
+Árbol de clasificación del catálogo. Las categorías **raíz son los rubros** (ej: _Fragancias_) y sus hijas las categorías dentro del rubro (ej: _Fragancias hombre_, _Fragancia mujer_).
+
 - **Atributos:** `nombre`, `slug` (único), `parentId` (vacío en las raíces), `ancestors` (cadena de ancestros, derivada), `orden`, `activa`.
 - **Configuración de variantes y ficha técnica:**
   - `variantAxes`: atributos de tipo selección que generan variantes en los productos de la categoría (ej: `volumen`, `color`). Sin ejes, los productos son **simples** (una única variante).
   - `imageAxis`: eje cuyo valor agrupa las imágenes (ej: una foto por color).
   - `specAttributes`: atributos que se cargan como ficha técnica, cada uno obligatorio u opcional (ej: `genero`).
 - **Jerarquía en filtros:** filtrar por una categoría incluye también a todas sus descendientes.
-- **Navegación de la tienda:** el menú del encabezado y la columna *Categorías* del pie se arman con esta jerarquía; agregar un rubro o una categoría en el panel lo publica automáticamente.
+- **Navegación de la tienda:** el menú del encabezado y la columna _Categorías_ del pie se arman con esta jerarquía; agregar un rubro o una categoría en el panel lo publica automáticamente.
 
 ### 2.3 Atributo
+
 Dimensión reutilizable que describe productos y variantes.
+
 - **Atributos:** `key` (inmutable, único, minúsculas y guiones bajos), `label`, `type` (`select` | `text` | `number` | `boolean`), `unit` (para numéricos, ej: `ml`), `filterable`.
 - **Opciones** (tipo `select`): `value` (slug inmutable), `label` (editable), `order` (orden lógico, no alfabético), `hex` (solo colores) y `active`. Una opción en uso se **desactiva** en lugar de borrarse.
-- **Género:** ya no es una entidad propia. Se modela como el atributo `genero` (tipo selección) y se activa agregándolo a los `specAttributes` de una categoría. El filtro por género del catálogo toma las opciones activas de ese atributo y se puede ocultar con el ajuste *Habilitar el filtro por género*. No hay géneros predefinidos y se administra en un único lugar, *Ajustes*: allí se crean, ocultan y eliminan sus opciones (Hombre, Mujer, etc.) y se elige qué categorías lo usan (en *Atributos* aparece bloqueado). Mientras no haya opciones activas el filtro no se muestra.
+- **Género:** ya no es una entidad propia. Se modela como el atributo `genero` (tipo selección) y se activa agregándolo a los `specAttributes` de una categoría. El filtro por género del catálogo toma las opciones activas de ese atributo y se puede ocultar con el ajuste _Habilitar el filtro por género_. No hay géneros predefinidos y se administra en un único lugar, _Ajustes_: allí se crean, ocultan y eliminan sus opciones (Hombre, Mujer, etc.) y se elige qué categorías lo usan (en _Atributos_ aparece bloqueado). Mientras no haya opciones activas el filtro no se muestra.
 - **Talles de calzado:** si en el futuro se vende calzado, se resuelven con un atributo de talle como eje de variantes de la categoría correspondiente.
 
 ### 2.4 Producto
+
 Artículo exhibido en la tienda.
+
 - **Atributos:** `nombre`, `slug`, `descripcion`, `activo`, `esLiquidacion` (marca de oferta), `imagenes`.
 - **Relaciones:** pertenece a una Marca y a una Categoría (la Categoría define sus ejes de variantes y su ficha técnica).
 - **Ficha técnica (`specs`):** pares clave/valor según los `specAttributes` de la categoría.
@@ -60,21 +70,29 @@ Artículo exhibido en la tienda.
 - **Campos de compatibilidad:** `retailPrice`, `wholesalePrice`, `stock` a nivel producto se completan al guardar el formulario; la **fuente de verdad del stock y de los precios de venta son las variantes**.
 
 ### 2.5 Variante
-Combinación vendible de un producto (ej: *100 ml*, *negro / 50 ml*). Un producto simple tiene una sola variante sin opciones.
+
+Combinación vendible de un producto (ej: _100 ml_, _negro / 50 ml_). Un producto simple tiene una sola variante sin opciones.
+
 - **Atributos:** `sku`, `name` (opcional), `options` (pares `key`/`value` de los ejes), `retailPrice`, `wholesalePrice` (opcional), `stock`, `active`.
 - **Identidad estable:** el `_id` de la variante se conserva al editar el producto, porque los carritos y los pedidos pendientes la referencian.
 - **Etiqueta:** se muestra con los valores de sus opciones unidos por " / "; si no tiene opciones, usa su nombre o su SKU.
 
 ### 2.6 Imagen de Producto
+
 Referencia a imágenes alojadas en ImageKit.
+
 - **Atributos:** `url`, `fileId`, `isPrincipal`, `position` y `axisValue` (valor del `imageAxis` al que pertenece; vacío si es una foto general).
 
 ### 2.7 Promoción
+
 Banner del carrusel de la página principal, meramente visual.
+
 - **Atributos:** `titulo`, `descripcion`, `imageUrl`, `activa`, `orden`, `fechaInicio` y `fechaFin` (opcionales).
 
 ### 2.8 Solicitud de Venta (Pedido)
+
 Registro de intención de compra generado desde la tienda o creado desde el panel.
+
 - **Atributos:**
   - `orderNumber` (único; web `PED-AAAA-NNNNxx`, venta directa `PED-AAAA-N<secuencia>`), `origen` (`web` | `admin_direct`), `fechaCreacion`.
   - `cliente`: `nombre`, `apellido`, `telefono` (todos requeridos).
@@ -84,20 +102,28 @@ Registro de intención de compra generado desde la tienda o creado desde el pane
   - `subtotal`, `descuento`, `total`, `medioPago` (`transferencia` | `efectivo` | `tarjeta` | `otro`), `notas`, `motivoCancelacion`.
 
 ### 2.9 Registro de Venta
+
 Se crea al autorizar un pedido o al registrar una venta directa.
+
 - **Atributos:** `orderId` (único), `orderNumber`, `fechaConfirmacion`, `medioPagoRegistrado`, `notaDescuento`, `totalFinal`.
 
 ### 2.10 Gasto
+
 Egreso registrado en contabilidad.
+
 - **Atributos:** `concepto`, `categoria` (`mercaderia` | `logistica` | `servicios` | `marketing` | `alquiler` | `sueldos` | `otros`), `monto`, `medioPago` (`efectivo` | `transferencia`), `fecha`, `notas`.
 
 ### 2.11 Usuario
+
 Cuenta del panel de administración.
+
 - **Atributos:** `username` (único), `nombre`, `email` (opcional), `passwordHash`, `activo`, `rol` (`superadmin` | `admin` | `seller`).
 - **Acceso:** `superadmin` y `admin` tienen acceso completo al panel. `seller` accede únicamente al POS, a sus propias ventas directas autorizadas (listar, ver, editar y cancelar), a su contabilidad mensual (solo ingresos y desviación de precio) y al stock en solo lectura (productos activos, sin costos); no ve costos, ventas de otros usuarios, pedidos web, gastos, gestión de productos, ajustes ni usuarios. Solo un `superadmin` crea o edita a otro `superadmin`, y el último `superadmin` activo está protegido. Los cambios de rol y las bajas rigen de inmediato: cada operación del panel vuelve a verificar contra la base que el usuario siga activo y su rol actual.
 
 ### 2.12 Ajustes de la Tienda
+
 Configuración única, editable desde el panel y expuesta a la tienda.
+
 - **Identidad y contacto:** nombre, teléfono de WhatsApp, email, horarios, mensaje de consulta, Instagram, Facebook.
 - **SEO:** título, descripción y palabras clave; descripción del pie.
 - **Datos bancarios:** alias, CBU, titular, CUIT, banco.
@@ -109,6 +135,7 @@ Configuración única, editable desde el panel y expuesta a la tienda.
 ## 3. FLUJO DE USUARIO: CLIENTE (COMPRADOR)
 
 ### 3.1 Descubrir Productos (Landing Page)
+
 1. El cliente entra a la web y visualiza:
    - Carrusel de promociones activas.
    - Encabezado con **Catálogo, los rubros (con un desplegable de sus categorías) y Ofertas**, y buscador.
@@ -117,16 +144,19 @@ Configuración única, editable desde el panel y expuesta a la tienda.
 3. Los enlaces del encabezado y del pie abren el catálogo ya filtrado por la categoría elegida.
 
 ### 3.2 Ver Detalle de Producto
+
 1. Al hacer clic en una tarjeta se abre el detalle: galería de imágenes, ficha técnica, descripción y precios.
 2. **Selector de variantes** según los ejes de la categoría (por ejemplo volumen o color), con el stock disponible de la variante elegida. En productos simples se muestra solo el stock.
 3. Selector de cantidad y botón **"Agregar al carrito"**.
 
 ### 3.3 Carrito y Precio Mayorista
+
 1. El carrito suma las unidades de todos los productos y recalcula los precios en tiempo real (ver regla en la sección 5).
 2. Muestra el progreso hacia el beneficio mayorista y el total.
 3. El carrito se conserva en el navegador del cliente.
 
 ### 3.4 Checkout en 3 Pasos
+
 - **Paso 1: Tus Datos** (nombre, apellido, teléfono WhatsApp).
 - **Paso 2: Tu Pedido** (resumen con variante, tipo de precio aplicado y totales). Al confirmar, el pedido se guarda en estado `pendiente`.
 - **Paso 3: Pago y Confirmación** (datos bancarios y botón para enviar el resumen por WhatsApp).
@@ -158,7 +188,7 @@ Configuración única, editable desde el panel y expuesta a la tienda.
    - Un producto con mayorista habilitado cotiza una variante a su precio mayorista cuando las unidades de ese producto en el pedido alcanzan su `minQty`, siempre que el precio mayorista sea menor al minorista.
    - Además, cuando el pedido completo suma **5 o más unidades** (umbral global), todos los productos que tengan precio mayorista inferior al minorista pasan a precio mayorista.
    - El servidor recalcula el precio al crear el pedido; el cliente no puede forzarlo. En el POS, 5 o más unidades activan el precio mayorista, y el administrador puede fijar un precio acordado (`custom`) por ítem.
-   - **Nota:** el umbral global de 5 unidades está definido en el código. El ajuste *Unidades mínimas para precio mayorista* del panel se guarda pero hoy no modifica ese umbral (ver deuda técnica en [arquitectura.md](arquitectura.md)).
+   - **Nota:** el umbral global de 5 unidades está definido en el código. El ajuste _Unidades mínimas para precio mayorista_ del panel se guarda pero hoy no modifica ese umbral (ver deuda técnica en [arquitectura.md](arquitectura.md)).
 2. **Stock asincrónico:** el stock no se reserva mientras el producto está en el carrito ni mientras el pedido web está `pendiente`. Se descuenta solo cuando el administrador **autoriza** el pedido; si en ese momento no hay stock suficiente, la autorización se rechaza.
 3. **Ventas directas (stock único real):** toda venta del POS pasa a `autorizado` y descuenta el stock en el acto.
 4. **Variantes como fuente de verdad:** el stock y el precio de venta se leen de la variante. Editar un producto conserva el identificador de sus variantes existentes.
@@ -166,6 +196,7 @@ Configuración única, editable desde el panel y expuesta a la tienda.
 6. **Categorías:** filtrar por una categoría padre incluye los productos de sus hijas. Una categoría con productos asociados no puede cambiar sus ejes de variantes ni eliminarse; al mover una categoría de lugar se actualizan los ancestros de sus productos.
 
 ---
+
 ---
 
 # 🇬🇧 ENGLISH VERSION
@@ -181,9 +212,11 @@ Configuración única, editable desde el panel y expuesta a la tienda.
 - **Seller (`seller`):** registers direct sales in the POS and manages only their own `autorizado` direct sales (list, view, edit, cancel); sees their own monthly accounting (income and price deviation only) and stock read-only.
 
 ### Out of Scope
+
 Customer accounts, mandatory customer email, automated payment gateways and shipment tracking.
 
 ### UI Design System
+
 Governed by [DESIGN.md](DESIGN.md). In the current implementation the storefront header and footer use the dark theme while the main content keeps the light theme.
 
 ---
@@ -191,10 +224,10 @@ Governed by [DESIGN.md](DESIGN.md). In the current implementation the storefront
 ## 2. MAIN BUSINESS ENTITIES
 
 - **Brand:** unique name; 1-to-N with Products.
-- **Category:** tree. Root categories are the store's *rubros*; children are categories inside them. Fields: `name`, unique `slug`, `parentId`, derived `ancestors`, `variantAxes` (select attributes that generate variants), `imageAxis`, `specAttributes` (spec sheet), `order`, `active`. Filtering by a category includes its descendants. The header menu and the footer *Categorías* column are built from this tree.
-- **Attribute:** reusable dimension with an immutable `key`, a `label`, a `type` (`select` | `text` | `number` | `boolean`), a `unit` and a `filterable` flag. Select options have an immutable slug `value`, a `label`, an `order`, an optional `hex` and an `active` flag (options in use are deactivated, never deleted). **Gender is the `genero` attribute**, enabled by adding it to a category's `specAttributes`. There are no built-in genders and they are managed in one place, the admin *Ajustes* page: its options are created, hidden and removed there and it also picks which categories use gender (the attribute is locked in *Atributos*). The storefront filter is hidden while no option is active.
+- **Category:** tree. Root categories are the store's _rubros_; children are categories inside them. Fields: `name`, unique `slug`, `parentId`, derived `ancestors`, `variantAxes` (select attributes that generate variants), `imageAxis`, `specAttributes` (spec sheet), `order`, `active`. Filtering by a category includes its descendants. The header menu and the footer _Categorías_ column are built from this tree.
+- **Attribute:** reusable dimension with an immutable `key`, a `label`, a `type` (`select` | `text` | `number` | `boolean`), a `unit` and a `filterable` flag. Select options have an immutable slug `value`, a `label`, an `order`, an optional `hex` and an `active` flag (options in use are deactivated, never deleted). **Gender is the `genero` attribute**, enabled by adding it to a category's `specAttributes`. There are no built-in genders and they are managed in one place, the admin _Ajustes_ page: its options are created, hidden and removed there and it also picks which categories use gender (the attribute is locked in _Atributos_). The storefront filter is hidden while no option is active.
 - **Product:** `name`, `slug`, `description`, `active`, `isClearance`, `images`, `specs`, `wholesale { enabled, minQty }`, a Brand, a Category and its **variants**. Derived fields (`priceRange`, `totalStock`, `hasWholesale`) are recomputed on save; **variants are the source of truth** for stock and sale prices.
-- **Variant:** sellable combination (e.g. *100 ml*). Fields: `sku`, optional `name`, `options` (axis key/value pairs), `retailPrice`, optional `wholesalePrice`, `stock`, `active`. A simple product has a single option-less variant. A variant's `_id` is stable across product edits because carts and pending orders reference it.
+- **Variant:** sellable combination (e.g. _100 ml_). Fields: `sku`, optional `name`, `options` (axis key/value pairs), `retailPrice`, optional `wholesalePrice`, `stock`, `active`. A simple product has a single option-less variant. A variant's `_id` is stable across product edits because carts and pending orders reference it.
 - **Promotion:** carousel banner (`imageUrl`, `active`, `order`, optional dates).
 - **Order:** `orderNumber` (web `PED-YYYY-NNNNxx`, direct sale `PED-YYYY-N<sequence>`), `origin` (`web` | `admin_direct`), `guest { name, lastName, phone }`, `status` (`pendiente` | `autorizado` | `cancelado`; legacy `confirmada`, `completada`, `cancelada` are still read), `items` (`productId`, `variantId`, `sku`, `variantLabel`, `qty`, `appliedPriceType`, `unitPrice`, `listPrice`, `subtotal`), `subtotal`, `discount`, `total`, `paymentMethod`, `notes`, `soldBy` (user who registered the POS sale) and `history` (audit entries for creation, edits and cancellation).
 - **Sales record:** created on authorization or direct sale (`orderId`, `orderNumber`, `confirmationDate`, `recordedPaymentMethod`, `appliedDiscountNote`, `finalTotal`).
@@ -206,8 +239,8 @@ Governed by [DESIGN.md](DESIGN.md). In the current implementation the storefront
 
 ## 3. USER FLOW: CUSTOMER
 
-- **Discovery:** promotion carousel, header with *Catálogo*, rubros (with a dropdown of their categories) and *Ofertas*, search, and a product grid. Filters: brand (searchable, alphabetical multi-select list), category (hierarchical) and gender when enabled and configured; sorting by price. Header and footer links open the catalog filtered by category.
-- **Product detail:** gallery, spec sheet, description, prices, variant selector driven by the category axes, stock of the selected variant, quantity and *Add to cart*.
+- **Discovery:** promotion carousel, header with _Catálogo_, rubros (with a dropdown of their categories) and _Ofertas_, search, and a product grid. Filters: brand (searchable, alphabetical multi-select list), category (hierarchical) and gender when enabled and configured; sorting by price. Header and footer links open the catalog filtered by category.
+- **Product detail:** gallery, spec sheet, description, prices, variant selector driven by the category axes, stock of the selected variant, quantity and _Add to cart_.
 - **Cart:** unit totals across all products with live repricing (see rules below); persisted in the browser.
 - **Checkout (3 steps):** customer data; order review (saved as `pendiente`); bank details and WhatsApp redirection.
 
@@ -222,7 +255,7 @@ Governed by [DESIGN.md](DESIGN.md). In the current implementation the storefront
 
 ## 5. BUSINESS RULES AND CONSTRAINTS
 
-1. **Wholesale pricing:** a product with wholesale enabled is priced at the variant's wholesale price when the units of that product reach its `minQty`; additionally, when the whole order reaches **5 or more units** (global threshold), every product whose wholesale price is lower than its retail price switches to wholesale. The server recomputes prices when creating the order. In the POS, 5 or more units enable wholesale and the admin may set a custom price per item. *Note:* the global threshold of 5 is defined in code; the admin setting *Minimum units for wholesale* is stored but does not change it today (see technical debt in [arquitectura.md](arquitectura.md)).
+1. **Wholesale pricing:** a product with wholesale enabled is priced at the variant's wholesale price when the units of that product reach its `minQty`; additionally, when the whole order reaches **5 or more units** (global threshold), every product whose wholesale price is lower than its retail price switches to wholesale. The server recomputes prices when creating the order. In the POS, 5 or more units enable wholesale and the admin may set a custom price per item. _Note:_ the global threshold of 5 is defined in code; the admin setting _Minimum units for wholesale_ is stored but does not change it today (see technical debt in [arquitectura.md](arquitectura.md)).
 2. **Asynchronous stock:** nothing is reserved in the cart or while an order is `pendiente`; stock is decremented only on authorization, which is rejected if stock is insufficient.
 3. **Direct sales:** POS sales are saved as `autorizado` and decrement stock immediately.
 4. **Variants are the source of truth** for stock and sale prices, and their identifiers survive product edits.

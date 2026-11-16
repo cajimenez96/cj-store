@@ -23,12 +23,12 @@ const geistMono = Geist_Mono({
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
-  let title = "The Point | Perfumes Importados & Fragancias Exclusivas";
+  let title = "Alquimia Parfums | Perfumes Importados & Fragancias Exclusivas";
   let description =
-    "Catálogo exclusivo de perfumes importados y fragancias de autor en The Point. Comprá online con atención personalizada por WhatsApp y envíos a todo el país.";
+    "Catálogo exclusivo de perfumes importados y fragancias de autor en Alquimia Parfums. Comprá online con atención personalizada por WhatsApp y envíos a todo el país.";
   let keywords =
-    "perfumes, fragancias, perfumes importados, the point, diseñador, decants, hombre, mujer, unisex";
-  let storeName = "The Point";
+    "perfumes, fragancias, perfumes importados, Alquimia Parfums, diseñador, decants, hombre, mujer, unisex";
+  let storeName = "Alquimia Parfums";
 
   try {
     await connectToDatabase();
@@ -64,8 +64,8 @@ export async function generateMetadata(): Promise<Metadata> {
       follow: true,
     },
     icons: {
-      icon: '/logotipo.png',
-      apple: '/logotipo.png',
+      icon: "/logotipo.png",
+      apple: "/logotipo.png",
     },
   };
 }

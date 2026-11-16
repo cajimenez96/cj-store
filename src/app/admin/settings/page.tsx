@@ -52,7 +52,8 @@ export default function AdminSettingsPage() {
   // Inventory & Business Rules
   const [minStockAlert, setMinStockAlert] = useState<number | "">(3);
   const [wholesaleMinPairs, setWholesaleMinPairs] = useState<number | "">(5);
-  const [showWholesaleInCart, setShowWholesaleInCart] = useState<boolean>(false);
+  const [showWholesaleInCart, setShowWholesaleInCart] =
+    useState<boolean>(false);
   const [shippingInfo, setShippingInfo] = useState("");
   const [enableGenders, setEnableGenders] = useState<boolean>(true);
 
@@ -140,13 +141,19 @@ export default function AdminSettingsPage() {
         throw new Error(json.message || "Error al actualizar los ajustes");
       }
 
-      toast.success("¡Ajustes del sistema y de la tienda actualizados correctamente!", {
-        description: "Los cambios ya son visibles en la tienda.",
-      });
+      toast.success(
+        "¡Ajustes del sistema y de la tienda actualizados correctamente!",
+        {
+          description: "Los cambios ya son visibles en la tienda.",
+        },
+      );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error al guardar los cambios", {
-        description: "Revisá los datos e intentá nuevamente.",
-      });
+      toast.error(
+        err instanceof Error ? err.message : "Error al guardar los cambios",
+        {
+          description: "Revisá los datos e intentá nuevamente.",
+        },
+      );
     } finally {
       setSaving(false);
     }
@@ -199,7 +206,7 @@ export default function AdminSettingsPage() {
                   </label>
                   <input
                     type="text"
-                    placeholder="Ej: The Point"
+                    placeholder="Ej: Alquimia Parfums"
                     value={storeName}
                     onChange={(e) => setStoreName(e.target.value)}
                     className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-bold py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
@@ -343,7 +350,7 @@ export default function AdminSettingsPage() {
                   </label>
                   <input
                     type="text"
-                    placeholder="Ej: The Point"
+                    placeholder="Ej: Alquimia Parfums"
                     value={bankHolder}
                     onChange={(e) => setBankHolder(e.target.value)}
                     className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-bold py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
@@ -395,8 +402,8 @@ export default function AdminSettingsPage() {
 
               <div>
                 <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5">
-                  Stock Mínimo de Alerta (Cantidad Total de Unidades por Producto)
-                  *
+                  Stock Mínimo de Alerta (Cantidad Total de Unidades por
+                  Producto) *
                 </label>
                 <div className="flex items-center gap-3">
                   <input
@@ -416,9 +423,9 @@ export default function AdminSettingsPage() {
                   </span>
                 </div>
                 <p className="text-[11px] text-[#707072] mt-2">
-                  Cuando la <strong>suma total de unidades</strong> de un producto
-                  sea menor o igual a este valor, aparecerá resaltado en naranja
-                  en la sección de Control de Stock.
+                  Cuando la <strong>suma total de unidades</strong> de un
+                  producto sea menor o igual a este valor, aparecerá resaltado
+                  en naranja en la sección de Control de Stock.
                 </p>
               </div>
             </div>
@@ -443,7 +450,9 @@ export default function AdminSettingsPage() {
                     Mostrar información mayorista en el carrito
                   </h3>
                   <p className="text-xs text-[#707072]">
-                    Si se activa, el carrito mostrará la barra de progreso con la cantidad de unidades necesarias para acceder al precio mayorista.
+                    Si se activa, el carrito mostrará la barra de progreso con
+                    la cantidad de unidades necesarias para acceder al precio
+                    mayorista.
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -460,8 +469,8 @@ export default function AdminSettingsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-extrabold uppercase tracking-wider text-[#111111] mb-1.5 flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 text-[#007d48]" /> Unidades Mínimas
-                    para Precio Mayorista *
+                    <Tag className="w-3.5 h-3.5 text-[#007d48]" /> Unidades
+                    Mínimas para Precio Mayorista *
                   </label>
                   <div className="flex items-center gap-2">
                     <input
@@ -515,7 +524,8 @@ export default function AdminSettingsPage() {
                     <Sparkles className="w-4 h-4 text-amber-500" />
                   </h2>
                   <p className="text-xs text-[#707072]">
-                    Configurá cómo aparece The Point en Google, WhatsApp, Facebook y buscadores.
+                    Configurá cómo aparece Alquimia Parfums en Google, WhatsApp,
+                    Facebook y buscadores.
                   </p>
                 </div>
               </div>
@@ -527,13 +537,14 @@ export default function AdminSettingsPage() {
                   </label>
                   <input
                     type="text"
-                    placeholder="Ej: The Point | Perfumes Importados & Fragancias Exclusivas"
+                    placeholder="Ej: Alquimia Parfums | Perfumes Importados & Fragancias Exclusivas"
                     value={metaTitle}
                     onChange={(e) => setMetaTitle(e.target.value)}
                     className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-bold py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
                   />
                   <p className="text-[10px] text-[#707072] mt-1">
-                    Es el título que se muestra en la pestaña del navegador y en los resultados de Google.
+                    Es el título que se muestra en la pestaña del navegador y en
+                    los resultados de Google.
                   </p>
                 </div>
 
@@ -543,13 +554,14 @@ export default function AdminSettingsPage() {
                   </label>
                   <textarea
                     rows={3}
-                    placeholder="Ej: Catálogo exclusivo de perfumes importados y fragancias de autor en The Point. Comprá online con atención personalizada por WhatsApp y envíos a todo el país."
+                    placeholder="Ej: Catálogo exclusivo de perfumes importados y fragancias de autor en Alquimia Parfums. Comprá online con atención personalizada por WhatsApp y envíos a todo el país."
                     value={metaDescription}
                     onChange={(e) => setMetaDescription(e.target.value)}
                     className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-medium py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
                   />
                   <p className="text-[10px] text-[#707072] mt-1">
-                    Resumen visible bajo el título en Google y al compartir el link en WhatsApp o redes sociales.
+                    Resumen visible bajo el título en Google y al compartir el
+                    link en WhatsApp o redes sociales.
                   </p>
                 </div>
 
@@ -559,7 +571,7 @@ export default function AdminSettingsPage() {
                   </label>
                   <input
                     type="text"
-                    placeholder="Ej: perfumes, fragancias, perfumes importados, the point, dior, chanel"
+                    placeholder="Ej: perfumes, fragancias, perfumes importados, Alquimia Parfums, dior, chanel"
                     value={metaKeywords}
                     onChange={(e) => setMetaKeywords(e.target.value)}
                     className="w-full bg-[#f5f5f5] text-[#111111] text-sm font-medium py-2.5 px-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111]"
@@ -591,7 +603,8 @@ export default function AdminSettingsPage() {
                       Visibilidad y Clasificación por Género
                     </h2>
                     <p className="text-xs text-[#707072]">
-                      Definí los géneros de tu catálogo y controlá si la tienda los usa como filtro.
+                      Definí los géneros de tu catálogo y controlá si la tienda
+                      los usa como filtro.
                     </p>
                   </div>
                 </div>
@@ -603,7 +616,11 @@ export default function AdminSettingsPage() {
                     Habilitar el filtro por género en la tienda
                   </h3>
                   <p className="text-xs text-[#707072]">
-                    Si se desactiva, se oculta el filtro de género en el catálogo (el menú y el pie se arman con las categorías). Ideal para tiendas de fragancias o productos donde no se discrimina por género. El filtro solo aparece si hay opciones de género activas.
+                    Si se desactiva, se oculta el filtro de género en el
+                    catálogo (el menú y el pie se arman con las categorías).
+                    Ideal para tiendas de fragancias o productos donde no se
+                    discrimina por género. El filtro solo aparece si hay
+                    opciones de género activas.
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">

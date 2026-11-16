@@ -42,7 +42,7 @@ const SettingsSchema: Schema<ISettingsDocument> = new Schema(
     // Identity & Contact
     storeName: {
       type: String,
-      default: "The Point",
+      default: "Alquimia Parfums",
       trim: true,
     },
     storePhone: {
@@ -79,22 +79,25 @@ const SettingsSchema: Schema<ISettingsDocument> = new Schema(
     // SEO & Social Meta
     metaTitle: {
       type: String,
-      default: "The Point | Perfumes Importados & Fragancias Exclusivas",
+      default: "Alquimia Parfums | Perfumes Importados & Fragancias Exclusivas",
       trim: true,
     },
     metaDescription: {
       type: String,
-      default: "Catálogo exclusivo de perfumes importados y fragancias de autor en The Point. Comprá online con atención personalizada por WhatsApp y envíos a todo el país.",
+      default:
+        "Catálogo exclusivo de perfumes importados y fragancias de autor en Alquimia Parfums. Comprá online con atención personalizada por WhatsApp y envíos a todo el país.",
       trim: true,
     },
     metaKeywords: {
       type: String,
-      default: "perfumes, fragancias, perfumes importados, the point, decants, hombre, mujer, unisex",
+      default:
+        "perfumes, fragancias, perfumes importados, Alquimia Parfums, decants, hombre, mujer, unisex",
       trim: true,
     },
     footerDescription: {
       type: String,
-      default: "Perfumería de lujo y fragancias de autor. Seleccioná tus aromas favoritos y completá tu pedido de forma fácil y directa vía WhatsApp.",
+      default:
+        "Perfumería de lujo y fragancias de autor. Seleccioná tus aromas favoritos y completá tu pedido de forma fácil y directa vía WhatsApp.",
       trim: true,
     },
 
@@ -111,7 +114,7 @@ const SettingsSchema: Schema<ISettingsDocument> = new Schema(
     },
     bankHolder: {
       type: String,
-      default: "The Point",
+      default: "Alquimia Parfums",
       trim: true,
     },
     bankCuit: {

@@ -1,4 +1,4 @@
-# Arquitectura Técnica: Catálogo E-Commerce The Point / Technical Architecture: The Point E-Commerce Catalog
+# Arquitectura Técnica: Catálogo E-Commerce Alquimia Parfums / Technical Architecture: Alquimia Parfums E-Commerce Catalog
 
 > Este documento describe el sistema **actual**. El modelo original de calzado (tipos, géneros y talles fijos, `sizesStock`) fue reemplazado por categorías, atributos y variantes. El plan original se conserva en [planificacion.md](planificacion.md) como referencia histórica.
 
@@ -8,16 +8,16 @@
 
 ## 1. RESUMEN DE ARQUITECTURA TÉCNICA
 
-| Capa | Tecnología |
-| --- | --- |
-| Framework fullstack | Next.js 16 (App Router, Route Handlers) con React 19 y TypeScript |
-| Estilos | Tailwind CSS 4, íconos `lucide-react`, notificaciones `sonner` |
-| Base de datos | MongoDB con Mongoose 9 |
-| Validación | Zod 4 (`src/schemas`: atributos y categorías) |
+| Capa                    | Tecnología                                                                    |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| Framework fullstack     | Next.js 16 (App Router, Route Handlers) con React 19 y TypeScript             |
+| Estilos                 | Tailwind CSS 4, íconos `lucide-react`, notificaciones `sonner`                |
+| Base de datos           | MongoDB con Mongoose 9                                                        |
+| Validación              | Zod 4 (`src/schemas`: atributos y categorías)                                 |
 | Autenticación del panel | JWT firmado con `jose` (HS256) en cookie HttpOnly; contraseñas con `bcryptjs` |
-| Imágenes | ImageKit (solo se guardan las URLs y el `fileId` en la base) |
-| Mensajería | Redirección `wa.me` (WhatsApp) con el resumen del pedido |
-| Sistema de diseño | [DESIGN.md](DESIGN.md) |
+| Imágenes                | ImageKit (solo se guardan las URLs y el `fileId` en la base)                  |
+| Mensajería              | Redirección `wa.me` (WhatsApp) con el resumen del pedido                      |
+| Sistema de diseño       | [DESIGN.md](DESIGN.md)                                                        |
 
 ```mermaid
 flowchart TD
@@ -68,14 +68,15 @@ docs/                             Esta documentación
 Colecciones: `brands`, `categories`, `attributes`, `products`, `orders`, `salesrecords`, `promotions`, `expenses`, `users`, `settings` y `counters` (secuencia atómica anual del número de pedido).
 
 ### 3.1 `categories`
+
 ```typescript
 interface ICategory {
   name: string;
-  slug: string;                          // único
-  parentId?: Types.ObjectId | null;      // null en los rubros (raíz)
-  ancestors: Types.ObjectId[];           // [raíz, ..., padre]; derivado
-  variantAxes: string[];                 // keys de atributos select que generan variantes
-  imageAxis?: string;                    // eje que agrupa imágenes
+  slug: string; // único
+  parentId?: Types.ObjectId | null; // null en los rubros (raíz)
+  ancestors: Types.ObjectId[]; // [raíz, ..., padre]; derivado
+  variantAxes: string[]; // keys de atributos select que generan variantes
+  imageAxis?: string; // eje que agrupa imágenes
   specAttributes: { key: string; required: boolean }[]; // ficha técnica
   order: number;
   active: boolean;
@@ -84,29 +85,32 @@ interface ICategory {
 ```
 
 ### 3.2 `attributes`
+
 ```typescript
 interface IAttribute {
-  key: string;                           // único, inmutable, minúsculas y "_"
+  key: string; // único, inmutable, minúsculas y "_"
   label: string;
-  type: 'select' | 'text' | 'number' | 'boolean';
+  type: "select" | "text" | "number" | "boolean";
   options: {
-    value: string;                       // slug inmutable
-    label: string;                       // editable
+    value: string; // slug inmutable
+    label: string; // editable
     order: number;
-    hex?: string;                        // solo colores
-    active: boolean;                     // se desactiva en vez de borrarse
+    hex?: string; // solo colores
+    active: boolean; // se desactiva en vez de borrarse
   }[];
-  unit?: string;                         // ej: "ml"
+  unit?: string; // ej: "ml"
   filterable: boolean;
 }
 ```
+
 El género es el atributo `genero`; no existe un modelo de géneros ni de tipos.
 
 ### 3.3 `products`
+
 ```typescript
 interface IVariant {
-  _id: Types.ObjectId;                   // estable al editar el producto
-  sku: string;                           // se guarda en mayúsculas
+  _id: Types.ObjectId; // estable al editar el producto
+  sku: string; // se guarda en mayúsculas
   name?: string;
   options: { key: string; value: string }[];
   retailPrice: number;
@@ -120,13 +124,19 @@ interface IProduct {
   slug?: string;
   description: string;
   categoryId?: Types.ObjectId;
-  categoryAncestors?: Types.ObjectId[];  // derivado de la categoría
+  categoryAncestors?: Types.ObjectId[]; // derivado de la categoría
   brandId?: Types.ObjectId;
   active: boolean;
   isClearance?: boolean;
   specs?: { key: string; value: string | number | boolean }[];
   wholesale?: { enabled: boolean; minQty?: number };
-  images: { url: string; fileId?: string; isPrincipal: boolean; position: number; axisValue?: string }[];
+  images: {
+    url: string;
+    fileId?: string;
+    isPrincipal: boolean;
+    position: number;
+    axisValue?: string;
+  }[];
   variants?: IVariant[];
 
   // Derivados (se recalculan al guardar)
@@ -135,13 +145,17 @@ interface IProduct {
   hasWholesale?: boolean;
 
   // Campos de compatibilidad a nivel producto
-  price?: number; retailPrice?: number; wholesalePrice?: number; stock?: number;
+  price?: number;
+  retailPrice?: number;
+  wholesalePrice?: number;
+  stock?: number;
 }
 // Índices: { active, categoryAncestors, priceRange.min }, { active, brandId }, { variants.sku },
 //          { slug } único y disperso, { variants.options.key, variants.options.value }, texto en name y description
 ```
 
 ### 3.4 `orders`
+
 ```typescript
 interface IOrderItem {
   productId: Types.ObjectId;
@@ -152,32 +166,44 @@ interface IOrderItem {
   variantLabel?: string;
   variantName?: string;
   qty: number;
-  listPrice?: number;                    // precio de catálogo al vender (auditoría; ausente en pedidos viejos)
-  appliedPriceType: 'retail' | 'wholesale' | 'custom';
-  unitPrice: number;                     // foto del precio al momento de la venta
+  listPrice?: number; // precio de catálogo al vender (auditoría; ausente en pedidos viejos)
+  appliedPriceType: "retail" | "wholesale" | "custom";
+  unitPrice: number; // foto del precio al momento de la venta
   subtotal: number;
 }
 
 interface IOrder {
-  orderNumber: string;                   // único; web "PED-AAAA-NNNNxx", ventas directas "PED-AAAA-N<secuencia>"
-  origin: 'web' | 'admin_direct';
+  orderNumber: string; // único; web "PED-AAAA-NNNNxx", ventas directas "PED-AAAA-N<secuencia>"
+  origin: "web" | "admin_direct";
   guest: { name: string; lastName: string; phone: string };
   items: IOrderItem[];
   subtotal: number;
   discount: number;
-  total: number;                         // subtotal - discount
-  paymentMethod: 'transferencia' | 'efectivo' | 'tarjeta' | 'otro';
-  status: 'pendiente' | 'autorizado' | 'cancelado'
-        | 'confirmada' | 'completada' | 'cancelada';   // los tres últimos son heredados
+  total: number; // subtotal - discount
+  paymentMethod: "transferencia" | "efectivo" | "tarjeta" | "otro";
+  status:
+    | "pendiente"
+    | "autorizado"
+    | "cancelado"
+    | "confirmada"
+    | "completada"
+    | "cancelada"; // los tres últimos son heredados
   notes?: string;
   cancelReason?: string;
-  soldBy?: { userId: ObjectId; username: string; name: string };   // quién registró la venta (POS); ausente en pedidos web
-  history: Array<{ at: Date; byUserId?: ObjectId; byName: string; action: string; summary: string }>;   // auditoría de cambios
+  soldBy?: { userId: ObjectId; username: string; name: string }; // quién registró la venta (POS); ausente en pedidos web
+  history: Array<{
+    at: Date;
+    byUserId?: ObjectId;
+    byName: string;
+    action: string;
+    summary: string;
+  }>; // auditoría de cambios
 }
 // Índices: { orderNumber } único, { status, createdAt }, { origin, createdAt }, { 'soldBy.userId' }
 ```
 
 ### 3.5 Otras colecciones
+
 - **`salesrecords`:** `orderId` (único), `orderNumber`, `confirmationDate`, `recordedPaymentMethod`, `appliedDiscountNote`, `finalTotal`.
 - **`brands`:** `name` único.
 - **`promotions`:** `title`, `description`, `imageUrl`, `active`, `order`, `startDate`, `endDate`.
@@ -189,22 +215,22 @@ interface IOrder {
 
 ## 4. LÓGICA DE DOMINIO (`src/lib`)
 
-| Módulo | Responsabilidad |
-| --- | --- |
-| `derived.ts` | Calcula `priceRange`, `totalStock` y `hasWholesale` a partir de las variantes activas. |
-| `variants.ts` | Genera combinaciones de variantes a partir de los ejes de la categoría, SKUs y etiquetas. |
-| `stock.ts` | Convierte variantes en filas de stock editables y suma las unidades de las variantes activas. |
-| `categoryTree.ts` | Arma el árbol de categorías (rubros y sus categorías) y los enlaces `?categoryId=`. |
-| `categoryFilter.ts` | Condición de Mongo para filtrar por una categoría **y sus descendientes** (`categoryId` o `categoryAncestors`). |
-| `genderFilter.ts` | Condición de Mongo por la ficha técnica `genero` (acepta el slug o la etiqueta) y opciones activas del atributo. |
-| `pricing.ts` | Motor de carrito viejo, sin uso (ver deuda técnica); además exporta `resolveListPrice` (precio de catálogo de un ítem, usado para `items[].listPrice`). |
-| `permissions.ts` | Política de roles pura (apta para el edge): `canAccess(role, method, pathname)`, reglas de `seller` (`SELLER_RULES`) y el interruptor `SELLER_ACCESS_ENABLED`. |
-| `session.ts` | `getSession(req)`: verifica el JWT y revalida contra la base (usuario activo y rol actual). |
-| `order-access.ts` | `ordersScope` (qué pedidos ve cada rol) y `canMutateOrder` (qué puede editar o cancelar un vendedor). |
+| Módulo                                                  | Responsabilidad                                                                                                                                                |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `derived.ts`                                            | Calcula `priceRange`, `totalStock` y `hasWholesale` a partir de las variantes activas.                                                                         |
+| `variants.ts`                                           | Genera combinaciones de variantes a partir de los ejes de la categoría, SKUs y etiquetas.                                                                      |
+| `stock.ts`                                              | Convierte variantes en filas de stock editables y suma las unidades de las variantes activas.                                                                  |
+| `categoryTree.ts`                                       | Arma el árbol de categorías (rubros y sus categorías) y los enlaces `?categoryId=`.                                                                            |
+| `categoryFilter.ts`                                     | Condición de Mongo para filtrar por una categoría **y sus descendientes** (`categoryId` o `categoryAncestors`).                                                |
+| `genderFilter.ts`                                       | Condición de Mongo por la ficha técnica `genero` (acepta el slug o la etiqueta) y opciones activas del atributo.                                               |
+| `pricing.ts`                                            | Motor de carrito viejo, sin uso (ver deuda técnica); además exporta `resolveListPrice` (precio de catálogo de un ítem, usado para `items[].listPrice`).        |
+| `permissions.ts`                                        | Política de roles pura (apta para el edge): `canAccess(role, method, pathname)`, reglas de `seller` (`SELLER_RULES`) y el interruptor `SELLER_ACCESS_ENABLED`. |
+| `session.ts`                                            | `getSession(req)`: verifica el JWT y revalida contra la base (usuario activo y rol actual).                                                                    |
+| `order-access.ts`                                       | `ordersScope` (qué pedidos ve cada rol) y `canMutateOrder` (qué puede editar o cancelar un vendedor).                                                          |
 | `order-mutation.ts` · `stock-ops.ts` · `transaction.ts` | Regla única de stock de pedidos, descuento atómico con guarda (`applyStockDeltas`), número de pedido (`nextOrderNumber`) y transacciones (`runInTransaction`). |
-| `order-history.ts` | Genera las entradas de `history` al editar o cancelar un pedido. |
-| `jwt.ts` · `auth.ts` | Firma y verificación de la sesión del panel y chequeo de rol. |
-| `db.ts` · `imagekit.ts` · `api-client.ts` | Conexión cacheada a MongoDB, cliente de ImageKit y cliente HTTP del frontend. |
+| `order-history.ts`                                      | Genera las entradas de `history` al editar o cancelar un pedido.                                                                                               |
+| `jwt.ts` · `auth.ts`                                    | Firma y verificación de la sesión del panel y chequeo de rol.                                                                                                  |
+| `db.ts` · `imagekit.ts` · `api-client.ts`               | Conexión cacheada a MongoDB, cliente de ImageKit y cliente HTTP del frontend.                                                                                  |
 
 Hook `useStoreCategories`: una única consulta a `/api/categories`, compartida entre el encabezado y el pie.
 
@@ -215,50 +241,52 @@ Hook `useStoreCategories`: una única consulta a `/api/categories`, compartida e
 Respuesta estándar: `{ ok: true, data, ... }` o `{ ok: false, error, message }`.
 
 ### 5.1 Públicos
-| Método | Ruta | Descripción |
-| --- | --- | --- |
-| GET | `/api/products` | Productos activos. Query: `brandId`, `categoryId` (lista separada por comas; incluye descendientes), `gender`, `search`, `clearance`, `wholesale`, `sort` (`price_asc` \| `price_desc`), `page`, `limit`. Devuelve `totalStock`, `isOutOfStock` y `pagination`. |
-| GET | `/api/categories` | Categorías activas ordenadas (alimentan menú, pie y filtros). |
-| GET | `/api/brands` | Marcas. |
-| GET | `/api/catalog/available-filters` | Opciones activas del atributo `genero`. |
-| GET | `/api/promotions` | Promociones del carrusel. |
-| GET | `/api/settings` | Ajustes públicos de la tienda. |
-| GET | `/api/health` | Estado del servicio. |
-| POST | `/api/checkout/create-order` | Crea un pedido `pendiente`. **No descuenta stock.** |
+
+| Método | Ruta                             | Descripción                                                                                                                                                                                                                                                     |
+| ------ | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/products`                  | Productos activos. Query: `brandId`, `categoryId` (lista separada por comas; incluye descendientes), `gender`, `search`, `clearance`, `wholesale`, `sort` (`price_asc` \| `price_desc`), `page`, `limit`. Devuelve `totalStock`, `isOutOfStock` y `pagination`. |
+| GET    | `/api/categories`                | Categorías activas ordenadas (alimentan menú, pie y filtros).                                                                                                                                                                                                   |
+| GET    | `/api/brands`                    | Marcas.                                                                                                                                                                                                                                                         |
+| GET    | `/api/catalog/available-filters` | Opciones activas del atributo `genero`.                                                                                                                                                                                                                         |
+| GET    | `/api/promotions`                | Promociones del carrusel.                                                                                                                                                                                                                                       |
+| GET    | `/api/settings`                  | Ajustes públicos de la tienda.                                                                                                                                                                                                                                  |
+| GET    | `/api/health`                    | Estado del servicio.                                                                                                                                                                                                                                            |
+| POST   | `/api/checkout/create-order`     | Crea un pedido `pendiente`. **No descuenta stock.**                                                                                                                                                                                                             |
 
 **`POST /api/checkout/create-order`**
+
 ```json
 {
   "guest": { "name": "Juan", "lastName": "Pérez", "phone": "3815218630" },
   "paymentMethod": "transferencia",
-  "items": [
-    { "productId": "66b1...", "variantId": "66b2...", "qty": 2 }
-  ]
+  "items": [{ "productId": "66b1...", "variantId": "66b2...", "qty": 2 }]
 }
 ```
+
 El servidor ignora los precios del cliente y, para cada ítem: resuelve la variante (por `variantId`, `sku` o `variantName`), verifica el stock disponible (`409 INSUFFICIENT_STOCK` si no alcanza), aplica el precio minorista o mayorista según las reglas del producto y crea la orden con `origin: "web"`. Respuesta `201` con `orderId`, `orderNumber`, `subtotal`, `discount` y `total`.
 
 ### 5.2 Administración (`/api/admin/*`, requieren sesión)
-| Recurso | Métodos | Notas |
-| --- | --- | --- |
-| `auth/login`, `auth/logout`, `auth/me` | POST, POST, GET | Sesión por cookie `admin_token`. |
-| `products`, `products/[id]` | GET, POST, PUT, DELETE · GET | Alta y edición con variantes; el PUT conserva el `_id` de las variantes existentes. |
-| `products/[id]/stock` | PATCH | Ajuste de stock por variante (`variantId` o `sku`). |
-| `stock` | GET, PUT | Reporte por producto y variante (GET también para `seller`, solo productos activos y sin costos) y ajuste de una variante (PUT solo admin; `productId`, `variantId`, `newStock`). |
-| `categories`, `categories/[id]` | GET, POST · GET, PUT, DELETE | No permite cambiar los ejes de una categoría con productos ni eliminarla; al moverla actualiza los ancestros de sus productos. |
-| `attributes`, `attributes/[id]` | GET, POST · GET, PUT, DELETE | Atributos y opciones. No permite quitar una opción usada en variantes o en la ficha técnica de algún producto. |
-| `brands`, `promotions`, `expenses` | CRUD | Expenses: GET, POST, DELETE. |
-| `orders` | GET, PUT | El GET lista y filtra pedidos (`userId`: un usuario o `web`, solo admin; un `seller` solo ve los suyos); el PUT (cambio de estado `completada`/`cancelada`) es un flujo heredado que el panel no usa. |
-| `orders/[id]` | GET, PUT, PATCH | PUT edita un pedido pendiente o autorizado y conserva el vínculo con cada variante; PATCH con `{ action: "cancel" }` cancela. Un `seller` solo opera sobre sus ventas directas `autorizado`. |
-| `orders/[id]/authorize` | POST | Solo admin. Autoriza: verifica stock, descuenta por variante, pasa a `autorizado` y crea el registro de venta. |
-| `sales/create-direct` | POST | Venta del POS (admin y `seller`): crea el pedido `autorizado` con `soldBy` y descuenta el stock al instante. |
-| `reports`, `accounting` | GET | Métricas de ventas; libro mensual (`month`, `year`). `accounting` también lo consulta el `seller`, solo con sus ingresos y la desviación de precio. El admin además recibe gastos, `deviation`, `bySeller` y puede filtrar con `userId`. |
-| `users`, `settings` | CRUD · GET, PUT | Gestión de usuarios (con reglas de `superadmin`) y de ajustes. |
-| `imagekit/upload`, `imagekit/delete` | POST · DELETE | Imágenes en el CDN. |
 
-**Autorización de pedidos y stock.** Si MongoDB corre como *replica set*, el descuento de stock, el cambio de estado y el registro de venta se ejecutan en una transacción (`withTransaction`); en un servidor standalone se descuenta ítem por ítem y, ante un error, se revierte manualmente lo descontado (compensación de mejor esfuerzo).
+| Recurso                                | Métodos                      | Notas                                                                                                                                                                                                                                    |
+| -------------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth/login`, `auth/logout`, `auth/me` | POST, POST, GET              | Sesión por cookie `admin_token`.                                                                                                                                                                                                         |
+| `products`, `products/[id]`            | GET, POST, PUT, DELETE · GET | Alta y edición con variantes; el PUT conserva el `_id` de las variantes existentes.                                                                                                                                                      |
+| `products/[id]/stock`                  | PATCH                        | Ajuste de stock por variante (`variantId` o `sku`).                                                                                                                                                                                      |
+| `stock`                                | GET, PUT                     | Reporte por producto y variante (GET también para `seller`, solo productos activos y sin costos) y ajuste de una variante (PUT solo admin; `productId`, `variantId`, `newStock`).                                                        |
+| `categories`, `categories/[id]`        | GET, POST · GET, PUT, DELETE | No permite cambiar los ejes de una categoría con productos ni eliminarla; al moverla actualiza los ancestros de sus productos.                                                                                                           |
+| `attributes`, `attributes/[id]`        | GET, POST · GET, PUT, DELETE | Atributos y opciones. No permite quitar una opción usada en variantes o en la ficha técnica de algún producto.                                                                                                                           |
+| `brands`, `promotions`, `expenses`     | CRUD                         | Expenses: GET, POST, DELETE.                                                                                                                                                                                                             |
+| `orders`                               | GET, PUT                     | El GET lista y filtra pedidos (`userId`: un usuario o `web`, solo admin; un `seller` solo ve los suyos); el PUT (cambio de estado `completada`/`cancelada`) es un flujo heredado que el panel no usa.                                    |
+| `orders/[id]`                          | GET, PUT, PATCH              | PUT edita un pedido pendiente o autorizado y conserva el vínculo con cada variante; PATCH con `{ action: "cancel" }` cancela. Un `seller` solo opera sobre sus ventas directas `autorizado`.                                             |
+| `orders/[id]/authorize`                | POST                         | Solo admin. Autoriza: verifica stock, descuenta por variante, pasa a `autorizado` y crea el registro de venta.                                                                                                                           |
+| `sales/create-direct`                  | POST                         | Venta del POS (admin y `seller`): crea el pedido `autorizado` con `soldBy` y descuenta el stock al instante.                                                                                                                             |
+| `reports`, `accounting`                | GET                          | Métricas de ventas; libro mensual (`month`, `year`). `accounting` también lo consulta el `seller`, solo con sus ingresos y la desviación de precio. El admin además recibe gastos, `deviation`, `bySeller` y puede filtrar con `userId`. |
+| `users`, `settings`                    | CRUD · GET, PUT              | Gestión de usuarios (con reglas de `superadmin`) y de ajustes.                                                                                                                                                                           |
+| `imagekit/upload`, `imagekit/delete`   | POST · DELETE                | Imágenes en el CDN.                                                                                                                                                                                                                      |
 
-**Máquina de estados de stock** (`order-mutation.ts`). Un pedido *retiene* stock solo en `autorizado` y `completada`. Toda transición de estado mueve el stock por la diferencia: de no retener a retener descuenta las unidades (con guarda), de retener a no retener las repone una sola vez, y entre estados del mismo lado no mueve nada. `cancelado` es final: no se puede editar ni volver a cancelar. Las ediciones de ítems mueven stock solo mientras el pedido lo retiene. El movimiento usa `applyStockDeltas`, un `$inc` atómico con guarda de stock suficiente (`409 INSUFFICIENT_STOCK`) que, si un lote falla, deshace lo ya aplicado. El número de pedido de las ventas directas sale de `nextOrderNumber` (contador `order-number-<año>` en `counters`, formato `PED-<año>-N<secuencia>`).
+**Autorización de pedidos y stock.** Si MongoDB corre como _replica set_, el descuento de stock, el cambio de estado y el registro de venta se ejecutan en una transacción (`withTransaction`); en un servidor standalone se descuenta ítem por ítem y, ante un error, se revierte manualmente lo descontado (compensación de mejor esfuerzo).
+
+**Máquina de estados de stock** (`order-mutation.ts`). Un pedido _retiene_ stock solo en `autorizado` y `completada`. Toda transición de estado mueve el stock por la diferencia: de no retener a retener descuenta las unidades (con guarda), de retener a no retener las repone una sola vez, y entre estados del mismo lado no mueve nada. `cancelado` es final: no se puede editar ni volver a cancelar. Las ediciones de ítems mueven stock solo mientras el pedido lo retiene. El movimiento usa `applyStockDeltas`, un `$inc` atómico con guarda de stock suficiente (`409 INSUFFICIENT_STOCK`) que, si un lote falla, deshace lo ya aplicado. El número de pedido de las ventas directas sale de `nextOrderNumber` (contador `order-number-<año>` en `counters`, formato `PED-<año>-N<secuencia>`).
 
 ---
 
@@ -269,13 +297,14 @@ El servidor ignora los precios del cliente y, para cada ítem: resuelve la varia
 - Roles: `superadmin` y `admin` tienen acceso completo. `seller` solo accede a lo que permite `SELLER_RULES` (matriz abajo); todo lo no listado se deniega. El interruptor `SELLER_ACCESS_ENABLED` (en `permissions.ts`) deniega a todos los vendedores si se pone en `false`.
 - Defensa en capas: (1) el middleware aplica `canAccess` por método y ruta; (2) cada handler vuelve a chequear el rol contra la base y acota los datos (`ordersScope`, `canMutateOrder`): los handlers compartidos con vendedores usan `getSession` y los exclusivos de administración usan `requireAdmin` (`src/lib/session.ts`: `401` sin sesión válida, `403` si el rol actual no es admin); (3) `getSession` revalida contra la base que el usuario siga activo y su rol actual, por lo que un cambio de rol o una baja rige de inmediato en todo el API aunque el JWT siga vigente.
 
-| Capacidad | `seller` | `admin` / `superadmin` |
-| --- | --- | --- |
-| POS (`sales/create-direct`) | Sí | Sí |
-| Pedidos | Lista, ve, edita y cancela solo sus ventas directas `autorizado` (no puede pasarlas a `completada`) | Todos; filtro por usuario o `web`; autorizar |
-| Contabilidad | Solo sus ingresos del mes y desviación de precio | Ingresos, gastos, balance, filtro por usuario, desglose por vendedor y desviación de precio |
-| Stock | Solo lectura, productos activos, sin costos | Lectura y ajuste |
-| Costos, ventas de otros, pedidos web, gastos, productos (gestión), ajustes, usuarios | No | Sí |
+| Capacidad                                                                            | `seller`                                                                                            | `admin` / `superadmin`                                                                      |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| POS (`sales/create-direct`)                                                          | Sí                                                                                                  | Sí                                                                                          |
+| Pedidos                                                                              | Lista, ve, edita y cancela solo sus ventas directas `autorizado` (no puede pasarlas a `completada`) | Todos; filtro por usuario o `web`; autorizar                                                |
+| Contabilidad                                                                         | Solo sus ingresos del mes y desviación de precio                                                    | Ingresos, gastos, balance, filtro por usuario, desglose por vendedor y desviación de precio |
+| Stock                                                                                | Solo lectura, productos activos, sin costos                                                         | Lectura y ajuste                                                                            |
+| Costos, ventas de otros, pedidos web, gastos, productos (gestión), ajustes, usuarios | No                                                                                                  | Sí                                                                                          |
+
 - Un `superadmin` es el único que crea o edita a otro `superadmin`, y se protege al último `superadmin` activo.
 - `pnpm seed` crea un `superadmin` inicial: **cambiá sus credenciales** antes de exponer el sistema.
 
@@ -284,7 +313,7 @@ El servidor ignora los precios del cliente y, para cada ítem: resuelve la varia
 ## 7. FRONTEND
 
 - **Estado del cliente:** `CartContext` (carrito en `localStorage`, clave `cj_store_cart_v1`, cálculo de precio mayorista) y `SettingsContext` (ajustes públicos).
-- **Navegación por categorías:** el encabezado (rubros con desplegable) y el pie (columna *Categorías*) se arman con `useStoreCategories`; sus enlaces abren `/?categoryId=<id>#catalogo`, que la página principal convierte en filtro.
+- **Navegación por categorías:** el encabezado (rubros con desplegable) y el pie (columna _Categorías_) se arman con `useStoreCategories`; sus enlaces abren `/?categoryId=<id>#catalogo`, que la página principal convierte en filtro.
 - **Filtros del catálogo:** marca, categoría (jerárquica), género (si está habilitado) y orden por precio, enviados a `/api/products`.
 - **WhatsApp:** `utils/whatsapp.ts` arma el mensaje del pedido (con la variante de cada ítem y el alias bancario); el detalle de pedido del panel arma un mensaje al cliente con el nombre de la tienda.
 - **Tema:** encabezado y pie oscuros; contenido principal claro (ver [DESIGN.md](DESIGN.md)).
@@ -308,37 +337,30 @@ NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY=public_...
 IMAGEKIT_PRIVATE_KEY=private_...
 ```
 
-La identidad de la tienda, el WhatsApp y los datos bancarios **no** se configuran por variables de entorno: se editan en *Ajustes* del panel y se guardan en la colección `settings`.
+La identidad de la tienda, el WhatsApp y los datos bancarios **no** se configuran por variables de entorno: se editan en _Ajustes_ del panel y se guardan en la colección `settings`.
 
-| Script | Acción |
-| --- | --- |
-| `pnpm dev` · `build` · `start` · `lint` | Desarrollo, compilación, ejecución y linter. |
-| `pnpm seed` · `seed:prod` | Crea el `superadmin` inicial si no existe (`seed:prod` usa `.env.prod`). No borra datos. Acepta `SEED_ADMIN_USERNAME`, `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD`. |
-| `pnpm wipe:data` | Vacía todas las colecciones excepto `users`. **Destructivo.** |
+| Script                                  | Acción                                                                                                                                                             |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm dev` · `build` · `start` · `lint` | Desarrollo, compilación, ejecución y linter.                                                                                                                       |
+| `pnpm seed` · `seed:prod`               | Crea el `superadmin` inicial si no existe (`seed:prod` usa `.env.prod`). No borra datos. Acepta `SEED_ADMIN_USERNAME`, `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD`. |
+| `pnpm wipe:data`                        | Vacía todas las colecciones excepto `users`. **Destructivo.**                                                                                                      |
 
 ---
 
 ## 9. DEUDA TÉCNICA CONOCIDA
 
 Críticos
+
 1. **Secreto JWT por defecto:** `src/lib/jwt.ts` usa una cadena fija si falta `NEXTAUTH_SECRET`. En un despliegue sin esa variable, cualquiera podría fabricar un token de administrador. Debería fallar al arrancar si no está definida.
 
-Inconsistencias de negocio
-2. **Umbral mayorista global fijo:** la constante `5` está repetida en `CartContext`, `CartDrawer`, `create-order`, `create-direct` y el POS. El ajuste `wholesaleMinPairs` se guarda pero no se aplica.
-3. **`minQty` y `minUnits`:** el producto guarda `wholesale.minQty`, pero el carrito del cliente lee `wholesale.minUnits` (siempre vacío), por lo que ignora el umbral por producto; el servidor sí lo respeta.
-4. **Cancelación:** `PATCH /api/admin/orders/[id]` rechaza (`409`) un pedido ya cancelado y repone el stock una sola vez si estaba autorizado (ver máquina de estados). Un pedido cancelado es final.
-5. **Flujo heredado:** `PUT /api/admin/orders` (estados `completada`/`cancelada`) no lo usa el panel y ubica variantes solo por nombre.
+Inconsistencias de negocio 2. **Umbral mayorista global fijo:** la constante `5` está repetida en `CartContext`, `CartDrawer`, `create-order`, `create-direct` y el POS. El ajuste `wholesaleMinPairs` se guarda pero no se aplica. 3. **`minQty` y `minUnits`:** el producto guarda `wholesale.minQty`, pero el carrito del cliente lee `wholesale.minUnits` (siempre vacío), por lo que ignora el umbral por producto; el servidor sí lo respeta. 4. **Cancelación:** `PATCH /api/admin/orders/[id]` rechaza (`409`) un pedido ya cancelado y repone el stock una sola vez si estaba autorizado (ver máquina de estados). Un pedido cancelado es final. 5. **Flujo heredado:** `PUT /api/admin/orders` (estados `completada`/`cancelada`) no lo usa el panel y ubica variantes solo por nombre.
 
-Código sin uso o redundante
-6. `src/lib/pricing.ts` conserva el motor de carrito viejo sin uso (solo se usa `resolveListPrice`). Los pedidos web (`create-order`) siguen sin usar el contador `Counter`; solo las ventas directas usan `nextOrderNumber`.
-7. Los campos a nivel producto `stock`, `retailPrice`, `wholesalePrice`, `price` y `totalStock` pueden quedar desfasados respecto de las variantes (las lecturas recalculan desde las variantes).
-8. `SalesRecord` solo se crea al autorizar o registrar una venta directa: no se actualiza al editar o cancelar el pedido y ningún código lo lee, por lo que puede quedar desfasado respecto de `orders` (la contabilidad lee `orders`).
-9. En MongoDB standalone no hay aislamiento: la reversión del stock ante un error es de mejor esfuerzo y puede rechazar espuriamente una venta concurrente (nunca sobrevende).
+Código sin uso o redundante 6. `src/lib/pricing.ts` conserva el motor de carrito viejo sin uso (solo se usa `resolveListPrice`). Los pedidos web (`create-order`) siguen sin usar el contador `Counter`; solo las ventas directas usan `nextOrderNumber`. 7. Los campos a nivel producto `stock`, `retailPrice`, `wholesalePrice`, `price` y `totalStock` pueden quedar desfasados respecto de las variantes (las lecturas recalculan desde las variantes). 8. `SalesRecord` solo se crea al autorizar o registrar una venta directa: no se actualiza al editar o cancelar el pedido y ningún código lo lee, por lo que puede quedar desfasado respecto de `orders` (la contabilidad lee `orders`). 9. En MongoDB standalone no hay aislamiento: la reversión del stock ante un error es de mejor esfuerzo y puede rechazar espuriamente una venta concurrente (nunca sobrevende).
 
-Calidad
-10. ESLint reporta advertencias y errores previos (por ejemplo `setState` dentro de efectos y usos de `any`) y las pruebas automatizadas (`pnpm test`, Vitest) cubren solo `src/lib` y algunos handlers, no los componentes.
+Calidad 10. ESLint reporta advertencias y errores previos (por ejemplo `setState` dentro de efectos y usos de `any`) y las pruebas automatizadas (`pnpm test`, Vitest) cubren solo `src/lib` y algunos handlers, no los componentes.
 
 ---
+
 ---
 
 # 🇬🇧 ENGLISH VERSION
@@ -395,11 +417,11 @@ Collections: `brands`, `categories`, `attributes`, `products`, `orders`, `salesr
 
 ## 7. FRONTEND
 
-`CartContext` keeps the cart in `localStorage` (`cj_store_cart_v1`) and computes wholesale pricing. The header (rubros with a dropdown) and the footer (*Categorías* column) are built from `useStoreCategories`; their links open `/?categoryId=<id>#catalogo`. Catalog filters are brand, hierarchical category, gender (when enabled) and price sorting. WhatsApp messages include each item's variant. Header and footer are dark; the main content is light.
+`CartContext` keeps the cart in `localStorage` (`cj_store_cart_v1`) and computes wholesale pricing. The header (rubros with a dropdown) and the footer (_Categorías_ column) are built from `useStoreCategories`; their links open `/?categoryId=<id>#catalogo`. Catalog filters are brand, hierarchical category, gender (when enabled) and price sorting. WhatsApp messages include each item's variant. Header and footer are dark; the main content is light.
 
 ## 8. ENVIRONMENT VARIABLES AND SCRIPTS
 
-`MONGODB_URI`, `NEXTAUTH_SECRET` (required in production), `NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT`, `NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY`, `IMAGEKIT_PRIVATE_KEY`; scripts accept `ENV_FILE`. Store identity, WhatsApp and bank data live in the `settings` collection, edited from the admin *Ajustes* page. Scripts: `dev`, `build`, `start`, `lint`, `seed` and `seed:prod` (non-destructive: create the initial `superadmin` only if it does not exist; credentials via `SEED_ADMIN_*`), `wipe:data` (empties everything except `users`).
+`MONGODB_URI`, `NEXTAUTH_SECRET` (required in production), `NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT`, `NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY`, `IMAGEKIT_PRIVATE_KEY`; scripts accept `ENV_FILE`. Store identity, WhatsApp and bank data live in the `settings` collection, edited from the admin _Ajustes_ page. Scripts: `dev`, `build`, `start`, `lint`, `seed` and `seed:prod` (non-destructive: create the initial `superadmin` only if it does not exist; credentials via `SEED_ADMIN_*`), `wipe:data` (empties everything except `users`).
 
 ## 9. KNOWN TECHNICAL DEBT
 

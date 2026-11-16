@@ -37,7 +37,7 @@ export interface StoreSettings {
 }
 
 const DEFAULT_SETTINGS: StoreSettings = {
-  storeName: "The Point",
+  storeName: "Alquimia Parfums",
   storePhone: "-",
   storeEmail: "contacto@thepoint.com",
   businessHours: "Lun a Sáb: 9:00 a 20:00 hs",
@@ -45,17 +45,17 @@ const DEFAULT_SETTINGS: StoreSettings = {
   instagramUrl: "",
   facebookUrl: "",
 
-  metaTitle: "The Point | Perfumes Importados & Fragancias Exclusivas",
+  metaTitle: "Alquimia Parfums | Perfumes Importados & Fragancias Exclusivas",
   metaDescription:
-    "Catálogo exclusivo de perfumes importados y fragancias de autor en The Point. Comprá online con atención personalizada por WhatsApp y envíos a todo el país.",
+    "Catálogo exclusivo de perfumes importados y fragancias de autor en Alquimia Parfums. Comprá online con atención personalizada por WhatsApp y envíos a todo el país.",
   metaKeywords:
-    "perfumes, fragancias, perfumes importados, the point, decants, hombre, mujer, unisex",
+    "perfumes, fragancias, perfumes importados, Alquimia Parfums, decants, hombre, mujer, unisex",
   footerDescription:
     "Perfumería de lujo y fragancias de autor. Seleccioná tus aromas favoritos y completá tu pedido de forma fácil y directa vía WhatsApp.",
 
   bankAlias: "THE.POINT",
   bankCbu: "",
-  bankHolder: "The Point",
+  bankHolder: "Alquimia Parfums",
   bankCuit: "",
   bankName: "Banco Galicia",
 
