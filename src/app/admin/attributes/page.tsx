@@ -386,7 +386,7 @@ export default function AdminAttributesPage() {
           </div>
         ) : (
           <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {paginatedAttributes.length === 0 ? (
                 <div className="col-span-2 bg-white border border-[#e5e5e5] p-12 text-center space-y-2">
                   <Search className="w-8 h-8 text-[#707072] mx-auto" />
@@ -400,134 +400,134 @@ export default function AdminAttributesPage() {
               ) : (
                 paginatedAttributes.map((attr) => {
                   const isSelect = attr.type === "select";
-              const optionsCount = attr.options?.length || 0;
+                  const optionsCount = attr.options?.length || 0;
                   const isColor = attr.key.toLowerCase().includes("color");
 
-              return (
-                <div
-                  key={attr._id}
-                  className="bg-white border border-[#e5e5e5] p-6 space-y-4 shadow-sm flex flex-col justify-between"
-                >
-                  <div className="space-y-3">
-                    {/* Header */}
-                    <div className="flex items-start justify-between border-b border-[#e5e5e5] pb-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h2 className="text-base font-extrabold uppercase text-[#111111]">
-                            {attr.label}
-                          </h2>
-                          <span className="font-mono text-[11px] text-[#707072] bg-[#f5f5f5] px-2 py-0.5 border border-[#e5e5e5]">
-                            key: {attr.key}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1 text-xs text-[#707072]">
-                          <span className="capitalize font-semibold text-[#111111]">
+                  return (
+                    <div
+                      key={attr._id}
+                      className="bg-white border border-[#e5e5e5] p-6 space-y-4 shadow-sm flex flex-col justify-between"
+                    >
+                      <div className="space-y-3">
+                        {/* Header */}
+                        <div className="flex items-start justify-between border-b border-[#e5e5e5] pb-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h2 className="text-base font-extrabold uppercase text-[#111111]">
+                                {attr.label}
+                              </h2>
+                              <span className="font-mono text-[11px] text-[#707072] bg-[#f5f5f5] px-2 py-0.5 border border-[#e5e5e5]">
+                                key: {attr.key}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-1 text-xs text-[#707072]">
+                              <span className="capitalize font-semibold text-[#111111]">
                                 Tipo:{" "}
                                 {attr.type === "select"
                                   ? "Selección (Eje de variantes)"
                                   : attr.type}
-                          </span>
-                          {attr.unit && <span>• Unidad: {attr.unit}</span>}
-                          {attr.filterable && (
+                              </span>
+                              {attr.unit && <span>• Unidad: {attr.unit}</span>}
+                              {attr.filterable && (
                                 <span className="text-[#007d48] font-bold">
                                   • Filtrable en tienda
                                 </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {attr.key === GENDER_ATTRIBUTE_KEY ? (
+                            <Link
+                              href="/admin/settings"
+                              className="text-[11px] font-bold text-[#007d48] hover:underline whitespace-nowrap"
+                              title="Las opciones y las categorías de Género se administran en Ajustes"
+                            >
+                              Se gestiona en Ajustes →
+                            </Link>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => openEditModal(attr)}
+                                className="p-1.5 text-[#707072] hover:text-[#111111] hover:bg-[#f5f5f5] transition-colors cursor-pointer"
+                                title="Editar atributo"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(attr)}
+                                className="p-1.5 text-[#707072] hover:text-[#d30005] hover:bg-[#f5f5f5] transition-colors cursor-pointer"
+                                title="Eliminar atributo"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           )}
                         </div>
-                      </div>
 
-                      {attr.key === GENDER_ATTRIBUTE_KEY ? (
-                        <Link
-                          href="/admin/settings"
-                          className="text-[11px] font-bold text-[#007d48] hover:underline whitespace-nowrap"
-                          title="Las opciones y las categorías de Género se administran en Ajustes"
-                        >
-                          Se gestiona en Ajustes →
-                        </Link>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => openEditModal(attr)}
-                            className="p-1.5 text-[#707072] hover:text-[#111111] hover:bg-[#f5f5f5] transition-colors cursor-pointer"
-                            title="Editar atributo"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(attr)}
-                            className="p-1.5 text-[#707072] hover:text-[#d30005] hover:bg-[#f5f5f5] transition-colors cursor-pointer"
-                            title="Eliminar atributo"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Options Preview for Select */}
-                    {isSelect ? (
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between text-[11px] font-bold uppercase text-[#707072]">
-                          <span>Opciones ({optionsCount})</span>
+                        {/* Options Preview for Select */}
+                        {isSelect ? (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px] font-bold uppercase text-[#707072]">
+                              <span>Opciones ({optionsCount})</span>
                               {isColor && (
                                 <span className="flex items-center gap-1">
                                   🎨 Paleta con colores
                                 </span>
                               )}
-                        </div>
-                        <div className="flex flex-wrap gap-1.5 min-h-[42px] p-2 bg-[#f9f9f9] border border-[#e5e5e5]">
-                          {optionsCount === 0 ? (
+                            </div>
+                            <div className="flex flex-wrap gap-1.5 min-h-[42px] p-2 bg-[#f9f9f9] border border-[#e5e5e5]">
+                              {optionsCount === 0 ? (
                                 <span className="text-xs text-[#707072] italic">
                                   Sin opciones cargadas
                                 </span>
-                          ) : (
-                            attr.options.map((opt) => (
-                              <span
-                                key={opt.value}
-                                className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 border shadow-2xs ${
-                                  opt.active
+                              ) : (
+                                attr.options.map((opt) => (
+                                  <span
+                                    key={opt.value}
+                                    className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 border shadow-2xs ${
+                                      opt.active
                                         ? "bg-white text-[#111111] border-[#e5e5e5]"
                                         : "bg-[#eeeeee] text-[#707072] border-[#e5e5e5] line-through"
-                                }`}
-                              >
-                                {opt.hex && (
-                                  <span
-                                    className="w-3 h-3 rounded-full border border-black/20"
-                                    style={{ backgroundColor: opt.hex }}
-                                  />
-                                )}
-                                <span>{opt.label}</span>
-                              </span>
-                            ))
-                          )}
-                        </div>
+                                    }`}
+                                  >
+                                    {opt.hex && (
+                                      <span
+                                        className="w-3 h-3 rounded-full border border-black/20"
+                                        style={{ backgroundColor: opt.hex }}
+                                      />
+                                    )}
+                                    <span>{opt.label}</span>
+                                  </span>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-3 bg-[#f9f9f9] border border-[#e5e5e5] text-xs text-[#707072]">
+                            Este atributo se utiliza como especificación de
+                            ficha técnica.
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="p-3 bg-[#f9f9f9] border border-[#e5e5e5] text-xs text-[#707072]">
-                            Este atributo se utiliza como especificación de ficha
-                            técnica.
-                      </div>
-                    )}
-                  </div>
 
-                  {/* Footer Usage */}
-                  <div className="pt-3 border-t border-[#e5e5e5] flex items-center justify-between text-xs text-[#707072]">
-                    <span>
+                      {/* Footer Usage */}
+                      <div className="pt-3 border-t border-[#e5e5e5] flex items-center justify-between text-xs text-[#707072]">
+                        <span>
                           Usado en <strong>{attr.usedInCount || 0}</strong>{" "}
                           categorías
-                    </span>
+                        </span>
                         {attr.usedInCategories &&
                           attr.usedInCategories.length > 0 && (
-                      <span className="text-[11px] text-[#111111] font-semibold truncate max-w-[200px]">
+                            <span className="text-[11px] text-[#111111] font-semibold truncate max-w-[200px]">
                               ({attr.usedInCategories.join(", ")})
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
+                            </span>
+                          )}
+                      </div>
+                    </div>
+                  );
                 })
               )}
-          </div>
+            </div>
 
             {/* Pagination */}
             {totalPages > 1 && (
@@ -593,7 +593,11 @@ export default function AdminAttributesPage() {
           <ResponsiveModal
             open
             onOpenChange={(open) => !open && setIsModalOpen(false)}
-            title={editingAttr ? `Editar Atributo: ${editingAttr.label}` : 'Nuevo Atributo'}
+            title={
+              editingAttr
+                ? `Editar Atributo: ${editingAttr.label}`
+                : "Nuevo Atributo"
+            }
             hideTitle
             className="sm:max-w-2xl p-6 sm:p-8 gap-6"
             footer={
@@ -625,7 +629,11 @@ export default function AdminAttributesPage() {
               </h3>
             </div>
 
-            <form id="attribute-form" onSubmit={handleSubmit} className="space-y-6">
+            <form
+              id="attribute-form"
+              onSubmit={handleSubmit}
+              className="space-y-6 p-0.5"
+            >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Label */}
                 <div>
@@ -672,13 +680,19 @@ export default function AdminAttributesPage() {
                   </label>
                   <select
                     value={type}
-                    onChange={(e) => setType(e.target.value as "select" | "text" | "number" | "boolean")}
+                    onChange={(e) =>
+                      setType(
+                        e.target.value as
+                          | "select"
+                          | "text"
+                          | "number"
+                          | "boolean",
+                      )
+                    }
                     disabled={Boolean(editingAttr)}
                     className="w-full bg-[#f5f5f5] text-[#111111] text-xs font-bold p-3 border border-[#e5e5e5] focus:outline-none focus:ring-2 focus:ring-[#111111] disabled:opacity-60 cursor-pointer"
                   >
-                    <option value="select">
-                      Selección (Genera Variantes)
-                    </option>
+                    <option value="select">Selección (Genera Variantes)</option>
                     <option value="text">Texto (Especificación)</option>
                     <option value="number">Número (Especificación)</option>
                     <option value="boolean">Sí / No (Especificación)</option>
@@ -774,8 +788,8 @@ export default function AdminAttributesPage() {
                   <div className="space-y-1.5 max-h-56 overflow-y-auto pt-2">
                     {options.length === 0 ? (
                       <p className="text-xs text-[#9e9ea0] italic py-2 text-center">
-                        Añadí opciones para este atributo (ej: talles
-                        numéricos, letras o colores).
+                        Añadí opciones para este atributo (ej: talles numéricos,
+                        letras o colores).
                       </p>
                     ) : (
                       options.map((opt) => (
@@ -798,7 +812,9 @@ export default function AdminAttributesPage() {
                               <input
                                 autoFocus
                                 value={editingOptLabel}
-                                onChange={(e) => setEditingOptLabel(e.target.value)}
+                                onChange={(e) =>
+                                  setEditingOptLabel(e.target.value)
+                                }
                                 onKeyDown={(e) => {
                                   if (e.key === "Enter") {
                                     e.preventDefault();
@@ -826,7 +842,9 @@ export default function AdminAttributesPage() {
                               <>
                                 <button
                                   type="button"
-                                  onClick={() => handleSaveEditOption(opt.value)}
+                                  onClick={() =>
+                                    handleSaveEditOption(opt.value)
+                                  }
                                   className="text-[#007d48] hover:bg-emerald-50 p-1 cursor-pointer"
                                   title="Guardar etiqueta"
                                 >
@@ -879,7 +897,6 @@ export default function AdminAttributesPage() {
                   </div>
                 </div>
               )}
-
             </form>
           </ResponsiveModal>
         )}
